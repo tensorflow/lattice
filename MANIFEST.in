@@ -1,0 +1,6 @@
+include README.md LICENSE BUILD
+recursive-include tensorflow_lattice BUILD
+graft tensorflow_lattice/cc
+recursive-exclude tensorflow_lattice/cc *_test.cc *.so
+recursive-exclude tensorflow_lattice/cc/test_tools *
+
