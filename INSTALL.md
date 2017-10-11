@@ -71,8 +71,13 @@ with tf.Session() as sess:
   print(sess.run(y, feed_dict={x: [[0.0, 0.0]]}))
 ```
 
-Now you are ready to use *TensorFlow Lattice*, and you can stop here unless you
-want to build TensorFlow Lattice from the source.
+Now you are ready to use *TensorFlow Lattice*. Check out examples in the
+[examples](https://github.com/tensorflow/lattice/tree/master/examples) directory
+and run them if you need more examples to run.
+[Tutorial](g3doc/tutorial/index.md) contains detailed explanation on how to use
+TensorFlow Lattice.
+
+You can stop here unless you want to build TensorFlow Lattice from the source.
 
 # Build TensorFlow Lattice and TensorFlow pip package from the source.
 You can also build TensorFlow Lattice packages from the source.

@@ -20,23 +20,37 @@ limitations under the License.
 
 This is an implementation of [Monotonic Calibrated Interpolated Look-Up Tables](http://jmlr.org/papers/v17/15-243.html) in [TensorFlow](https://www.tensorflow.org).
 
-These are fast-to-evaluate and interpretable lattice models, also known as interpolated look-up tables. This library also provides a rich and intuitive set of regularizations and monotonicity constraints configurable per feature.
+These are fast-to-evaluate and interpretable lattice models, also known as
+interpolated look-up tables. This library also provides a rich and intuitive set
+of regularizations and monotonicity constraints configurable per feature.
 
-It includes [__canned estimators__](https://www.tensorflow.org/extend/estimators) for regression and classification with the most common set ups for lattice models:
+It includes
+[__TensorFlow estimators__](https://www.tensorflow.org/extend/estimators) for
+regression and classification with the most common set ups for lattice models:
 
 * Calibrated Linear
 * Calibrated Lattice
 * Random Tiny Lattices (_RTL_)
 * Embedded Tiny Lattices (_ETL_) (see [Deep Lattice Networks and Partial Monotonic Functions](https://research.google.com/pubs/pub46327.html))
 
-Additionally this library provides two types of __model components__ (or __layers__) that can be combined with other types of models (like neural networks):
+Additionally this library provides two types of __model components__
+(or __layers__) that can be combined with other types of models (including
+neural networks):
 
 * Calibration: piecewise linear calibration of signals.
 * Lattice: interpolated look-up table implementation.
 
-See [Install](INSTALL.md) for installation,
-[Tutorial](g3doc/tutorial/index.md) for more detailed explanation about lattice
-models and usage in TensorFlow, and [API docs](g3doc/api_docs/python/index.md)
-for python APIs.
+
+You can install our prebuilt pip package using
+
+```bash
+pip install tensorflow-lattice
+```
+
+but please see the [install](INSTALL.md) section for more detailed instructions.
+
+This [tutorial](g3doc/tutorial/index.md) contains more detailed explanation
+about lattice models and usage in TensorFlow, and check out
+[API docs](g3doc/api_docs/python/index.md) for python APIs.
 
 __TensorFlow Lattice is not an official Google product.__
