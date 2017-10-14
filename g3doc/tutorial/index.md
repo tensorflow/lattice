@@ -202,7 +202,7 @@ Our `input_fn` functions look like the following:
 ```python
 import pandas as pd
 import tensorflow as tf
-import tenosrflow_lattice as tfl
+import tensorflow_lattice as tfl
 
 flags = tf.flags
 FLAGS = flags.FLAGS
