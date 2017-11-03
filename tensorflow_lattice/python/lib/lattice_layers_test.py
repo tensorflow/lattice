@@ -41,16 +41,15 @@ class LatticeParamTestCase(test.TestCase):
         lattice_sizes=[2, 2],
         output_dim=2,
         linear_weights=[[1.0, 1.0], [-0.1, 0.3]])
-    self.assertAllClose([[-0.5, 0.0, 0.0, 0.5], [-0.5, -0.55, -0.35, -0.4]],
+    self.assertAllClose([[-0.5, 0.0, 0.0, 0.5], [-0.05, -0.1, 0.1, 0.05]],
                         lattice_param)
 
   def testTwoByThreeByTwoOneOutput(self):
     lattice_param = lattice_layers.lattice_param_as_linear(
         lattice_sizes=[2, 3, 2], output_dim=1, linear_weights=[-1.0, 1.0, 1.0])
     self.assertAllClose([[
-        -0.5, -0.8333333333333333, -0.33333333333333337, -0.6666666666666666,
-        -0.16666666666666669, -0.5, -0.16666666666666669, -0.5, 0.0,
-        -0.3333333333333333, 0.1666666666666666, -0.16666666666666663
+        -0.1666667, -0.5, 0.0, -0.3333333, 0.1666667, -0.1666667, 0.1666667,
+        -0.1666667, 0.3333333, 0.0, 0.5, 0.1666667
     ]], lattice_param)
 
   def testWrongLatticeSizesExpectError(self):
@@ -147,10 +146,11 @@ class LatticeLayersTestCase(test.TestCase):
     output_dim = 2
     inputs = [[0.0, 0.0], [0.1, 0.9], [0.3, 1.1], [1.5, 2.0]]
     # This parameter works as a linear function
-    #   f(x1, x2) == 1/2 * (x1 + x2) - 0.5
+    #   f(x1, x2) == 1/2 * (x1 + x2) - 0.75
     parameters = lattice_layers.lattice_param_as_linear(
         lattice_sizes=lattice_sizes, linear_weights=[1.0, 2.0], output_dim=2)
-    expected_outputs = [[-0.5, -0.5], [0.0, 0.0], [0.2, 0.2], [1.0, 1.0]]
+    expected_outputs = [[-0.75, -0.75], [-0.25, -0.25], [-0.05, -0.05],
+                        [0.75, 0.75]]
     self._testLatticeLayerEvaluation(
         interpolation_type='hypercube',
         output_dim=output_dim,
@@ -164,12 +164,13 @@ class LatticeLayersTestCase(test.TestCase):
     output_dim = 2
     inputs = [[0.0, 0.0], [0.1, 0.9], [0.3, 1.1], [1.5, 2.0]]
     # This parameter works as linear functions
-    #   f(x1, x2) = [0.5 * (x1 + x2) - 0.5, x1 + x2 - 0.5]
+    #   f(x1, x2) = [0.5 * (x1 + x2) - 0.75, x1 + x2 - 1.5]
     parameters = lattice_layers.lattice_param_as_linear(
         lattice_sizes=lattice_sizes,
         output_dim=2,
         linear_weights=[[1.0, 2.0], [2.0, 4.0]])
-    expected_outputs = [[-0.5, -0.5], [0.0, 0.5], [0.2, 0.9], [1.0, 2.5]]
+    expected_outputs = [[-0.75, -1.5], [-0.25, -0.5], [-0.05, -0.1],
+                        [0.75, 1.5]]
     self._testLatticeLayerEvaluation(
         interpolation_type='simplex',
         output_dim=output_dim,
