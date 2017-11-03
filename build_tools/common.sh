@@ -25,14 +25,13 @@ function git_init {
   git init
 
   if [  -d "tensorflow"  ]; then
-    echo "TensorFlow submodule exist. Checkout r1.3"
+    echo "TensorFlow submodule exist. Checkout r1.4"
     cd tensorflow
-    git checkout r1.3
+    git checkout r1.4
     cd -
   else
-    echo "Add TensorFlow r1.3 submodule."
-    # Add tensorflow r1.3 as a submodule.
-    git submodule add -b r1.3 https://github.com/tensorflow/tensorflow.git
+    echo "Add TensorFlow r1.4 submodule."
+    git submodule add -b r1.4 https://github.com/tensorflow/tensorflow.git
   fi
 
   # Fetch all submodules.
@@ -60,8 +59,15 @@ function create_virtualenv {
   source ${TFL_ENV_PATH}/bin/activate
   python -V
   pip install --upgrade pip
-  pip install six numpy wheel
+  pip install six numpy wheel enum34
   deactivate
+}
+
+# Pointfix aws workspace build rule.
+# Without this fix, bazel replaces @%ws% -> empty which makes all imports fail
+# in aws.BUILD.
+function aws_ws_fix {
+  sed -i='' 's,@%ws%,@org_tensorflow,' tensorflow/third_party/aws.BUILD
 }
 
 # Prepare all necessary environment for bazel build & testing.
@@ -89,6 +95,9 @@ function prepare_build {
   echo "Initialize git repo."
   git_init
   echo "Initialization is done."
+
+  echo "Pointfix aws.BUILD"
+  aws_ws_fix
 
   deactivate
 }

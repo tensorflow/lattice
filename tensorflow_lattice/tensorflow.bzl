@@ -18,9 +18,11 @@ TensorFlow Lattice uses many tensorflow macros to create Bazel rules, but the
 dependency paths in them must be corrected to point to the proper workspace.
 """
 
-load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
-load("@local_config_cuda//cuda:build_defs.bzl", "cuda_default_copts")
 load("@org_tensorflow//tensorflow:tensorflow.bzl", "check_deps")
+load(
+    "@local_config_cuda//cuda:build_defs.bzl",
+    "if_cuda",
+)
 
 # Sanitize a dependency so that it works correctly from code that includes
 # TensorFlow as a submodule.
@@ -32,6 +34,12 @@ def tf_copts():
           if_cuda(["-DGOOGLE_CUDA=1"]) +
           select({"@org_tensorflow//tensorflow:darwin": [],
                   "//conditions:default": ["-pthread"]}))
+
+# Bazel-generated shared objects which must be linked into TensorFlow binaries
+# to define symbols from //tensorflow/core:framework and //tensorflow/core:lib.
+def tf_binary_additional_srcs():
+  """Returns binaries needed for static linking."""
+  return [clean_dep("@org_tensorflow//tensorflow:libtensorflow_framework.so")]
 
 # Given a list of "op_lib_names" (a list of files in the ops directory
 # without their .cc extensions), generate a library for that file.
@@ -60,6 +68,7 @@ def tf_gen_op_wrapper_py(name, out=None, hidden=[], visibility=None, deps=[],
     deps = ["@org_tensorflow//tensorflow/core:" + name + "_op_lib"]
   native.cc_binary(
       name = tool_name,
+      srcs = tf_binary_additional_srcs(),
       linkopts = ["-lm"],
       copts = tf_copts(),
       linkstatic = 1,   # Faster to link this one-time-use binary dynamically
@@ -79,17 +88,21 @@ def tf_gen_op_wrapper_py(name, out=None, hidden=[], visibility=None, deps=[],
            + " " + ("1" if require_shape_functions else "0") + " > $@"))
 
   # Make a py_library out of the generated python file.
-  native.py_library(name=name,
-                    srcs=[out],
-                    srcs_version="PY2AND3",
-                    visibility=visibility,
-                    deps=[],)
+  native.py_library(
+      name=name,
+      srcs=[out],
+      srcs_version="PY2AND3",
+      visibility=visibility,
+      deps=[
+          "@org_tensorflow//tensorflow/python:framework_for_generated_wrappers_v2",
+      ],
+  )
 
 def tf_custom_op_library_additional_deps():
   return [
       "@org_tensorflow//third_party/eigen3",
       "@org_tensorflow//tensorflow/core:framework_headers_lib",
-      "@protobuf//:protobuf_headers",
+      "@protobuf_archive//:protobuf_headers",
   ]
 
 def tf_custom_op_py_library(name, srcs=[], dso=[], kernels=[],
@@ -269,7 +282,7 @@ def tf_cc_test(name,
                linkopts=[]):
   native.cc_test(
       name="%s%s" % (name, suffix),
-      srcs=srcs,
+      srcs=srcs + tf_binary_additional_srcs(),
       size=size,
       args=args,
       copts=tf_copts(),
@@ -297,7 +310,7 @@ def tf_custom_op_library(name, srcs=[], gpu_srcs=[], deps=[]):
 
   native.cc_binary(
       name=name,
-      srcs=srcs,
+      srcs=srcs + tf_binary_additional_srcs(),
       deps=deps + if_cuda(cuda_deps),
       data=[name + "_check_deps"],
       copts=tf_copts(),

@@ -29,7 +29,7 @@ from setuptools.dist import Distribution
 import warnings
 
 
-__version__ = '0.9.3'
+__version__ = '0.9.4'
 
 
 REQUIRED_PACKAGES = [
@@ -47,10 +47,10 @@ else:
 
 if use_gpu:
   project_name = 'tensorflow-lattice-gpu'
-  REQUIRED_PACKAGES.append('tensorflow-gpu>=1.3.0')
+  REQUIRED_PACKAGES.append('tensorflow-gpu==1.4.0')
 else:
   project_name = 'tensorflow-lattice'
-  REQUIRED_PACKAGES.append('tensorflow>=1.3.0')
+  REQUIRED_PACKAGES.append('tensorflow==1.4.0')
 
 
 class BinaryDistribution(Distribution):

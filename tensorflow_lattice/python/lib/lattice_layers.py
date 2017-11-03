@@ -35,15 +35,20 @@ _VALID_INTERPOLATION_TYPES = ['hypercube', 'simplex']
 def lattice_param_as_linear(lattice_sizes, output_dim, linear_weights=1.0):
   """Returns lattice parameter that represents a normalized linear function.
 
-  For simplicity, let's assume output_dim == 1. This function returns a lattice
-  parameter so that
+  For simplicity, let's assume output_dim == 1 (when output_dim > 1 you get
+  output_dim lattices one for each linear function). This function returns a
+  lattice parameter so that
 
-    lattice_param' phi(x) = 1 / (len(lattice_sizes))
-      * sum_k (linear_weights[k]/(lattice_sizes[k] - 1)) * x[k] - 0.5.
+    lattice_param' * phi(x) = 1 / len(lattice_sizes) *
+      (sum_k x[k] * linear_weights[k]/(lattice_sizes[k] - 1) + bias)
 
-  where phi(x) is the lattice interpolation weight.
-  The normalization in the weights and bias (-0.5) are introduced to make the
-  output ranges [-0.5, 0.5] when all linear_weights are 1.0.
+  where phi(x) is the lattice interpolation weight and
+  bias = -sum_k linear_weights[k] / 2.
+
+  The normalization in the weights and the bias term make the output lie in the
+  range [-0.5, 0.5], when every member of linear_weights is 1.0.
+  In addition, the bias term makes the expected value zero when x[k] is from the
+  uniform distribution over [0, lattice_sizes[k] - 1].
 
   The returned lattice_param can be used to initialize a lattice layer as a
   linear function.
@@ -112,7 +117,11 @@ def lattice_param_as_linear(lattice_sizes, output_dim, linear_weights=1.0):
   # Normalize linear_weight_matrix.
   lattice_parameters = []
   for linear_weight_per_output in linear_weight_matrix:
-    lattice_parameter = [-0.5] * lattice_structure.num_vertices
+    sum_of_weights = 0.0
+    for weight in linear_weight_per_output:
+      sum_of_weights += weight
+    sum_of_weights /= (2.0 * lattice_rank)
+    lattice_parameter = [-sum_of_weights] * lattice_structure.num_vertices
     for (idx, vertex) in tools.lattice_indices_generator(lattice_structure):
       for dim in range(lattice_rank):
         lattice_parameter[idx] += (linear_weight_per_output[dim] * float(
