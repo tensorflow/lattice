@@ -32,7 +32,7 @@ cc_library(
     ],
 )
 
-cc_library(
+tf_kernel_library(
     name = "pwl_indexing_calibrator_kernels",
     srcs = ["pwl_indexing_calibrator_kernels.cc"],
     deps = [
@@ -42,7 +42,7 @@ cc_library(
     ],
 )
 
-cc_library(
+tf_kernel_library(
     name = "monotonic_projection_kernel",
     srcs = ["monotonic_projection_kernel.cc"],
     deps = [

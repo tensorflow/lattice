@@ -14,7 +14,7 @@
 # limitations under the License.
 # ==============================================================================
 
-# This script will run the bash function tensorflow_lattice_test under a python2
+# This script will run the bash function tensorflow_lattice_test under a python3
 # environment.
 
 set -e
@@ -23,7 +23,8 @@ set -x
 # Source common scripts.
 source "build_tools/common.sh"
 
-export TFL_PY="py2"
+export IS_MAC=true
+export TFL_PY="py3"
 export TFL_USE_GPU=false
 
 # Prepare build.

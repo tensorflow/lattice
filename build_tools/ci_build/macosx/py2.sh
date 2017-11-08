@@ -14,24 +14,30 @@
 # limitations under the License.
 # ==============================================================================
 
-# Run tensorflow lattice bazel tests.
-function tensorflow_lattice_test {
-  # Cleaning up bazel workspace
-  bazel clean
+# This script will run the bash function tensorflow_lattice_test under a python2
+# environment.
 
-  if [[ "${IS_MAC}" == true ]]; then
-    N_JOBS=$(sysctl -n hw.ncpu)
-  else
-    N_JOBS=$(grep -c ^processor /proc/cpuinfo)
-  fi
+set -e
+set -x
 
-  echo ""
-  echo "Bazel will use ${N_JOBS} concurrent job(s)."
-  echo ""
+# Source common scripts.
+source "build_tools/common.sh"
 
-  # Run bazel test command. Double test timeouts to avoid flakes.
-  bazel test --config=opt --test_tag_filters=-gpu -k \
-      --jobs=${N_JOBS} --test_timeout 300,450,1200,3600 --build_tests_only \
-      --test_output=errors -- \
-      //tensorflow_lattice/...
-}
+export IS_MAC=true
+export TFL_PY="py2"
+export TFL_USE_GPU=false
+
+# Prepare build.
+prepare_build
+
+# Source common ci scripts.
+source "build_tools/ci_build/ci_common.sh"
+
+# Activate virtualenv.
+source ${TFL_ENV_PATH}/bin/activate
+
+echo "Running all tests."
+tensorflow_lattice_test
+echo "Done with testing."
+
+deactivate

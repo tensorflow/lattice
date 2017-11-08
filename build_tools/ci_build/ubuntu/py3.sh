@@ -23,6 +23,7 @@ set -x
 # Source common scripts.
 source "build_tools/common.sh"
 
+export IS_MAC=false
 export TFL_PY="py3"
 export TFL_USE_GPU=false
 
