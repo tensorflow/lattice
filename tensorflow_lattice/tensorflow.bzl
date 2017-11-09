@@ -244,7 +244,7 @@ def _make_search_paths(prefix, levels_to_root, add_tf=False):
     paths += ("," + _add_tf_search_path(prefix, levels_to_root))
   return paths
 
-def _rpath_linkopts(name, add_tf=False):
+def _rpath_linkopts(name):
   # Search parent directories up to the TensorFlow root directory for shared
   # object dependencies, even if this op shared object is deeply nested
   # (e.g. tensorflow/contrib/package:python/ops/_op_lib.so). tensorflow/ is then
@@ -257,12 +257,12 @@ def _rpath_linkopts(name, add_tf=False):
       clean_dep("@org_tensorflow//tensorflow:darwin"): [
           "-Wl,%s" % (_make_search_paths("@loader_path",
                                          levels_to_root,
-                                         add_tf),),
+                                         add_tf=True),),
       ],
       "//conditions:default": [
           "-Wl,%s" % (_make_search_paths("$$ORIGIN",
                                          levels_to_root,
-                                         add_tf),),
+                                         add_tf=False),),
       ],
   })
 
