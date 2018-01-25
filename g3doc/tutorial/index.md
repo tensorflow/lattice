@@ -96,7 +96,7 @@ grow linearly on the number of features, albeit exponential on the number of
 features in each of these "tiny" lattices, but the number of features per
 lattice are typically configured to be small.
 
-The library provide two variations of these ensembles:
+The library provides two variations of these ensembles:
 
 *   __Random Tiny Lattices__ (__RTL__ for short): an arbitrary number of
     lattices of dimension $$D_l$$, each including random $$D_l$$ features out of
@@ -129,7 +129,7 @@ often a somewhat biased representation of where the model will be applied:
 TensorFlow Lattice provides the following types of __"semantic
 regularization"__:
 
-*   Lattice resolution: the number of vertices in your lattice allow control
+*   Lattice resolution: the number of vertices in your lattice allows control
     over the flexibility of the functions that can be learned.
 
 *   __Monotonicity__: You can specify that the output should only

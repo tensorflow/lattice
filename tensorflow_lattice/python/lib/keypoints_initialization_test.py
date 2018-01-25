@@ -139,7 +139,8 @@ class KeypointsInitializationTestCase(test.TestCase):
                       'x2': 7.},
           output_max={'x0': 1.,
                       'x1': 10.,
-                      'x2': 13.})
+                      'x2': 13.}
+      )
       with self.test_session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
     self.assertAllClose(keypoints_init['x0'][0], [0, 5.**2, 100.], atol=0.2)
@@ -235,6 +236,48 @@ class KeypointsInitializationTestCase(test.TestCase):
         x2,
         use_feature_columns=False,
         override=True)
+
+  def testQuantileInitWithReversedDict(self):
+    num_examples = 100
+    x0 = np.linspace(0.0, 10.0, num_examples)
+    x1 = np.linspace(0.0, 10.0, num_examples)
+    x2 = np.linspace(0.0, 1.0, num_examples)
+
+    input_fn, feature_names, feature_columns = self._BuildInputs(x0, x1, x2)
+    save_dir = os.path.join(self.get_temp_dir(), 'reversed_dict')
+    keypoints_initialization.save_quantiles_for_keypoints(
+        input_fn,
+        save_dir,
+        feature_columns=feature_columns,
+        num_quantiles=100,
+        override=True)
+    reversed_dict = {'x0': False,
+                     'x1': True,
+                     'x2': False}
+
+    with ops.Graph().as_default() as g:
+      # Check by using load_keypoints_from_quantiles.
+      keypoints_init = keypoints_initialization.load_keypoints_from_quantiles(
+          feature_names,
+          save_dir,
+          num_keypoints=3,
+          output_min={'x0': 0.,
+                      'x1': 0.,
+                      'x2': 0.},
+          output_max={'x0': 1.,
+                      'x1': 1.,
+                      'x2': 1.},
+          reversed_dict=reversed_dict
+      )
+      with self.test_session(graph=g) as sess:
+        keypoints_init = sess.run(keypoints_init)
+
+    self.assertAllClose(keypoints_init['x0'][0], [0.0, 5.0, 10.0], atol=0.1)
+    self.assertAllClose(keypoints_init['x0'][1], [0.0, 0.5, 1.0], atol=0.01)
+    self.assertAllClose(keypoints_init['x1'][0], [0.0, 5.0, 10.0], atol=0.1)
+    self.assertAllClose(keypoints_init['x1'][1], [1.0, 0.5, 0.0], atol=0.01)
+    self.assertAllClose(keypoints_init['x2'][0], [0.0, 0.5, 1.0], atol=0.01)
+    self.assertAllClose(keypoints_init['x2'][1], [0.0, 0.5, 1.0], atol=0.01)
 
   def testUniformKeypointsForSignal(self):
     # New graph is needed because default graph is changed by save

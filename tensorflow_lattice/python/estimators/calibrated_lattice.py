@@ -36,7 +36,8 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
                lattice_initializers_fn=None,
                optimizer=None,
                config=None,
-               hparams=None):
+               hparams=None,
+               head=None):
     """Construct CalibrateLatticeClassifier/Regressor."""
     if not hparams:
       hparams = tfl_hparams.CalibratedLatticeHParams([])
@@ -48,7 +49,7 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
     super(_CalibratedLattice,
           self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
                          keypoints_initializers_fn, optimizer, config, hparams,
-                         'lattice')
+                         head, 'lattice')
 
   def _check_param_configuration(self, adjusted, monotonicity, lattice_size,
                                  calibration_output_min, calibration_output_max,
@@ -235,7 +236,8 @@ def calibrated_lattice_classifier(feature_columns=None,
                                   keypoints_initializers_fn=None,
                                   optimizer=None,
                                   config=None,
-                                  hparams=None):
+                                  hparams=None,
+                                  head=None):
   """Calibrated lattice classifier binary model.
 
 
@@ -313,6 +315,10 @@ def calibrated_lattice_classifier(feature_columns=None,
       to learn_runner.EstimatorConfig().
     hparams: an instance of tfl_hparams.CalibrationHParams. If set to
       None default parameters are used.
+    head: a `TensorFlow Estimator Head` which specifies how the loss function,
+      final predictions, and so on are generated from model outputs. Defaults
+      to using a sigmoid cross entropy head for binary classification and mean
+      squared error head for regression.
 
   Returns:
     A `CalibratedLatticeClassifier` estimator.
@@ -329,7 +335,8 @@ def calibrated_lattice_classifier(feature_columns=None,
       keypoints_initializers_fn=keypoints_initializers_fn,
       optimizer=optimizer,
       config=config,
-      hparams=hparams)
+      hparams=hparams,
+      head=head)
 
 
 def calibrated_lattice_regressor(feature_columns=None,
@@ -338,7 +345,8 @@ def calibrated_lattice_regressor(feature_columns=None,
                                  keypoints_initializers_fn=None,
                                  optimizer=None,
                                  config=None,
-                                 hparams=None):
+                                 hparams=None,
+                                 head=None):
   """Calibrated lattice estimator (model) for regression.
 
   This model uses a piecewise lattice calibration function on each of the
@@ -417,6 +425,10 @@ def calibrated_lattice_regressor(feature_columns=None,
       to learn_runner.EstimatorConfig().
     hparams: an instance of tfl_hparams.CalibrationHParams. If set to
       None default parameters are used.
+    head: a `TensorFlow Estimator Head` which specifies how the loss function,
+      final predictions, and so on are generated from model outputs. Defaults
+      to using a sigmoid cross entropy head for binary classification and mean
+      squared error head for regression.
 
   Returns:
     A `CalibratedLatticeRegressor` estimator.
@@ -433,4 +445,5 @@ def calibrated_lattice_regressor(feature_columns=None,
       keypoints_initializers_fn=keypoints_initializers_fn,
       optimizer=optimizer,
       config=config,
-      hparams=hparams)
+      hparams=hparams,
+      head=head)

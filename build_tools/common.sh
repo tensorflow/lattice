@@ -25,13 +25,13 @@ function git_init {
   git init
 
   if [  -d "tensorflow"  ]; then
-    echo "TensorFlow submodule exist. Checkout r1.4"
+    echo "TensorFlow submodule exist. Checkout r1.5"
     cd tensorflow
-    git checkout r1.4
+    git checkout r1.5
     cd -
   else
-    echo "Add TensorFlow r1.4 submodule."
-    git submodule add -b r1.4 https://github.com/tensorflow/tensorflow.git
+    echo "Add TensorFlow r1.5 submodule."
+    git submodule add -b r1.5 https://github.com/tensorflow/tensorflow.git
   fi
 
   # Fetch all submodules.

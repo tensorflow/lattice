@@ -300,7 +300,8 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
                optimizer=None,
                config=None,
                hparams=None,
-               feature_engineering_fn=None):
+               feature_engineering_fn=None,
+               head=None):
     """Construct CalibrateEtlClassifier/Regressor."""
     if not hparams:
       hparams = tfl_hparams.CalibratedEtlHParams([])
@@ -309,7 +310,7 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
 
     super(_CalibratedEtl, self).__init__(
         n_classes, feature_columns, model_dir, quantiles_dir,
-        keypoints_initializers_fn, optimizer, config, hparams, 'etl')
+        keypoints_initializers_fn, optimizer, config, hparams, head, 'etl')
     # After initialization, we expect model_dir exists.
     if self._model_dir is None:
       raise ValueError('model_dir is not created')
@@ -485,7 +486,8 @@ def calibrated_etl_classifier(feature_columns=None,
                               keypoints_initializers_fn=None,
                               optimizer=None,
                               config=None,
-                              hparams=None):
+                              hparams=None,
+                              head=None):
   """Calibrated etl binary classifier model.
 
 
@@ -570,6 +572,10 @@ def calibrated_etl_classifier(feature_columns=None,
       to learn_runner.EstimatorConfig().
     hparams: an instance of tfl_hparams.CalibrationEtlHParams. If set to
       None default parameters are used.
+    head: a `TensorFlow Estimator Head` which specifies how the loss function,
+      final predictions, and so on are generated from model outputs. Defaults
+      to using a sigmoid cross entropy head for binary classification and mean
+      squared error head for regression.
 
   Returns:
     A `calibrated_etl_classifier` estimator.
@@ -586,7 +592,8 @@ def calibrated_etl_classifier(feature_columns=None,
       keypoints_initializers_fn=keypoints_initializers_fn,
       optimizer=optimizer,
       config=config,
-      hparams=hparams)
+      hparams=hparams,
+      head=head)
 
 
 def calibrated_etl_regressor(feature_columns=None,
@@ -595,7 +602,8 @@ def calibrated_etl_regressor(feature_columns=None,
                              keypoints_initializers_fn=None,
                              optimizer=None,
                              config=None,
-                             hparams=None):
+                             hparams=None,
+                             head=None):
   """Calibrated etl regressor model.
 
   This model uses a piecewise lattice calibration function on each of the
@@ -678,6 +686,10 @@ def calibrated_etl_regressor(feature_columns=None,
       to learn_runner.EstimatorConfig().
     hparams: an instance of tfl_hparams.CalibrationEtlHParams. If set to
       None default parameters are used.
+    head: a `TensorFlow Estimator Head` which specifies how the loss function,
+      final predictions, and so on are generated from model outputs. Defaults
+      to using a sigmoid cross entropy head for binary classification and mean
+      squared error head for regression.
 
   Returns:
     A `calibrated_etl_regressor` estimator.
@@ -694,4 +706,5 @@ def calibrated_etl_regressor(feature_columns=None,
       keypoints_initializers_fn=keypoints_initializers_fn,
       optimizer=optimizer,
       config=config,
-      hparams=hparams)
+      hparams=hparams,
+      head=head)

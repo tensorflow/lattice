@@ -20,8 +20,12 @@ package(
     ],
 )
 
-load("//tensorflow_lattice:tensorflow.bzl", "tf_kernel_library")
-load("//tensorflow_lattice:tensorflow.bzl", "tf_cc_test")
+load(
+    "//tensorflow_lattice:tensorflow_lattice.bzl",
+    "rpath_linkopts",
+)
+load("@org_tensorflow//tensorflow:tensorflow.bzl", "tf_kernel_library")
+load("@org_tensorflow//tensorflow:tensorflow.bzl", "tf_cc_test")
 
 # Piecewise-linear calibration kernels
 cc_library(
@@ -114,6 +118,7 @@ cc_library(
 tf_cc_test(
     name = "lattice_raw_iterator_test",
     srcs = ["lattice_raw_iterator_test.cc"],
+    linkopts = rpath_linkopts("lattice_raw_iterator_test"),
     deps = [
         ":lattice_raw_iterator",
         "//tensorflow_lattice/cc:test_main",
@@ -137,6 +142,7 @@ cc_library(
 tf_cc_test(
     name = "monotonic_lattice_projections_test",
     srcs = ["monotonic_lattice_projections_test.cc"],
+    linkopts = rpath_linkopts("monotonic_lattice_projections_test"),
     deps = [
         ":monotonic_lattice_projections",
         "//tensorflow_lattice/cc:test_main",

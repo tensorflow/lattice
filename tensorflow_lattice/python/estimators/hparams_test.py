@@ -79,6 +79,29 @@ class TensorFlowLatticeHParamsTest(test.TestCase):
           num_keypoints=default_num_keypoints,
           feature__x2__num_keypoints=10)
 
+  def testAddFeature(self):
+    default_num_keypoints = 10
+    feature_x0_num_keypoints = 5
+    hp = hparams.PerFeatureHParams(
+        [u'x0', 'x1'],
+        num_keypoints=default_num_keypoints,
+        feature__x0__num_keypoints=feature_x0_num_keypoints)
+    # Unicode feature name.
+    hp.add_feature([u'x2'])
+    self.assertEqual(hp.get_feature_names(), ['x0', 'x1', 'x2'])
+    self.assertEqual(
+        hp.get_feature_param('x0', 'num_keypoints'), feature_x0_num_keypoints)
+    self.assertEqual(
+        hp.get_feature_param('x1', 'num_keypoints'), default_num_keypoints)
+    self.assertEqual(
+        hp.get_feature_param('x2', 'num_keypoints'), default_num_keypoints)
+    # Feature name not of expected type string.
+    with self.assertRaises(ValueError) as value_error:
+      hp.add_feature([1.0])
+    self.assertEqual('feature_name should either be a list of strings,'
+                     ' or a string, got "[1.0]"',
+                     str(value_error.exception))
+
   def testGlobalPerFeatureHParams(self):
     hp = hparams.PerFeatureHParams(['x0', 'x1'], num_keypoints=2)
     self.assertEqual(hp.get_param('num_keypoints'), 2)
@@ -147,6 +170,12 @@ class TensorFlowLatticeHParamsTest(test.TestCase):
     self.assertFalse(etl.calibration_bound)
     with self.assertRaises(ValueError):
       etl.parse('calibration_bound=foobar')
+
+  def testAddNonExistingPerFeatureParam(self):
+    hp = hparams.CalibratedLinearHParams(['x0', 'x1'])
+    hp.set_feature_param('x0', 'calibration_l2_laplacian_reg', 0.1)
+    self.assertAlmostEqual(
+        hp.get_feature_param('x0', 'calibration_l2_laplacian_reg'), 0.1)
 
 
 if __name__ == '__main__':

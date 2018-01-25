@@ -23,14 +23,19 @@ package(
 )
 
 load(
-    "//tensorflow_lattice:tensorflow.bzl",
+    "//tensorflow_lattice:tensorflow_lattice.bzl",
+    "rpath_linkopts",
+)
+load(
+    "@org_tensorflow//tensorflow:tensorflow.bzl",
     "tf_gen_op_wrapper_py",
 )
-load("//tensorflow_lattice:tensorflow.bzl", "tf_custom_op_py_library")
+load("@org_tensorflow//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 
 tf_gen_op_wrapper_py(
     name = "pwl_indexing_calibrator_py_wrapper",
     out = "ops/gen_pwl_indexing_calibrator.py",
+    cc_linkopts = rpath_linkopts("pwl_indexing_calibrator_py_wrapper"),
     hidden = [],
     deps = [
         "//tensorflow_lattice/cc:pwl_indexing_calibrator_ops_op_lib",
@@ -40,6 +45,7 @@ tf_gen_op_wrapper_py(
 tf_gen_op_wrapper_py(
     name = "monotonic_projection_py_wrapper",
     out = "ops/gen_monotonic_projection.py",
+    cc_linkopts = rpath_linkopts("monotonic_projection_py_wrapper"),
     hidden = [],
     deps = [
         "//tensorflow_lattice/cc:monotonic_projection_op_op_lib",
@@ -49,6 +55,7 @@ tf_gen_op_wrapper_py(
 tf_gen_op_wrapper_py(
     name = "lattice_interpolation_py_wrapper",
     out = "ops/gen_lattice_interpolation.py",
+    cc_linkopts = rpath_linkopts("lattice_interpolation_py_wrapper"),
     hidden = [],
     require_shape_functions = True,
     deps = [
@@ -59,6 +66,7 @@ tf_gen_op_wrapper_py(
 tf_gen_op_wrapper_py(
     name = "monotone_lattice_py_wrapper",
     out = "ops/gen_monotone_lattice.py",
+    cc_linkopts = rpath_linkopts("monotone_lattice_py_wrapper"),
     hidden = [],
     require_shape_functions = True,
     deps = [

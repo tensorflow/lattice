@@ -322,6 +322,7 @@ def load_keypoints_from_quantiles(feature_names,
                                   num_keypoints,
                                   output_min,
                                   output_max,
+                                  reversed_dict=None,
                                   dtype=dtypes.float32):
   """Retrieves keypoints initialization values for selected features.
 
@@ -346,6 +347,11 @@ def load_keypoints_from_quantiles(feature_names,
       or a dict mapping feature name to output_min.
     output_max: Like output_min, but the calibrated value associated to the
       last keypoint. Scalar or dict.
+    reversed_dict: An optional dict. If reversed_dict[feature_name] is True,
+      then the initial output keypoints will be in reversed order for that
+      feature, i.e., input_min will be mapped to output_max, and input_max will
+      be mapped to output_min. Reversing output keypoints is useful for
+      decreasing monotonic calibrators.
     dtype: Type to be used for calibration.
 
   Returns:
@@ -376,7 +382,11 @@ def load_keypoints_from_quantiles(feature_names,
     quantiles = np.percentile(
         all_quantiles, percentiles, interpolation="nearest")
     quantiles = sorted(set(quantiles))  # Remove repeated quantiles.
-    keypoints[feature_name] = (array_ops.constant(
-        quantiles, shape=[len(quantiles)], dtype=dtype), math_ops.linspace(
-            output_min[feature_name], output_max[feature_name], len(quantiles)))
+    input_kpts = array_ops.constant(
+        quantiles, shape=[len(quantiles)], dtype=dtype)
+    output_kpts = math_ops.linspace(
+            output_min[feature_name], output_max[feature_name], len(quantiles))
+    if reversed_dict is not None and reversed_dict[feature_name]:
+      output_kpts = array_ops.reverse(output_kpts, axis=[0])
+    keypoints[feature_name] = (input_kpts, output_kpts)
   return keypoints

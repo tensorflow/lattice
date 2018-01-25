@@ -54,9 +54,9 @@ class LatticeOpBase : public OpKernel {
   void SetCostPerExample(const int64 cost_per_example) {
     cost_per_example_ = cost_per_example;
   }
-  std::unique_ptr<LatticeStructure> lattice_structure_;
 
  private:
+  std::unique_ptr<LatticeStructure> lattice_structure_;
   int64 cost_per_example_;
 };
 
