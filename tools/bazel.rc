@@ -1,6 +1,9 @@
 # Import TensorFlow configuration.
 import %workspace%/tensorflow/.tf_configure.bazelrc
 
+# Disable load checks.
+common --incompatible_load_argument_is_label=false
+
 # Coloring for error messages.
 common --color=yes
 

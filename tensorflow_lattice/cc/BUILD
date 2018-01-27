@@ -23,10 +23,14 @@ package(
 )
 
 load(
-    "//tensorflow_lattice:tensorflow.bzl",
+    "//tensorflow_lattice:tensorflow_lattice.bzl",
+    "rpath_linkopts",
+)
+load(
+    "@org_tensorflow//tensorflow:tensorflow.bzl",
     "tf_cc_test",
-    "tf_gen_op_libs",
     "tf_custom_op_library",
+    "tf_gen_op_libs",
 )
 
 tf_custom_op_library(
@@ -35,6 +39,7 @@ tf_custom_op_library(
         ":ops/lattice_interpolation_ops.cc",
         ":ops/monotone_lattice_ops.cc",
     ],
+    linkopts = rpath_linkopts("ops/_lattice_ops.so"),
     deps = [
         "//tensorflow_lattice/cc/kernels:lattice_kernels",
         "//tensorflow_lattice/cc/lib:lattice_structure",
@@ -47,6 +52,7 @@ tf_custom_op_library(
         ":ops/monotonic_projection_op.cc",
         ":ops/pwl_indexing_calibrator_ops.cc",
     ],
+    linkopts = rpath_linkopts("ops/_pwl_calibration_ops.so"),
     deps = [
         "//tensorflow_lattice/cc/kernels:pwl_calibration_kernels",
     ],
@@ -121,6 +127,7 @@ tf_cc_test(
     name = "pwl_indexing_calibrator_ops_test",
     size = "small",
     srcs = ["ops/pwl_indexing_calibrator_ops_test.cc"],
+    linkopts = rpath_linkopts("pwl_indexing_calibrator_ops_test"),
     deps = [
         ":pwl_indexing_calibrator_ops_op_lib",
         ":test_main",
@@ -132,18 +139,36 @@ tf_cc_test(
     ],
 )
 
+cc_library(
+    name = "hypercube_interpolation_ops_test_lib",
+    testonly = 1,
+    srcs = ["ops/hypercube_interpolation_ops_test_p.cc"],
+    hdrs = ["ops/hypercube_interpolation_ops_test.h"],
+    linkopts = rpath_linkopts("hypercube_interpolation_ops_test"),
+    deps = [
+        ":lattice_interpolation_ops_op_lib",
+        ":test_main",
+        "@org_tensorflow//tensorflow/core:core_cpu",
+        "@org_tensorflow//tensorflow/core:framework",
+        "@org_tensorflow//tensorflow/core:lib",
+        "@org_tensorflow//tensorflow/core:protos_all_cc",
+        "@org_tensorflow//tensorflow/core:test",
+        "@org_tensorflow//tensorflow/core:testlib",
+        "@org_tensorflow//tensorflow/core/kernels:ops_testutil",
+        "@org_tensorflow//tensorflow/core/kernels:ops_util_hdrs",
+        # fixdeps: Don't add //third_party/gtest
+    ],
+)
+
 tf_cc_test(
     name = "hypercube_interpolation_ops_test",
     size = "small",
     srcs = ["ops/hypercube_interpolation_ops_test.cc"],
     deps = [
-        ":lattice_interpolation_ops_op_lib",
-        ":test_main",
+        ":hypercube_interpolation_ops_test_lib",
         "@org_tensorflow//tensorflow/core:framework",
-        "@org_tensorflow//tensorflow/core:lib",
         "@org_tensorflow//tensorflow/core:test",
         "@org_tensorflow//tensorflow/core:testlib",
-        "@org_tensorflow//tensorflow/core/kernels:ops_testutil",
     ],
 )
 
@@ -151,6 +176,7 @@ tf_cc_test(
     name = "simplex_interpolation_ops_test",
     size = "small",
     srcs = ["ops/simplex_interpolation_ops_test.cc"],
+    linkopts = rpath_linkopts("simplex_interpolation_ops_test"),
     deps = [
         ":lattice_interpolation_ops_op_lib",
         ":test_main",
@@ -166,6 +192,7 @@ tf_cc_test(
     name = "monotonic_projection_op_test",
     size = "small",
     srcs = ["ops/monotonic_projection_op_test.cc"],
+    linkopts = rpath_linkopts("monotonic_projection_op_test"),
     deps = [
         ":monotonic_projection_op_op_lib",
         ":test_main",

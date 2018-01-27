@@ -116,18 +116,18 @@ class PerFeatureHParams(object):
     if isinstance(feature_name, list):
       # Add all elements in the list, if a list.
       for f in feature_name:
-        if not isinstance(f, str):
+        if not isinstance(f, six.string_types):
           raise ValueError(
-              'feature_name should either be a list of strings, or a string '
-              '%s, got "%s"' % feature_name)
+              'feature_name should either be a list of strings, or a string, '
+              'got "%s"' % feature_name)
         PerFeatureHParams._check_feature_name(f)
         self._feature_names.add(f)
-    elif isinstance(feature_name, str):
+    elif isinstance(feature_name, six.string_types):
       PerFeatureHParams._check_feature_name(feature_name)
       self._feature_names.add(feature_name)
     else:
       raise ValueError(
-          'feature_name should either be a list of strings, or a string %s, '
+          'feature_name should either be a list of strings, or a string, '
           'got "%s"' % feature_name)
     return self
 

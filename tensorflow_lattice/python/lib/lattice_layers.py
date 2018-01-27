@@ -161,7 +161,7 @@ def lattice_layer(input_tensor,
       a 2D tensor [output_dim, parameter_dim] (where parameter_dim ==
       lattice_sizes[0] * ... * lattice_sizes[input_dim - 1]). If None,
       lattice_param_as_linear initializer will be used with
-      linear_weights=[1 if monotone else 0 for monotone in is_monotone].
+      linear_weights=[1] * len(lattice_sizes).
     l1_reg: (float) l1 regularization amount.
     l2_reg: (float) l2 regularization amount.
     l1_torsion_reg: (float) l1 torsion regularization amount.
@@ -190,12 +190,7 @@ def lattice_layer(input_tensor,
         _VALID_INTERPOLATION_TYPES))
 
   if lattice_initializer is None:
-    if is_monotone:
-      is_monotone = tools.cast_to_list(is_monotone,
-                                       len(lattice_sizes), 'is_monotone')
-      linear_weights = [1.0 if monotonic else 0.0 for monotonic in is_monotone]
-    else:
-      linear_weights = [0.0] * len(lattice_sizes)
+    linear_weights = [1.0] * len(lattice_sizes)
     lattice_initializer = lattice_param_as_linear(
         lattice_sizes, output_dim, linear_weights=linear_weights)
 
@@ -291,7 +286,6 @@ def ensemble_lattices_layer(input_tensor,
       step (or every so many steps) to project the model to a feasible space:
       used for bounding the outputs or for imposing monotonicity.
     * None or a regularization loss, if regularization is configured.
-
   """
   num_lattices = len(structure_indices)
   lattice_initializers = tools.cast_to_list(lattice_initializers, num_lattices,

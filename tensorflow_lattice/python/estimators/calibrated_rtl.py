@@ -47,7 +47,8 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
                lattice_initializers_fn=None,
                optimizer=None,
                config=None,
-               hparams=None):
+               hparams=None,
+               head=None):
     """Construct CalibrateRtlClassifier/Regressor."""
     if not hparams:
       hparams = tfl_hparams.CalibratedRtlHParams([])
@@ -59,7 +60,7 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     super(_CalibratedRtl,
           self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
                          keypoints_initializers_fn, optimizer, config, hparams,
-                         'rtl')
+                         head, 'rtl')
     self._structure_file = os.path.join(self._model_dir, _RTL_STRUCTURE_FILE)
 
   def _check_per_feature_param_configuration(
@@ -312,8 +313,8 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     (output_tensors, _, projection_ops, regularization) = packed_results
     # Take an average of output_tensors and add bias.
     output_tensor = array_ops.stack(
-        output_tensors, axis=2, name='stacked_output')
-    ensemble_output = math_ops.reduce_mean(output_tensor, axis=2)
+        output_tensors, axis=0, name='stacked_output')
+    ensemble_output = math_ops.reduce_mean(output_tensor, axis=0)
     ensemble_bias_init = hparams.get_param('ensemble_bias')
     b = variables.Variable([ensemble_bias_init], name='ensemble_bias')
     prediction = ensemble_output + b
@@ -328,7 +329,8 @@ def calibrated_rtl_classifier(feature_columns=None,
                               keypoints_initializers_fn=None,
                               optimizer=None,
                               config=None,
-                              hparams=None):
+                              hparams=None,
+                              head=None):
   """Calibrated rtl binary classifier model.
 
 
@@ -413,6 +415,10 @@ def calibrated_rtl_classifier(feature_columns=None,
       to learn_runner.EstimatorConfig().
     hparams: an instance of tfl_hparams.CalibrationRtlHParams. If set to
       None default parameters are used.
+    head: a `TensorFlow Estimator Head` which specifies how the loss function,
+      final predictions, and so on are generated from model outputs. Defaults
+      to using a sigmoid cross entropy head for binary classification and mean
+      squared error head for regression.
 
   Returns:
     A `calibrated_rtl_classifier` estimator.
@@ -429,7 +435,8 @@ def calibrated_rtl_classifier(feature_columns=None,
       keypoints_initializers_fn=keypoints_initializers_fn,
       optimizer=optimizer,
       config=config,
-      hparams=hparams)
+      hparams=hparams,
+      head=head)
 
 
 def calibrated_rtl_regressor(feature_columns=None,
@@ -438,7 +445,8 @@ def calibrated_rtl_regressor(feature_columns=None,
                              keypoints_initializers_fn=None,
                              optimizer=None,
                              config=None,
-                             hparams=None):
+                             hparams=None,
+                             head=None):
   """Calibrated rtl regressor model.
 
   This model uses a piecewise lattice calibration function on each of the
@@ -521,6 +529,10 @@ def calibrated_rtl_regressor(feature_columns=None,
       to learn_runner.EstimatorConfig().
     hparams: an instance of tfl_hparams.CalibrationRtlHParams. If set to
       None default parameters are used.
+    head: a `TensorFlow Estimator Head` which specifies how the loss function,
+      final predictions, and so on are generated from model outputs. Defaults
+      to using a sigmoid cross entropy head for binary classification and mean
+      squared error head for regression.
 
   Returns:
     A `calibrated_rtl_regressor` estimator.
@@ -537,4 +549,5 @@ def calibrated_rtl_regressor(feature_columns=None,
       keypoints_initializers_fn=keypoints_initializers_fn,
       optimizer=optimizer,
       config=config,
-      hparams=hparams)
+      hparams=hparams,
+      head=head)

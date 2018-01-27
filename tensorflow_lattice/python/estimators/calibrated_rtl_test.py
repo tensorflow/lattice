@@ -103,7 +103,7 @@ class CalibratedRtlTest(test.TestCase):
 
   def setUp(self):
     super(CalibratedRtlTest, self).setUp()
-    self._test_data = test_data.TestData()
+    self._test_data = test_data.TestData(num_epochs=10)
 
   def _CalibratedRtlRegressor(self,
                               feature_names,

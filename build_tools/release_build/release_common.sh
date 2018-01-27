@@ -21,16 +21,12 @@ function build_pip_pkg {
     # Build pip install package.
     bazel build \
       --compilation_mode=opt \
-      --incompatible_dict_literal_has_no_duplicates=false \
-      --incompatible_disallow_set_constructor=false \
       --distinct_host_configuration=false \
       :pip_pkg
   else
     bazel build \
       --compilation_mode=opt \
       --cpu=k8 \
-      --incompatible_dict_literal_has_no_duplicates=false \
-      --incompatible_disallow_set_constructor=false \
       --distinct_host_configuration=false \
       :pip_pkg
   fi

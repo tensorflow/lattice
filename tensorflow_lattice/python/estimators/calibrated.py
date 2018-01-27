@@ -204,6 +204,14 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
       else:
         quantiles_feature_names = unique_feature_names
 
+      # Reverse initial output keypoints for decreasing monotonic features.
+      reversed_dict = {}
+      for feature_name in quantiles_feature_names:
+        if monotonicity[feature_name] == -1:
+          reversed_dict[feature_name] = True
+        else:
+          reversed_dict[feature_name] = False
+
       # Read initializers from quantiles_dir, for those not already
       # defined.
       #
@@ -215,6 +223,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
           num_keypoints=num_keypoints,
           output_min=calibration_output_min,
           output_max=calibration_output_max,
+          reversed_dict=reversed_dict,
           dtype=dtype)
 
       # Merge with explicit initializers.
@@ -299,6 +308,7 @@ class Calibrated(estimator.Estimator):
                optimizer=None,
                config=None,
                hparams=None,
+               head=None,
                name=None):
     """Construct CalibrateLinearClassifier/Regressor.
 
@@ -337,6 +347,10 @@ class Calibrated(estimator.Estimator):
         to learn_runner.EstimatorConfig().
       hparams: an instance of tf_lattice_hparams.CalibrationHParams. If set to
         None default parameters are used.
+      head: a `TensorFlow Estimator Head` which specifies how the loss function,
+        final predictions, and so on are generated from model outputs. Defaults
+        to using a sigmoid cross entropy head for binary classification and mean
+        squared error head for regression.
       name: Name to be used as top-level variable scope for model.
 
     Returns:
@@ -368,16 +382,19 @@ class Calibrated(estimator.Estimator):
     self._dtype = dtypes.float32
 
 
-    if n_classes == 0:
-      self._head = (
-          head_lib.  # pylint: disable=protected-access
-          _regression_head_with_mean_squared_error_loss(label_dimension=1))
-    elif n_classes == 2:
-      self._head = (
-          head_lib.  # pylint: disable=protected-access
-          _binary_logistic_head_with_sigmoid_cross_entropy_loss())
+    if head is not None:
+      self._head = head
     else:
-      raise ValueError("Invalid value for n_classes=%d" % n_classes)
+      if n_classes == 0:
+        self._head = (
+            head_lib.  # pylint: disable=protected-access
+            _regression_head_with_mean_squared_error_loss(label_dimension=1))
+      elif n_classes == 2:
+        self._head = (
+            head_lib.  # pylint: disable=protected-access
+            _binary_logistic_head_with_sigmoid_cross_entropy_loss())
+      else:
+        raise ValueError("Invalid value for n_classes=%d" % n_classes)
 
     super(Calibrated, self).__init__(
         model_fn=self._calibrated_model_builder(),
