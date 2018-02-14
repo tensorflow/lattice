@@ -166,3 +166,28 @@ py_test(
         "//tensorflow_lattice/python:test_data",
     ],
 )
+
+py_library(
+    name = "separately_calibrated_rtl",
+    srcs = ["separately_calibrated_rtl.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":calibrated",
+        ":hparams",
+        "@six_archive//:six",
+        "@org_tensorflow//tensorflow:tensorflow_py",
+        "//tensorflow_lattice/python:lattice_layers",
+    ],
+)
+
+py_test(
+    name = "separately_calibrated_rtl_test",
+    size = "large",
+    srcs = ["separately_calibrated_rtl_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":separately_calibrated_rtl",
+        "@org_tensorflow//tensorflow:tensorflow_py",
+        "//tensorflow_lattice/python:test_data",
+    ],
+)

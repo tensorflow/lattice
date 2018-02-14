@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""CalibratedRtl canned estimators."""
+"""SeparatelyCalibratedRtl canned estimators."""
 import copy
 import os
 import random
@@ -26,17 +26,14 @@ from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import lattice_layers
 
 from tensorflow.python.lib.io import file_io
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variables
 
 _EPSILON = 1e-7
 
 _RTL_STRUCTURE_FILE = 'rtl_structure.csv'
 
 
-class _CalibratedRtl(calibrated_lib.Calibrated):
-  """Base class for CalibratedRtl{Classifier|Regressor}."""
+class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
+  """Base class for SeparatelyCalibratedRtl{Classifier|Regressor}."""
 
   def __init__(self,
                n_classes,
@@ -57,10 +54,9 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
 
     self.lattice_initializers_fn_ = lattice_initializers_fn
 
-    super(_CalibratedRtl,
-          self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
-                         keypoints_initializers_fn, optimizer, config, hparams,
-                         head, 'rtl')
+    super(_SeparatelyCalibratedRtl, self).__init__(
+        n_classes, feature_columns, model_dir, quantiles_dir,
+        keypoints_initializers_fn, optimizer, config, hparams, head, 'rtl')
     self._structure_file = os.path.join(self._model_dir, _RTL_STRUCTURE_FILE)
 
   def _check_per_feature_param_configuration(
@@ -184,8 +180,8 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     hparams = copy.deepcopy(hparams)
     feature_names = hparams.get_feature_names()
     packed_feature_values = hparams.get_global_and_feature_params(
-        ['lattice_size', 'missing_input_value',
-         'missing_vertex'], feature_names)
+        ['lattice_size', 'missing_input_value', 'missing_vertex'],
+        feature_names)
     default_feature_values, per_feature_values = packed_feature_values
     final_lattice_size, missing_output_value = self._calibration_params(
         *default_feature_values)
@@ -248,33 +244,37 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     rtl_random = random.Random(rtl_seed)
     structure = []
     for _ in range(num_lattices):
-      structure.append(rtl_random.sample(six.moves.xrange(input_dim),
-                                         lattice_rank))
+      structure.append(
+          rtl_random.sample(six.moves.xrange(input_dim), lattice_rank))
     return structure
 
   def calibration_structure_builder(self, columns_to_tensors, feature_columns,
                                     hparams):
     """Returns the calibration structure of the model. See base class."""
-    return None
 
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
-    """Construct the prediciton."""
 
-    self.check_hparams(hparams, adjusted=True)
-    lattice_sizes = [
-        hparams.get_feature_param(f, 'final_lattice_size')
-        for f in per_dimension_feature_names
-    ]
-    lattice_monotonic = [(hparams.get_feature_param(f, 'monotonicity') != 0)
-                         for f in per_dimension_feature_names]
+    # Check to make sure input features are single dimensional.
+    if feature_columns is None:
+      for (column, t) in six.iteritems(columns_to_tensors):
+        if len(t.shape) > 1 and t.shape.dims[1].value > 1:
+          raise ValueError(
+              'Separately calibrated RTLs do not support multi dimensional '
+              'features: %s with shape %s' % (column, t.shape))
+    sorted_columns = sorted(columns_to_tensors.keys())
+
+    # We need to find subsets of feature_columns or columns_to_tensors.
+    if feature_columns is not None:
+      n_inputs = len(feature_columns)
+    else:
+      n_inputs = len(columns_to_tensors)
+
     num_lattices = hparams.get_param('num_lattices')
     lattice_rank = hparams.get_param('lattice_rank')
     rtl_seed = hparams.get_param('rtl_seed')
     # Create and save structure if it does not exists.
     if not file_io.file_exists(self._structure_file):
-      structure = self._create_structure(
-          len(lattice_sizes), num_lattices, lattice_rank, rtl_seed)
+      structure = self._create_structure(n_inputs, num_lattices, lattice_rank,
+                                         rtl_seed)
       self._save_structure(structure)
     structure = self._load_structure()
     # Check structure is what we expect.
@@ -282,12 +282,34 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
       raise ValueError(
           'Expect %d number of lattices, but found %d number of lattices in '
           'structure: %s' % (num_lattices, len(structure), str(structure)))
-    for each_lattice in structure:
-      if len(each_lattice) != lattice_rank:
+    calibration_structure = []
+    for indices in structure:
+      if len(indices) != lattice_rank:
         raise ValueError(
             'Expect %d lattice rank, but found %d in structure: %s' %
-            (lattice_rank, len(each_lattice), str(structure)))
+            (lattice_rank, len(indices), str(structure)))
+      if feature_columns is not None:
+        sub_feature_columns = [feature_columns[i] for i in indices]
+        calibration_structure.append((columns_to_tensors, sub_feature_columns))
+      else:
+        sub_columns_to_tensors = {
+            sorted_columns[i]: columns_to_tensors[sorted_columns[i]]
+            for i in indices
+        }
+        calibration_structure.append((sub_columns_to_tensors, feature_columns))
 
+    return calibration_structure
+
+  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
+                         calibrated):
+    """Construct the prediciton."""
+    self.check_hparams(hparams, adjusted=True)
+    lattice_sizes = [
+        hparams.get_feature_param(f, 'final_lattice_size')
+        for f in per_dimension_feature_names
+    ]
+    lattice_monotonic = [(hparams.get_feature_param(f, 'monotonicity') != 0)
+                         for f in per_dimension_feature_names]
     lattice_l1_reg = hparams.get_param('lattice_l1_reg')
     lattice_l2_reg = hparams.get_param('lattice_l2_reg')
     lattice_l1_torsion_reg = hparams.get_param('lattice_l1_torsion_reg')
@@ -302,40 +324,31 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     ]
     interpolation_type = hparams.get_param('interpolation_type')
 
-    packed_results = lattice_layers.ensemble_lattices_layer(
-        calibrated,
-        lattice_sizes,
-        structure,
-        is_monotone=lattice_monotonic,
-        interpolation_type=interpolation_type,
-        lattice_initializers=self.lattice_initializers_fn_,
-        l1_reg=lattice_l1_reg,
-        l2_reg=lattice_l2_reg,
-        l1_torsion_reg=lattice_l1_torsion_reg,
-        l2_torsion_reg=lattice_l2_torsion_reg,
-        l1_laplacian_reg=lattice_l1_laplacian_reg,
-        l2_laplacian_reg=lattice_l2_laplacian_reg)
-    (output_tensors, _, projection_ops, regularization) = packed_results
-    # Take an average of output_tensors and add bias.
-    output_tensor = array_ops.stack(
-        output_tensors, axis=0, name='stacked_output')
-    ensemble_output = math_ops.reduce_mean(output_tensor, axis=0)
-    ensemble_bias_init = hparams.get_param('ensemble_bias')
-    b = variables.Variable([ensemble_bias_init], name='ensemble_bias')
-    prediction = ensemble_output + b
-
+    (prediction, _, projection_ops,
+     regularization) = lattice_layers.lattice_layer(
+         calibrated,
+         lattice_sizes,
+         is_monotone=lattice_monotonic,
+         interpolation_type=interpolation_type,
+         lattice_initializer=self.lattice_initializers_fn_,
+         l1_reg=lattice_l1_reg,
+         l2_reg=lattice_l2_reg,
+         l1_torsion_reg=lattice_l1_torsion_reg,
+         l2_torsion_reg=lattice_l2_torsion_reg,
+         l1_laplacian_reg=lattice_l1_laplacian_reg,
+         l2_laplacian_reg=lattice_l2_laplacian_reg)
     # Returns prediction Tensor, projection ops, and regularization.
     return prediction, projection_ops, regularization
 
 
-def calibrated_rtl_classifier(feature_columns=None,
-                              model_dir=None,
-                              quantiles_dir=None,
-                              keypoints_initializers_fn=None,
-                              optimizer=None,
-                              config=None,
-                              hparams=None,
-                              head=None):
+def separately_calibrated_rtl_classifier(feature_columns=None,
+                                         model_dir=None,
+                                         quantiles_dir=None,
+                                         keypoints_initializers_fn=None,
+                                         optimizer=None,
+                                         config=None,
+                                         hparams=None,
+                                         head=None):
   """Calibrated rtl binary classifier model.
 
 
@@ -378,7 +391,7 @@ def calibrated_rtl_classifier(feature_columns=None,
     return  # Exit program.
 
   hparams = hparams.CalibratedRtlHparams(num_lattices=10, lattice_rank=2)
-  estimator = calibrated_rtl.calibrated_rtl_classifier(
+  estimator = separately_calibrated_rtl.separately_calibrated_rtl_classifier(
     feature_columns=feature_columns, hparams=hparams)
   estimator.train(input_fn=input_fn_train)
   estimator.evaluate(input_fn=input_fn_eval)
@@ -426,13 +439,13 @@ def calibrated_rtl_classifier(feature_columns=None,
       squared error head for regression.
 
   Returns:
-    A `calibrated_rtl_classifier` estimator.
+    A `separately_calibrated_rtl_classifier` estimator.
 
   Raises:
     ValueError: invalid parameters.
     KeyError: type of feature not supported.
   """
-  return _CalibratedRtl(
+  return _SeparatelyCalibratedRtl(
       n_classes=2,
       feature_columns=feature_columns,
       model_dir=model_dir,
@@ -444,14 +457,14 @@ def calibrated_rtl_classifier(feature_columns=None,
       head=head)
 
 
-def calibrated_rtl_regressor(feature_columns=None,
-                             model_dir=None,
-                             quantiles_dir=None,
-                             keypoints_initializers_fn=None,
-                             optimizer=None,
-                             config=None,
-                             hparams=None,
-                             head=None):
+def separately_calibrated_rtl_regressor(feature_columns=None,
+                                        model_dir=None,
+                                        quantiles_dir=None,
+                                        keypoints_initializers_fn=None,
+                                        optimizer=None,
+                                        config=None,
+                                        hparams=None,
+                                        head=None):
   """Calibrated rtl regressor model.
 
   This model uses a piecewise lattice calibration function on each of the
@@ -492,7 +505,7 @@ def calibrated_rtl_regressor(feature_columns=None,
     return  # Exit program.
 
   hparams = hparams.CalibratedRtlHparams(num_lattices=10, lattice_rank=2)
-  estimator = calibrated_rtl.calibrated_rtl_classifier(
+  estimator = separately_calibrated_rtl.separately_calibrated_rtl_classifier(
     feature_columns=feature_columns, hparams=hparams)
   estimator.train(input_fn=input_fn_train)
   estimator.evaluate(input_fn=input_fn_eval)
@@ -540,13 +553,13 @@ def calibrated_rtl_regressor(feature_columns=None,
       squared error head for regression.
 
   Returns:
-    A `calibrated_rtl_regressor` estimator.
+    A `separately_calibrated_rtl_regressor` estimator.
 
   Raises:
     ValueError: invalid parameters.
     KeyError: type of feature not supported.
   """
-  return _CalibratedRtl(
+  return _SeparatelyCalibratedRtl(
       n_classes=0,
       feature_columns=feature_columns,
       model_dir=model_dir,

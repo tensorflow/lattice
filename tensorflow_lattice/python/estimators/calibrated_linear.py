@@ -103,6 +103,11 @@ class _CalibratedLinear(calibrated_lib.Calibrated):
           ' the parameter may be inherited from global parameter.\nDetailed '
           'error messsages\n%s' % '\n'.join(error_messages))
 
+  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
+                                    hparams):
+    """Returns the calibration structure of the model. See base class."""
+    return None
+
   def prediction_builder(self, mode, per_dimension_feature_names, hparams,
                          calibrated):
     # No need for linear weights: since they are redundant, the calibration

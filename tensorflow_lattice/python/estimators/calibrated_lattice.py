@@ -189,6 +189,11 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
     # Last vertex of the lattice is reserved for missing values.
     return lattice_size + 1, lattice_size
 
+  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
+                                    hparams):
+    """Returns the calibration structure of the model. See base class."""
+    return None
+
   def prediction_builder(self, mode, per_dimension_feature_names, hparams,
                          calibrated):
     """Construct the prediciton."""

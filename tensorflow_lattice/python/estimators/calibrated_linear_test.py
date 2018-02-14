@@ -75,8 +75,10 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
     return calibrated_linear.calibrated_linear_regressor(
         feature_columns=feature_columns,
         hparams=hparams,
-        keypoints_initializers_fn={'x0': init_fn,
-                                   'x1': init_fn},
+        keypoints_initializers_fn={
+            'x0': init_fn,
+            'x1': init_fn
+        },
         quantiles_dir=quantiles_dir  # Used for 'x2'
     )
 
@@ -110,6 +112,18 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
     #   Loss(CalibratedLinear)=~2.5e-5
     #   Loss(LinearRegressor)=~2.5e-2
     self.assertLess(results['average_loss'], 1e-4)
+
+  def testCalibratedLinearMonotonicRegressorTraining1D(self):
+    feature_columns = [
+        feature_column_lib.numeric_column('x'),
+    ]
+    estimator = self._CalibratedLinearRegressor(
+        ['x'],
+        feature_columns,
+        feature__x__monotonicity=+1,
+        feature__x__missing_input_value=-1.0)
+    estimator.train(input_fn=self._test_data.oned_input_fn())
+    _ = estimator.evaluate(input_fn=self._test_data.oned_input_fn())
 
   def testCalibratedLinearRegressorTraining1DWithCalibrationRegularizer(self):
     feature_columns = [
@@ -152,8 +166,8 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
       estimator = self._CalibratedLinearRegressorWithQuantiles(
           ['x0', 'x1', 'x2'], feature_columns)
     estimator.train(input_fn=self._test_data.threed_input_fn(False, 4))
-    results = estimator.evaluate(input_fn=self._test_data.threed_input_fn(
-        False, 1))
+    results = estimator.evaluate(
+        input_fn=self._test_data.threed_input_fn(False, 1))
     # For the record:
     #   average_loss(CalibratedLinear, 4 epochs)=~1e-5
     #   average_loss(LinearRegressor, 100 epochs)=~0.159
