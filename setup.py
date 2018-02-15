@@ -29,7 +29,7 @@ from setuptools.dist import Distribution
 import warnings
 
 
-__version__ = '0.9.5'
+__version__ = '0.9.6'
 
 
 REQUIRED_PACKAGES = [
