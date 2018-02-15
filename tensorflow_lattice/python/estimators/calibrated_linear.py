@@ -116,7 +116,7 @@ class _CalibratedLinear(calibrated_lib.Calibrated):
     # many features.
 
     self.check_hparams(hparams)
-    prediction = math_ops.reduce_sum(calibrated, 1, keep_dims=True)
+    prediction = math_ops.reduce_sum(calibrated, 1, keepdims=True)
     bias = variable_scope.get_variable(
         _SCOPE_BIAS_WEIGHT,
         initializer=array_ops.zeros(shape=[], dtype=self._dtype))

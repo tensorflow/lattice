@@ -191,3 +191,25 @@ py_test(
         "//tensorflow_lattice/python:test_data",
     ],
 )
+
+py_library(
+    name = "optimizers",
+    srcs = ["optimizers.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "@org_tensorflow//tensorflow:tensorflow_py",
+    ],
+)
+
+py_test(
+    name = "optimizers_test",
+    size = "large",
+    srcs = ["optimizers_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":calibrated_linear",
+				":optimizers",
+        "@org_tensorflow//tensorflow:tensorflow_py",
+        "//tensorflow_lattice/python:test_data",
+    ],
+)
