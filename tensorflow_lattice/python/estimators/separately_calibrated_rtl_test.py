@@ -17,8 +17,8 @@
 
 import numpy as np
 
-from tensorflow_lattice.python.estimators import calibrated_rtl
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
+from tensorflow_lattice.python.estimators import separately_calibrated_rtl as scrtl
 from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import test_data
 
@@ -39,7 +39,7 @@ class CalibratedRtlHParamsTest(test.TestCase):
     self.hparams.set_param('calibration_bound', True)
     self.hparams.set_param('lattice_rank', 2)
     self.hparams.set_param('num_lattices', 10)
-    self.empty_estimator = calibrated_rtl.calibrated_rtl_classifier(
+    self.empty_estimator = scrtl.separately_calibrated_rtl_classifier(
         hparams=self.hparams)
 
   def testWrongLatticeSize(self):
@@ -127,7 +127,7 @@ class CalibratedRtlTest(test.TestCase):
     hparams.set_param('calibration_monotonic', None)
     hparams.set_param('learning_rate', 0.1)
 
-    return calibrated_rtl.calibrated_rtl_regressor(
+    return scrtl.separately_calibrated_rtl_regressor(
         feature_columns=feature_columns,
         hparams=hparams,
         keypoints_initializers_fn=init_fn)
@@ -151,7 +151,7 @@ class CalibratedRtlTest(test.TestCase):
     hparams.set_param('calibration_monotonic', None)
     hparams.set_param('learning_rate', 0.1)
 
-    return calibrated_rtl.calibrated_rtl_classifier(
+    return scrtl.separately_calibrated_rtl_classifier(
         feature_columns=feature_columns,
         hparams=hparams,
         keypoints_initializers_fn=init_fn)
@@ -164,7 +164,7 @@ class CalibratedRtlTest(test.TestCase):
         ['x'], feature_columns, num_lattices=3, lattice_rank=1)
     estimator.train(input_fn=self._test_data.oned_input_fn())
     results = estimator.evaluate(input_fn=self._test_data.oned_input_fn())
-    self.assertLess(results['average_loss'], 1e-3)
+    self.assertLess(results['average_loss'], 1e-2)
 
   def testCalibratedRtlRegressorTraining2D(self):
     feature_columns = [
@@ -235,33 +235,6 @@ class CalibratedRtlTest(test.TestCase):
     self.assertGreater(results['average_loss'], 0.1)
     self.assertLess(results['average_loss'], 0.2)
 
-  def testCalibratedRtlRegressorTrainingMultiDimensionalFeature(self):
-    feature_columns = [
-        feature_column_lib.numeric_column('x', shape=(2,)),
-    ]
-    estimator = self._CalibratedRtlRegressor(
-        ['x'],
-        feature_columns,
-        num_lattices=3,
-        lattice_rank=2,)
-    estimator.train(input_fn=self._test_data.multid_feature_input_fn())
-    results = estimator.evaluate(
-        input_fn=self._test_data.multid_feature_input_fn())
-    self.assertLess(results['average_loss'], 2e-2)
-
-    # Turn-off calibration for feature 'x', it should turn off for both
-    # dimensions, and the results should get much worse.
-    estimator = self._CalibratedRtlRegressor(
-        ['x'],
-        feature_columns,
-        num_lattices=3,
-        lattice_rank=2,
-        feature__x__num_keypoints=0)
-    estimator.train(input_fn=self._test_data.multid_feature_input_fn())
-    results = estimator.evaluate(
-        input_fn=self._test_data.multid_feature_input_fn())
-    self.assertGreater(results['average_loss'], 4e-2)
-
   def testCalibratedRtlClassifierTraining(self):
     feature_columns = [
         feature_column_lib.numeric_column('x0'),
@@ -308,13 +281,13 @@ class CalibratedRtlTest(test.TestCase):
         lattice_l1_torsion_reg=1.0,
         lattice_l2_torsion_reg=1.0,
         lattice_l1_laplacian_reg=1.0,
-        lattice_l2_laplacian_reg=0.1)
+        lattice_l2_laplacian_reg=1.0)
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.twod_classificer_input_fn())
     # We expect AUC is worse than the model without regularization.
     self.assertLess(results['auc'], 0.99)
-    self.assertGreater(results['auc'], 0.6)
+    self.assertGreater(results['auc'], 0.4)
 
   def testCalibratedRtlClassifierTrainingWithPerFeatureRegularizer(self):
     feature_columns = [
@@ -327,7 +300,7 @@ class CalibratedRtlTest(test.TestCase):
         num_lattices=3,
         lattice_rank=2,
         feature__x0__lattice_l1_laplacian_reg=5.0,
-        feature__x1__lattice_l2_laplacian_reg=0.1)
+        feature__x1__lattice_l2_laplacian_reg=0.5)
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.twod_classificer_input_fn())
@@ -383,7 +356,7 @@ class CalibratedRtlTest(test.TestCase):
     hparams.set_param('learning_rate', 0.1)
     hparams.set_param('interpolation_type', 'hypercube')
 
-    estimator = calibrated_rtl.calibrated_rtl_classifier(
+    estimator = scrtl.separately_calibrated_rtl_classifier(
         feature_columns=feature_columns,
         hparams=hparams,
         keypoints_initializers_fn=init_fn)
@@ -428,7 +401,7 @@ class CalibratedRtlTest(test.TestCase):
         missing_input_value=-1.)
     hparams.set_feature_param('x0', 'missing_vertex', True)
 
-    estimator = calibrated_rtl.calibrated_rtl_regressor(
+    estimator = scrtl.separately_calibrated_rtl_regressor(
         feature_columns=feature_columns,
         hparams=hparams,
         keypoints_initializers_fn=init_fn)

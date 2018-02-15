@@ -41,6 +41,9 @@ class CalibratedFake(calibrated_lib.Calibrated):
                          keypoints_initializers_fn, optimizer, config, hparams,
                          'Fake')
 
+  def calibration_structure_builder(self, hparams):
+    return None
+
   def prediction_builder(self, mode, per_dimension_feature_names, hparams,
                          calibrated):
     return None

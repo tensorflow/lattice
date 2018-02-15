@@ -136,8 +136,7 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
         raise ValueError(
             'incompatible types for signal \'%s\': uncalibrated=%s, '
             'keypoints_initializers[input=%s, output=%s]' %
-            (signal_name, uncalibrated_tensor.dtype, kp_in.dtype,
-             kp_out.dtype))
+            (signal_name, uncalibrated_tensor.dtype, kp_in.dtype, kp_out.dtype))
       tools.assert_shape(kp_in, [num_keypoints],
                          'keypoints_initializers[input]')
       tools.assert_shape(kp_out, [num_keypoints],
@@ -172,6 +171,7 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
           # Learned missing value, initialized by the first value of kp_out.
           def first_kp_out(*args, **kwargs):
             return kp_out(*args, **kwargs)[0]
+
           missing_out_calibrated = variable_scope.get_variable(
               missing_out_calibrated_name, shape=[], initializer=first_kp_out)
     else:
@@ -244,8 +244,10 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
         # them in variables make them available during inference.
         def min_kp_out(*args, **kwargs):
           return math_ops.reduce_min(kp_out(*args, **kwargs))
+
         def max_kp_out(*args, **kwargs):
           return math_ops.reduce_max(kp_out(*args, **kwargs))
+
         bound_min = variable_scope.get_variable(
             bound_min_name,
             dtype=uncalibrated_tensor.dtype,
@@ -284,7 +286,8 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
           constrained_diff,
           use_locking=None,
           name='project_feasible')
-      if missing_input_value is not None and missing_output_value is None:
+      if (bound and missing_input_value is not None and
+          missing_output_value is None):
         # Include op bounding calibrated missing value.
         projected_missing_out_calibrated = math_ops.minimum(
             math_ops.maximum(missing_out_calibrated, bound_min), bound_max)
@@ -300,8 +303,11 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
 
     # Regularization
     regularization = regularizers.calibrator_regularization(
-        keypoints_outputs, l1_reg=l1_reg, l2_reg=l2_reg,
-        l1_laplacian_reg=l1_laplacian_reg, l2_laplacian_reg=l2_laplacian_reg,
+        keypoints_outputs,
+        l1_reg=l1_reg,
+        l2_reg=l2_reg,
+        l1_laplacian_reg=l1_laplacian_reg,
+        l2_laplacian_reg=l2_laplacian_reg,
         name=signal_name + '_calibrator_regularization')
   return calibrated, projection_ops, regularization
 
@@ -409,14 +415,12 @@ def input_calibration_layer(columns_to_tensors,
         missing_input_values, feature_names, 'missing_input_values')
     missing_output_values = tools.cast_to_dict(
         missing_output_values, feature_names, 'missing_output_values')
-    l1_regs = tools.cast_to_dict(
-        l1_reg, feature_names, 'calibration_l1_reg')
-    l2_regs = tools.cast_to_dict(
-        l2_reg, feature_names, 'calibration_l2_reg')
-    l1_laplacian_regs = tools.cast_to_dict(
-        l1_laplacian_reg, feature_names, 'calibration_l1_laplacian_reg')
-    l2_laplacian_regs = tools.cast_to_dict(
-        l2_laplacian_reg, feature_names, 'calibration_l2_laplacian_reg')
+    l1_regs = tools.cast_to_dict(l1_reg, feature_names, 'calibration_l1_reg')
+    l2_regs = tools.cast_to_dict(l2_reg, feature_names, 'calibration_l2_reg')
+    l1_laplacian_regs = tools.cast_to_dict(l1_laplacian_reg, feature_names,
+                                           'calibration_l1_laplacian_reg')
+    l2_laplacian_regs = tools.cast_to_dict(l2_laplacian_reg, feature_names,
+                                           'calibration_l2_laplacian_reg')
 
     per_dimension_feature_names = []
 
@@ -441,7 +445,18 @@ def input_calibration_layer(columns_to_tensors,
     for feature_idx in range(len(feature_names)):
       name = feature_names[feature_idx]
       uncalibrated_feature = uncalibrated_features[feature_idx]
-      feature_dim = uncalibrated_feature.shape.dims[1].value
+      if uncalibrated_feature.shape.ndims == 1:
+        feature_dim = 1
+        uncalibrated_splits = [uncalibrated_feature]
+      elif uncalibrated_feature.shape.ndims == 2:
+        feature_dim = uncalibrated_feature.shape.dims[1].value
+        uncalibrated_splits = array_ops.unstack(uncalibrated_feature, axis=1)
+      else:
+        raise ValueError(
+            'feature {}: it has rank {}, but only ranks 1 or 2 are '
+            'supported; feature shape={}'.format(
+                name, uncalibrated_feature.shape.ndims,
+                uncalibrated_feature.shape))
       missing_input_value = missing_input_values[name]
       missing_output_value = missing_output_values[name]
       l1_reg = l1_regs[name]
@@ -451,7 +466,6 @@ def input_calibration_layer(columns_to_tensors,
 
       # FutureWork: make the interpolation ops handle multi-dimension values,
       #   so this step is not needed.
-      uncalibrated_splits = array_ops.unstack(uncalibrated_feature, axis=1)
       for dim_idx in range(feature_dim):
         per_dimension_feature_names += [name]
         split_name = name
@@ -589,7 +603,7 @@ def calibration_layer(uncalibrated_tensor,
     keypoints_initializers = tools.cast_to_list(keypoints_initializers, n,
                                                 'keypoints_initializers')
     keypoints_initializer_fns = tools.cast_to_list(keypoints_initializer_fns, n,
-                                                  'keypoints_initializer_fns')
+                                                   'keypoints_initializer_fns')
     bound = tools.cast_to_list(bound, n, 'bound')
     monotonic = tools.cast_to_list(monotonic, n, 'monotonic')
     missing_input_values = tools.cast_to_list(missing_input_values, n,

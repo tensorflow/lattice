@@ -39,5 +39,17 @@ py_library(
         "//tensorflow_lattice/python/estimators:calibrated_linear",
         "//tensorflow_lattice/python/estimators:calibrated_rtl",
         "//tensorflow_lattice/python/estimators:hparams",
+        "//tensorflow_lattice/python/estimators:separately_calibrated_rtl",
     ],
+)
+
+# Depend on this if you have a C++ library or binary that uses TensorFlow
+# lattice ops.
+cc_library(
+    name = "tensorflow_lattice_cc",
+    deps = [
+        "//tensorflow_lattice/cc:lattice_ops",
+        "//tensorflow_lattice/cc:pwl_calibration_ops",
+    ],
+    alwayslink = 1,
 )
