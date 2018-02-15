@@ -208,7 +208,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":calibrated_linear",
-				":optimizers",
+        ":optimizers",
         "@org_tensorflow//tensorflow:tensorflow_py",
         "//tensorflow_lattice/python:test_data",
     ],
