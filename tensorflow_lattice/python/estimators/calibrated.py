@@ -33,6 +33,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training import training
@@ -327,6 +328,7 @@ class Calibrated(estimator.Estimator):
                config=None,
                hparams=None,
                head=None,
+               weight_column=None,
                name=None):
     """Construct CalibrateLinearClassifier/Regressor.
 
@@ -369,6 +371,10 @@ class Calibrated(estimator.Estimator):
         final predictions, and so on are generated from model outputs. Defaults
         to using a sigmoid cross entropy head for binary classification and mean
         squared error head for regression.
+      weight_column: A string or a `tf.feature_column.numeric_column` defining
+        feature column representing weights. It is used to down weight or boost
+        examples during training. It will be multiplied by the loss of the
+        example.
       name: Name to be used as top-level variable scope for model.
 
     Returns:
@@ -380,6 +386,7 @@ class Calibrated(estimator.Estimator):
       KeyError: type of feature not supported.
     """
     self._feature_columns = feature_columns
+    self._weight_column = weight_column
     self._quantiles_dir = quantiles_dir
     self._keypoints_initializers_fn = keypoints_initializers_fn
     self._optimizer = optimizer
@@ -406,11 +413,14 @@ class Calibrated(estimator.Estimator):
       if n_classes == 0:
         self._head = (
             head_lib.  # pylint: disable=protected-access
-            _regression_head_with_mean_squared_error_loss(label_dimension=1))
+            _regression_head_with_mean_squared_error_loss(
+                label_dimension=1,
+                weight_column=self._weight_column))
       elif n_classes == 2:
         self._head = (
             head_lib.  # pylint: disable=protected-access
-            _binary_logistic_head_with_sigmoid_cross_entropy_loss())
+            _binary_logistic_head_with_sigmoid_cross_entropy_loss(
+                weight_column=self._weight_column))
       else:
         raise ValueError("Invalid value for n_classes=%d" % n_classes)
 

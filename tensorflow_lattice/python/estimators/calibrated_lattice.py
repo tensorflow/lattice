@@ -37,7 +37,8 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
                optimizer=None,
                config=None,
                hparams=None,
-               head=None):
+               head=None,
+               weight_column=None):
     """Construct CalibrateLatticeClassifier/Regressor."""
     if not hparams:
       hparams = tfl_hparams.CalibratedLatticeHParams([])
@@ -49,7 +50,7 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
     super(_CalibratedLattice,
           self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
                          keypoints_initializers_fn, optimizer, config, hparams,
-                         head, 'lattice')
+                         head, weight_column, 'lattice')
 
   def _check_param_configuration(self, adjusted, monotonicity, lattice_size,
                                  calibration_output_min, calibration_output_max,
@@ -242,7 +243,8 @@ def calibrated_lattice_classifier(feature_columns=None,
                                   optimizer=None,
                                   config=None,
                                   hparams=None,
-                                  head=None):
+                                  head=None,
+                                  weight_column=None):
   """Calibrated lattice classifier binary model.
 
 
@@ -324,6 +326,10 @@ def calibrated_lattice_classifier(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `CalibratedLatticeClassifier` estimator.
@@ -341,7 +347,8 @@ def calibrated_lattice_classifier(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)
 
 
 def calibrated_lattice_regressor(feature_columns=None,
@@ -351,7 +358,8 @@ def calibrated_lattice_regressor(feature_columns=None,
                                  optimizer=None,
                                  config=None,
                                  hparams=None,
-                                 head=None):
+                                 head=None,
+                                 weight_column=None):
   """Calibrated lattice estimator (model) for regression.
 
   This model uses a piecewise lattice calibration function on each of the
@@ -434,6 +442,10 @@ def calibrated_lattice_regressor(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `CalibratedLatticeRegressor` estimator.
@@ -451,4 +463,5 @@ def calibrated_lattice_regressor(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)
