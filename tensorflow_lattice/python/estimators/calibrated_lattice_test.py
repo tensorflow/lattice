@@ -133,15 +133,6 @@ class CalibratedLatticeTest(test.TestCase):
     results = estimator.evaluate(input_fn=self._test_data.oned_input_fn())
     self.assertLess(results['average_loss'], 1e-3)
 
-  def testCalibratedLatticeRegressorTraining1D(self):
-    feature_columns = [
-        feature_column_lib.numeric_column('x'),
-    ]
-    estimator = self._CalibratedLatticeRegressor(['x'], feature_columns)
-    estimator.train(input_fn=self._test_data.oned_input_fn())
-    results = estimator.evaluate(input_fn=self._test_data.oned_input_fn())
-    self.assertLess(results['average_loss'], 1e-3)
-
   def testCalibratedLatticeRegressorWeightedTraining1D(self):
     feature_columns = [
         feature_column_lib.numeric_column('x'),
