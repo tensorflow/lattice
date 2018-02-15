@@ -284,8 +284,7 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
           constrained_diff,
           use_locking=None,
           name='project_feasible')
-      if (bound and missing_input_value is not None
-              and missing_output_value is None):
+      if missing_input_value is not None and missing_output_value is None:
         # Include op bounding calibrated missing value.
         projected_missing_out_calibrated = math_ops.minimum(
             math_ops.maximum(missing_out_calibrated, bound_min), bound_max)
