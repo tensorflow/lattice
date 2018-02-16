@@ -45,7 +45,8 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
                optimizer=None,
                config=None,
                hparams=None,
-               head=None):
+               head=None,
+               weight_column=None):
     """Construct CalibrateRtlClassifier/Regressor."""
     if not hparams:
       hparams = tfl_hparams.CalibratedRtlHParams([])
@@ -56,7 +57,8 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
 
     super(_SeparatelyCalibratedRtl, self).__init__(
         n_classes, feature_columns, model_dir, quantiles_dir,
-        keypoints_initializers_fn, optimizer, config, hparams, head, 'rtl')
+        keypoints_initializers_fn, optimizer, config, hparams, head,
+        weight_column, 'rtl')
     self._structure_file = os.path.join(self._model_dir, _RTL_STRUCTURE_FILE)
 
   def _check_per_feature_param_configuration(
@@ -348,7 +350,8 @@ def separately_calibrated_rtl_classifier(feature_columns=None,
                                          optimizer=None,
                                          config=None,
                                          hparams=None,
-                                         head=None):
+                                         head=None,
+                                         weight_column=None):
   """Calibrated rtl binary classifier model.
 
 
@@ -437,6 +440,10 @@ def separately_calibrated_rtl_classifier(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `separately_calibrated_rtl_classifier` estimator.
@@ -454,7 +461,8 @@ def separately_calibrated_rtl_classifier(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)
 
 
 def separately_calibrated_rtl_regressor(feature_columns=None,
@@ -464,7 +472,8 @@ def separately_calibrated_rtl_regressor(feature_columns=None,
                                         optimizer=None,
                                         config=None,
                                         hparams=None,
-                                        head=None):
+                                        head=None,
+                                        weight_column=None):
   """Calibrated rtl regressor model.
 
   This model uses a piecewise lattice calibration function on each of the
@@ -551,6 +560,10 @@ def separately_calibrated_rtl_regressor(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `separately_calibrated_rtl_regressor` estimator.
@@ -568,4 +581,5 @@ def separately_calibrated_rtl_regressor(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)

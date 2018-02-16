@@ -40,7 +40,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
     return linear_estimator.LinearRegressor(feature_columns=feature_columns)
 
   def _CalibratedLinearRegressor(self, feature_names, feature_columns,
-                                 **hparams_args):
+          weight_column=None, **hparams_args):
 
     def init_fn():
       return keypoints_initialization.uniform_keypoints_for_signal(
@@ -50,6 +50,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
         feature_names, num_keypoints=_NUM_KEYPOINTS, **hparams_args)
     return calibrated_linear.calibrated_linear_regressor(
         feature_columns=feature_columns,
+        weight_column=weight_column,
         hparams=hparams,
         keypoints_initializers_fn=init_fn)
 
@@ -112,6 +113,17 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
     #   Loss(CalibratedLinear)=~2.5e-5
     #   Loss(LinearRegressor)=~2.5e-2
     self.assertLess(results['average_loss'], 1e-4)
+
+  def testCalibratedLinearRegressorWeightedTraining1D(self):
+    feature_columns = [feature_column_lib.numeric_column('x')]
+    weight_column = feature_column_lib.numeric_column('zero')
+    estimator = self._CalibratedLinearRegressor(['x'], feature_columns,
+            weight_column=weight_column)
+    estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
+    results = estimator.evaluate(
+            input_fn=self._test_data.oned_zero_weight_input_fn())
+    # Expects almost zero since the weight values are exactly zero.
+    self.assertLess(results['average_loss'], 1e-7)
 
   def testCalibratedLinearMonotonicRegressorTraining1D(self):
     feature_columns = [
