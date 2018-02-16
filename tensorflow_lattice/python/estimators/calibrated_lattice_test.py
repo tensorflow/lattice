@@ -89,8 +89,11 @@ class CalibratedLatticeTest(test.TestCase):
     super(CalibratedLatticeTest, self).setUp()
     self._test_data = test_data.TestData()
 
-  def _CalibratedLatticeRegressor(self, feature_names, feature_columns,
-          weight_column=None, **hparams_args):
+  def _CalibratedLatticeRegressor(self,
+                                  feature_names,
+                                  feature_columns,
+                                  weight_column=None,
+                                  **hparams_args):
 
     def init_fn():
       return keypoints_initialization.uniform_keypoints_for_signal(
@@ -105,6 +108,7 @@ class CalibratedLatticeTest(test.TestCase):
         feature_columns=feature_columns,
         weight_column=weight_column,
         hparams=hparams,
+        weight_column=weight_column,
         keypoints_initializers_fn=init_fn)
 
   def _CalibratedLatticeClassifier(self, feature_columns, **hparams_args):
@@ -138,11 +142,11 @@ class CalibratedLatticeTest(test.TestCase):
         feature_column_lib.numeric_column('x'),
     ]
     weight_column = feature_column_lib.numeric_column('zero')
-    estimator = self._CalibratedLatticeRegressor(['x'], feature_columns,
-            weight_column=weight_column)
+    estimator = self._CalibratedLatticeRegressor(
+        ['x'], feature_columns, weight_column=weight_column)
     estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
     results = estimator.evaluate(
-            input_fn=self._test_data.oned_zero_weight_input_fn())
+        input_fn=self._test_data.oned_zero_weight_input_fn())
     self.assertLess(results['average_loss'], 1e-7)
 
   def testCalibratedLatticeRegressorTraining2D(self):

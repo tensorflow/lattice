@@ -133,8 +133,8 @@ def calibrated_linear_classifier(feature_columns=None,
                                  optimizer=None,
                                  config=None,
                                  hparams=None,
-                                 weight_column=None,
-                                 head=None):
+                                 head=None,
+                                 weight_column=None):
   """Calibrated linear classifier binary model.
 
 
@@ -241,8 +241,8 @@ def calibrated_linear_classifier(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      weight_column=weight_column,
-      head=head)
+      head=head,
+      weight_column=weight_column)
 
 
 def calibrated_linear_regressor(feature_columns=None,
@@ -361,5 +361,5 @@ def calibrated_linear_regressor(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      weight_column=weight_column,
-      head=head)
+      head=head,
+      weight_column=weight_column)

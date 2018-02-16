@@ -55,10 +55,10 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
 
     self.lattice_initializers_fn_ = lattice_initializers_fn
 
-    super(_SeparatelyCalibratedRtl, self).__init__(
-        n_classes, feature_columns, model_dir, quantiles_dir,
-        keypoints_initializers_fn, optimizer, config, hparams, head,
-        weight_column, 'rtl')
+    super(_SeparatelyCalibratedRtl,
+          self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
+                         keypoints_initializers_fn, optimizer, config, hparams,
+                         head, weight_column, 'rtl')
     self._structure_file = os.path.join(self._model_dir, _RTL_STRUCTURE_FILE)
 
   def _check_per_feature_param_configuration(

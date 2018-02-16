@@ -309,10 +309,10 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
     self.check_hparams(hparams)
     hparams = self._adjust_calibration_params(hparams)
 
-    super(_CalibratedEtl, self).__init__(
-        n_classes, feature_columns, model_dir, quantiles_dir,
-        keypoints_initializers_fn, optimizer, config, hparams, head,
-        weight_column, 'etl')
+    super(_CalibratedEtl,
+          self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
+                         keypoints_initializers_fn, optimizer, config, hparams,
+                         head, weight_column, 'etl')
     # After initialization, we expect model_dir exists.
     if self._model_dir is None:
       raise ValueError('model_dir is not created')

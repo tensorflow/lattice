@@ -85,11 +85,14 @@ class TestData(object):
     zeros = np.zeros(shape=(self.num_examples))
     y = self._f(x)
     return numpy_io.numpy_input_fn(
-            x={'x': x, 'zero': zeros},
-            y=y,
-            batch_size=self.batch_size,
-            num_epochs=self.num_epochs,
-            shuffle=False)
+        x={
+            'x': x,
+            'zero': zeros
+        },
+        y=y,
+        batch_size=self.batch_size,
+        num_epochs=self.num_epochs,
+        shuffle=False)
 
   def twod_input_fn(self):
     """Returns an input function for two dimensional learning task.

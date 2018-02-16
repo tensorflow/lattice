@@ -171,11 +171,11 @@ class CalibratedRtlTest(test.TestCase):
   def testCalibratedRtlRegressorWeightedTraining1D(self):
     feature_columns = [feature_column_lib.numeric_column('x')]
     weight_column = feature_column_lib.numeric_column('zero')
-    estimator = self._CalibratedRtlRegressor(['x'], feature_columns,
-            weight_column=weight_column)
+    estimator = self._CalibratedRtlRegressor(
+        ['x'], feature_columns, weight_column=weight_column)
     estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
     results = estimator.evaluate(
-            input_fn=self._test_data.oned_zero_weight_input_fn())
+        input_fn=self._test_data.oned_zero_weight_input_fn())
     # Expects almost zero since the weight values are exactly zero.
     self.assertLess(results['average_loss'], 1e-7)
 
