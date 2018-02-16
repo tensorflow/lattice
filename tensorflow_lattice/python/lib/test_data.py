@@ -71,6 +71,29 @@ class TestData(object):
         num_epochs=self.num_epochs,
         shuffle=False)
 
+  def oned_zero_weight_input_fn(self):
+    """Returns an input function for one dimensional learning task.
+
+    column 'x' is a feature column, column 'zero' is a numerical column that
+    contains zero values and column 'y' is a label column.
+    The transformation is deterministic, where y = _f(x).
+
+    Returns:
+      Function, that has signature of ()->({'x': data, 'zero': zeros}, `target`)
+    """
+    x = np.random.uniform(-1.0, 1.0, size=self.num_examples)
+    zeros = np.zeros(shape=(self.num_examples))
+    y = self._f(x)
+    return numpy_io.numpy_input_fn(
+        x={
+            'x': x,
+            'zero': zeros
+        },
+        y=y,
+        batch_size=self.batch_size,
+        num_epochs=self.num_epochs,
+        shuffle=False)
+
   def twod_input_fn(self):
     """Returns an input function for two dimensional learning task.
 

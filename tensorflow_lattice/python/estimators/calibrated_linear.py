@@ -38,7 +38,8 @@ class _CalibratedLinear(calibrated_lib.Calibrated):
                optimizer=None,
                config=None,
                hparams=None,
-               head=None):
+               head=None,
+               weight_column=None):
     """Construct CalibrateLinearClassifier/Regressor."""
     if not hparams:
       hparams = tfl_hparams.CalibratedLinearHParams([])
@@ -47,7 +48,7 @@ class _CalibratedLinear(calibrated_lib.Calibrated):
     super(_CalibratedLinear,
           self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
                          keypoints_initializers_fn, optimizer, config, hparams,
-                         head, 'linear')
+                         head, weight_column, 'linear')
 
   def _check_param_configuration(self, num_keypoints, missing_input_value,
                                  missing_output_value):
@@ -132,7 +133,8 @@ def calibrated_linear_classifier(feature_columns=None,
                                  optimizer=None,
                                  config=None,
                                  hparams=None,
-                                 head=None):
+                                 head=None,
+                                 weight_column=None):
   """Calibrated linear classifier binary model.
 
 
@@ -218,6 +220,10 @@ def calibrated_linear_classifier(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `CalibratedLinearClassifier` estimator.
@@ -235,7 +241,8 @@ def calibrated_linear_classifier(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)
 
 
 def calibrated_linear_regressor(feature_columns=None,
@@ -245,7 +252,8 @@ def calibrated_linear_regressor(feature_columns=None,
                                 optimizer=None,
                                 config=None,
                                 hparams=None,
-                                head=None):
+                                head=None,
+                                weight_column=None):
   """Calibrated linear estimator (model) for regression.
 
   This model uses a piecewise linear calibration function on each of the
@@ -332,6 +340,10 @@ def calibrated_linear_regressor(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `CalibratedLinearRegressor` estimator.
@@ -349,4 +361,5 @@ def calibrated_linear_regressor(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)

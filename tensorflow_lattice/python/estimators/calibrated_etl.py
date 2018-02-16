@@ -301,16 +301,18 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
                config=None,
                hparams=None,
                feature_engineering_fn=None,
-               head=None):
+               head=None,
+               weight_column=None):
     """Construct CalibrateEtlClassifier/Regressor."""
     if not hparams:
       hparams = tfl_hparams.CalibratedEtlHParams([])
     self.check_hparams(hparams)
     hparams = self._adjust_calibration_params(hparams)
 
-    super(_CalibratedEtl, self).__init__(
-        n_classes, feature_columns, model_dir, quantiles_dir,
-        keypoints_initializers_fn, optimizer, config, hparams, head, 'etl')
+    super(_CalibratedEtl,
+          self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
+                         keypoints_initializers_fn, optimizer, config, hparams,
+                         head, weight_column, 'etl')
     # After initialization, we expect model_dir exists.
     if self._model_dir is None:
       raise ValueError('model_dir is not created')
@@ -492,7 +494,8 @@ def calibrated_etl_classifier(feature_columns=None,
                               optimizer=None,
                               config=None,
                               hparams=None,
-                              head=None):
+                              head=None,
+                              weight_column=None):
   """Calibrated etl binary classifier model.
 
 
@@ -581,6 +584,10 @@ def calibrated_etl_classifier(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `calibrated_etl_classifier` estimator.
@@ -598,7 +605,8 @@ def calibrated_etl_classifier(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)
 
 
 def calibrated_etl_regressor(feature_columns=None,
@@ -608,7 +616,8 @@ def calibrated_etl_regressor(feature_columns=None,
                              optimizer=None,
                              config=None,
                              hparams=None,
-                             head=None):
+                             head=None,
+                             weight_column=None):
   """Calibrated etl regressor model.
 
   This model uses a piecewise lattice calibration function on each of the
@@ -695,6 +704,10 @@ def calibrated_etl_regressor(feature_columns=None,
       final predictions, and so on are generated from model outputs. Defaults
       to using a sigmoid cross entropy head for binary classification and mean
       squared error head for regression.
+    weight_column: A string or a `tf.feature_column.numeric_column` defining
+      feature column representing weights. It is used to down weight or boost
+      examples during training. It will be multiplied by the loss of the
+      example.
 
   Returns:
     A `calibrated_etl_regressor` estimator.
@@ -712,4 +725,5 @@ def calibrated_etl_regressor(feature_columns=None,
       optimizer=optimizer,
       config=config,
       hparams=hparams,
-      head=head)
+      head=head,
+      weight_column=weight_column)
