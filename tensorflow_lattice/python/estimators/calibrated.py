@@ -237,7 +237,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
           exclude_input_values_dict[feature_name] = [
                   missing_input_values[feature_name]]
         else:
-          exclude_inptu_values_dict[feature_name] = []
+          exclude_input_values_dict[feature_name] = []
               
       # Read initializers from quantiles_dir, for those not already
       # defined.
