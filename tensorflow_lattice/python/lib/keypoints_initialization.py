@@ -323,6 +323,7 @@ def load_keypoints_from_quantiles(feature_names,
                                   output_min,
                                   output_max,
                                   reversed_dict=None,
+                                  exclude_input_values_dict=None,
                                   dtype=dtypes.float32):
   """Retrieves keypoints initialization values for selected features.
 
@@ -352,6 +353,10 @@ def load_keypoints_from_quantiles(feature_names,
       feature, i.e., input_min will be mapped to output_max, and input_max will
       be mapped to output_min. Reversing output keypoints is useful for
       decreasing monotonic calibrators.
+    exclude_input_values_dict: An optional dict. Values in
+      exclude_input_values[feature_name] are excluded from the input keypoint
+      values. This dict can be useful to exclude missing input values from the
+      input keypoint values.
     dtype: Type to be used for calibration.
 
   Returns:
@@ -378,6 +383,13 @@ def load_keypoints_from_quantiles(feature_names,
     if feature_name not in num_keypoints or not num_keypoints[feature_name]:
       continue
     all_quantiles = _load_quantiles(subdir, feature_name)
+    if exclude_input_values_dict is not None:
+      exclude_vals = exclude_input_values_dict[feature_name]
+      removed_quantiles = []
+      for q in all_quantiles:
+          if not q in exclude_vals:
+              removed_quantiles.append(q)
+      all_quantiles = removed_quantiles
     percentiles = np.linspace(0., 100., num_keypoints[feature_name])
     quantiles = np.percentile(
         all_quantiles, percentiles, interpolation="nearest")
