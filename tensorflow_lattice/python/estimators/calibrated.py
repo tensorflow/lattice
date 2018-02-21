@@ -229,7 +229,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
           reversed_dict[feature_name] = True
         else:
           reversed_dict[feature_name] = False
-      
+
       # Read initializers from quantiles_dir, for those not already
       # defined.
       #

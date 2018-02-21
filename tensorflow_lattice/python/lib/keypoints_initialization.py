@@ -353,8 +353,8 @@ def load_keypoints_from_quantiles(feature_names,
       feature, i.e., input_min will be mapped to output_max, and input_max will
       be mapped to output_min. Reversing output keypoints is useful for
       decreasing monotonic calibrators.
-    missing_input_values_dict: An optional dict. Values in
-      mssing_input_values[feature_name] are excluded from the input keypoint
+    missing_input_values_dict: An optional dict.
+      missing_input_values[feature_name] is  excluded from the input keypoint
       values.
     dtype: Type to be used for calibration.
 
