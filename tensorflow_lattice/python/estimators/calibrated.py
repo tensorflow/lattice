@@ -230,15 +230,6 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
         else:
           reversed_dict[feature_name] = False
       
-      # Exclude missing_input_values from input_keypoints.
-      exclude_input_values_dict = {}
-      for feature_name in quantiles_feature_names:
-        if missing_input_values[feature_name] is not None:
-          exclude_input_values_dict[feature_name] = [
-                  missing_input_values[feature_name]]
-        else:
-          exclude_input_values_dict[feature_name] = []
-              
       # Read initializers from quantiles_dir, for those not already
       # defined.
       #
@@ -251,7 +242,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
           output_min=calibration_output_min,
           output_max=calibration_output_max,
           reversed_dict=reversed_dict,
-          exclude_input_values_dict=exclude_input_values_dict,
+          missing_input_values_dict=missing_input_values,
           dtype=dtype)
 
       # Merge with explicit initializers.

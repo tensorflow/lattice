@@ -279,7 +279,7 @@ class KeypointsInitializationTestCase(test.TestCase):
     self.assertAllClose(keypoints_init['x2'][0], [0.0, 0.5, 1.0], atol=0.01)
     self.assertAllClose(keypoints_init['x2'][1], [0.0, 0.5, 1.0], atol=0.01)
 
-  def testQuantileInitWithExcludeInputValuesDict(self):
+  def testQuantileInitWithMissingInputValuesDict(self):
     num_examples = 10
     x0 = np.linspace(-1.0, 1.0, num_examples)
     x1 = np.linspace(0.0, 1.0, num_examples)
@@ -306,9 +306,9 @@ class KeypointsInitializationTestCase(test.TestCase):
           output_max={'x0': 1.,
                       'x1': 1.,
                       'x2': 1.},
-          exclude_input_values_dict={'x0': [-1.0],
-                                     'x1': [0.0, 0.5],
-                                     'x2': []},
+          missing_input_values_dict={'x0': -1.0,
+                                     'x1': 0.0,
+                                     'x2': None},
       )
       with self.test_session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
