@@ -18,10 +18,8 @@ import math
 import os
 
 # Dependency imports
-
-from tensorflow_lattice.python.lib import keypoints_initialization
-
 import numpy as np
+from tensorflow_lattice.python.lib import keypoints_initialization
 
 from tensorflow.python.estimator.inputs import numpy_io
 from tensorflow.python.feature_column import feature_column as feature_column_lib
@@ -116,9 +114,9 @@ class KeypointsInitializationTestCase(test.TestCase):
     self.assertAllClose(
         quantiles_x0, [0, 2.5**2, 5.**2, 7.5**2, 100.], atol=0.2)
     self.assertAllClose(
-        quantiles_x1, [1.,
-                       math.pow(10., 0.5), 10.0,
-                       math.pow(10., 1.5), 100.],
+        quantiles_x1,
+        [1., math.pow(10., 0.5), 10.0,
+         math.pow(10., 1.5), 100.],
         atol=0.2)
     # x2 should start with [0,0,...] and end in [..., 1, 1], the middle value
     # can be either 0 or 1.
@@ -134,13 +132,16 @@ class KeypointsInitializationTestCase(test.TestCase):
           feature_names,
           save_dir,
           3,
-          output_min={'x0': 0.,
-                      'x1': 1.,
-                      'x2': 7.},
-          output_max={'x0': 1.,
-                      'x1': 10.,
-                      'x2': 13.}
-      )
+          output_min={
+              'x0': 0.,
+              'x1': 1.,
+              'x2': 7.
+          },
+          output_max={
+              'x0': 1.,
+              'x1': 10.,
+              'x2': 13.
+          })
       with self.test_session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
     self.assertAllClose(keypoints_init['x0'][0], [0, 5.**2, 100.], atol=0.2)
@@ -159,15 +160,21 @@ class KeypointsInitializationTestCase(test.TestCase):
       # Check by using load_keypoints_from_quantiles.
       keypoints_init = keypoints_initialization.load_keypoints_from_quantiles(
           feature_names,
-          save_dir, {'x0': 3,
-                     'x2': 3,
-                     'x1': 0},
-          output_min={'x0': 0.,
-                      'x1': 1.,
-                      'x2': 7.},
-          output_max={'x0': 1.,
-                      'x1': 10.,
-                      'x2': 13.})
+          save_dir, {
+              'x0': 3,
+              'x2': 3,
+              'x1': 0
+          },
+          output_min={
+              'x0': 0.,
+              'x1': 1.,
+              'x2': 7.
+          },
+          output_max={
+              'x0': 1.,
+              'x1': 10.,
+              'x2': 13.
+          })
       with self.test_session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
     self.assertTrue('x0' in keypoints_init)
@@ -251,9 +258,7 @@ class KeypointsInitializationTestCase(test.TestCase):
         feature_columns=feature_columns,
         num_quantiles=100,
         override=True)
-    reversed_dict = {'x0': False,
-                     'x1': True,
-                     'x2': False}
+    reversed_dict = {'x0': False, 'x1': True, 'x2': False}
 
     with ops.Graph().as_default() as g:
       # Check by using load_keypoints_from_quantiles.
@@ -261,14 +266,17 @@ class KeypointsInitializationTestCase(test.TestCase):
           feature_names,
           save_dir,
           num_keypoints=3,
-          output_min={'x0': 0.,
-                      'x1': 0.,
-                      'x2': 0.},
-          output_max={'x0': 1.,
-                      'x1': 1.,
-                      'x2': 1.},
-          reversed_dict=reversed_dict
-      )
+          output_min={
+              'x0': 0.,
+              'x1': 0.,
+              'x2': 0.
+          },
+          output_max={
+              'x0': 1.,
+              'x1': 1.,
+              'x2': 1.
+          },
+          reversed_dict=reversed_dict)
       with self.test_session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
 
@@ -300,15 +308,21 @@ class KeypointsInitializationTestCase(test.TestCase):
           feature_names,
           save_dir,
           num_keypoints=3,
-          output_min={'x0': 0.,
-                      'x1': 0.,
-                      'x2': 0.},
-          output_max={'x0': 1.,
-                      'x1': 1.,
-                      'x2': 1.},
-          missing_input_values_dict={'x0': -1.0,
-                                     'x1': 0.0,
-                                     'x2': None},
+          output_min={
+              'x0': 0.,
+              'x1': 0.,
+              'x2': 0.
+          },
+          output_max={
+              'x0': 1.,
+              'x1': 1.,
+              'x2': 1.
+          },
+          missing_input_values_dict={
+              'x0': -1.0,
+              'x1': 0.0,
+              'x2': None
+          },
       )
       with self.test_session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
