@@ -43,9 +43,8 @@ import ast
 import os
 
 # Dependency imports
-from tensorflow_lattice.python.lib import tools
-
 import numpy as np
+from tensorflow_lattice.python.lib import tools
 
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
@@ -54,7 +53,6 @@ from tensorflow.python.lib.io import file_io
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.training import training
-
 
 _QUANTILES_SUBDIRECTORY = "quantiles"
 
@@ -121,7 +119,8 @@ def _materialize_locally(tensors, num_steps=1, feed_dict=None, safety_size=1e9):
       else:
         # Run num_steps times.
         splits = [
-            sess.run(tensors, feed_dict=feed_dict) for _ in range(num_steps)]
+            sess.run(tensors, feed_dict=feed_dict) for _ in range(num_steps)
+        ]
       if isinstance(splits[0], dict):
         materialized = {}
         for k in splits[0].keys():
@@ -249,7 +248,7 @@ def save_quantiles_for_keypoints(input_fn,
       will simply interpolate the missing quantiles. Similarly if there are not
       enough examples to represent the quantiles, it will interpolate the
       quantiles from the examples given.
-    dtype: Deafult dtype to use, in particular for categorical values.
+    dtype: Default dtype to use, in particular for categorical values.
 
   Returns: Nothing, results are saved to disk.
 
@@ -323,6 +322,7 @@ def load_keypoints_from_quantiles(feature_names,
                                   output_min,
                                   output_max,
                                   reversed_dict=None,
+                                  missing_input_values_dict=None,
                                   dtype=dtypes.float32):
   """Retrieves keypoints initialization values for selected features.
 
@@ -352,6 +352,10 @@ def load_keypoints_from_quantiles(feature_names,
       feature, i.e., input_min will be mapped to output_max, and input_max will
       be mapped to output_min. Reversing output keypoints is useful for
       decreasing monotonic calibrators.
+    missing_input_values_dict: An optional dict. If provided, it should include
+      all features passed via feature_names. If the value of
+      missing_input_values[feature_name] is Not none, it is excluded from the
+      input keypoint values.
     dtype: Type to be used for calibration.
 
   Returns:
@@ -378,14 +382,19 @@ def load_keypoints_from_quantiles(feature_names,
     if feature_name not in num_keypoints or not num_keypoints[feature_name]:
       continue
     all_quantiles = _load_quantiles(subdir, feature_name)
+    if (missing_input_values_dict is not None and
+        feature_name in missing_input_values_dict):
+      exclude_val = missing_input_values_dict[feature_name]
+      if exclude_val is not None:
+        all_quantiles = [q for q in all_quantiles if q != exclude_val]
     percentiles = np.linspace(0., 100., num_keypoints[feature_name])
     quantiles = np.percentile(
         all_quantiles, percentiles, interpolation="nearest")
     quantiles = sorted(set(quantiles))  # Remove repeated quantiles.
     input_kpts = array_ops.constant(
         quantiles, shape=[len(quantiles)], dtype=dtype)
-    output_kpts = math_ops.linspace(
-            output_min[feature_name], output_max[feature_name], len(quantiles))
+    output_kpts = math_ops.linspace(output_min[feature_name],
+                                    output_max[feature_name], len(quantiles))
     if reversed_dict is not None and reversed_dict[feature_name]:
       output_kpts = array_ops.reverse(output_kpts, axis=[0])
     keypoints[feature_name] = (input_kpts, output_kpts)
