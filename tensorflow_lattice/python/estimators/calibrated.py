@@ -242,6 +242,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
           output_min=calibration_output_min,
           output_max=calibration_output_max,
           reversed_dict=reversed_dict,
+          missing_input_values_dict=missing_input_values,
           dtype=dtype)
 
       # Merge with explicit initializers.

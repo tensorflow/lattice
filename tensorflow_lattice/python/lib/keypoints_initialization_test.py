@@ -279,6 +279,47 @@ class KeypointsInitializationTestCase(test.TestCase):
     self.assertAllClose(keypoints_init['x2'][0], [0.0, 0.5, 1.0], atol=0.01)
     self.assertAllClose(keypoints_init['x2'][1], [0.0, 0.5, 1.0], atol=0.01)
 
+  def testQuantileInitWithMissingInputValuesDict(self):
+    num_examples = 10
+    x0 = np.linspace(-1.0, 1.0, num_examples)
+    x1 = np.linspace(0.0, 1.0, num_examples)
+    x2 = np.linspace(0.0, 1.0, num_examples)
+
+    input_fn, feature_names, feature_columns = self._BuildInputs(x0, x1, x2)
+    save_dir = os.path.join(self.get_temp_dir(), 'exclude_input_values_dict')
+    keypoints_initialization.save_quantiles_for_keypoints(
+        input_fn,
+        save_dir,
+        feature_columns=feature_columns,
+        num_quantiles=num_examples,
+        override=True)
+
+    with ops.Graph().as_default() as g:
+      # Check by using load_keypoints_from_quantiles.
+      keypoints_init = keypoints_initialization.load_keypoints_from_quantiles(
+          feature_names,
+          save_dir,
+          num_keypoints=3,
+          output_min={'x0': 0.,
+                      'x1': 0.,
+                      'x2': 0.},
+          output_max={'x0': 1.,
+                      'x1': 1.,
+                      'x2': 1.},
+          missing_input_values_dict={'x0': -1.0,
+                                     'x1': 0.0,
+                                     'x2': None},
+      )
+      with self.test_session(graph=g) as sess:
+        keypoints_init = sess.run(keypoints_init)
+
+    self.assertAllClose(keypoints_init['x0'][0], [-0.778, 0.111, 1.0], atol=0.1)
+    self.assertAllClose(keypoints_init['x0'][1], [0.0, 0.5, 1.0], atol=0.01)
+    self.assertAllClose(keypoints_init['x1'][0], [0.111, 0.556, 1.0], atol=0.1)
+    self.assertAllClose(keypoints_init['x1'][1], [0.0, 0.5, 1.0], atol=0.01)
+    self.assertAllClose(keypoints_init['x2'][0], [0.0, 0.444, 1.0], atol=0.01)
+    self.assertAllClose(keypoints_init['x2'][1], [0.0, 0.5, 1.0], atol=0.01)
+
   def testUniformKeypointsForSignal(self):
     # New graph is needed because default graph is changed by save
     # keypoints, and self.test_session() will by default try to reuse a cached

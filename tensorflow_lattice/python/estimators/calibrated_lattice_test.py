@@ -106,7 +106,6 @@ class CalibratedLatticeTest(test.TestCase):
     hparams.set_param('learning_rate', 0.1)
     return calibrated_lattice.calibrated_lattice_regressor(
         feature_columns=feature_columns,
-        weight_column=weight_column,
         hparams=hparams,
         weight_column=weight_column,
         keypoints_initializers_fn=init_fn)
