@@ -63,13 +63,6 @@ function create_virtualenv {
   deactivate
 }
 
-# Pointfix aws workspace build rule.
-# Without this fix, bazel replaces @%ws% -> empty which makes all imports fail
-# in aws.BUILD.
-function aws_ws_fix {
-  sed -i='' 's,@%ws%,@org_tensorflow,' tensorflow/third_party/aws.BUILD
-}
-
 # Prepare all necessary environment for bazel build & testing.
 function prepare_build {
   # If TFL_ROOT does not exist, create one in here.
@@ -95,9 +88,6 @@ function prepare_build {
   echo "Initialize git repo."
   git_init
   echo "Initialization is done."
-
-  echo "Pointfix aws.BUILD"
-  aws_ws_fix
 
   deactivate
 }
