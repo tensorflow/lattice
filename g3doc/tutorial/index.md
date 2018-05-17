@@ -678,9 +678,9 @@ takes as input an embedding of the input features: each input is a linear
 combination of the calibrated features.
 
 The number of lattices is defined by 'monotonic_num_lattices' and
-'non_monotonic_num_lattices': monotonic lattices can take as input monotonic
-features and non-monotonic features. Non-monotonic lattices can only take
-non-monotonic features as input (otherwise monotonicity could be broken).
+'non_monotonic_num_lattices': Non-monotonic lattices can take as input monotonic
+features and non-monotonic features. Monotonic lattices can only take
+monotonic features as input (otherwise monotonicity could be broken).
 
 The size of the embedding to be used in each lattice is given by
 `monotonic_lattice_rank` and `non_monotonic_lattice_rank`. Each lattice has it's
