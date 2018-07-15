@@ -413,8 +413,7 @@ class Calibrated(estimator.Estimator):
       if n_classes == 0:
         self._head = (
             head_lib.  # pylint: disable=protected-access
-            _regression_head_with_mean_squared_error_loss(
-                label_dimension=1, weight_column=self._weight_column))
+            _regression_head(label_dimension=1, weight_column=self._weight_column))
       elif n_classes == 2:
         self._head = (
             head_lib.  # pylint: disable=protected-access
