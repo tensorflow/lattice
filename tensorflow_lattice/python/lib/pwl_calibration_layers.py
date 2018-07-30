@@ -50,10 +50,7 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
                                       monotonic=None,
                                       missing_input_value=None,
                                       missing_output_value=None,
-                                      l1_reg=None,
-                                      l2_reg=None,
-                                      l1_laplacian_reg=None,
-                                      l2_laplacian_reg=None):
+                                      **regularizer_amounts):
   """Creates a calibration layer for one single continuous signal.
 
   Returns a calibrated tensor of the uncalibrated continuous signal and a list
@@ -85,10 +82,10 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
       scalars.
     missing_output_value: Requires missing_input_value also to be set. If set
       if will convert missing input to this value.
-    l1_reg: (float) l1 regularization amount.
-    l2_reg: (float) l2 regularization amount.
-    l1_laplacian_reg: (float) l1 laplacian regularization amount.
-    l2_laplacian_reg: (float) l2 laplacian regularization amount.
+    **regularizer_amounts: Keyword args of regularization amounts passed to
+      regularizers.calibrator_regularization(). Keyword names should be among
+      supported regularizers.CALIBRATOR_REGULARIZERS and values should be
+      float.
 
   Returns:
     A tuple of:
@@ -196,10 +193,8 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
       missing_mask = math_ops.equal(uncalibrated_tensor,
                                     constant_op.constant(missing_input_value))
       mask_indices = math_ops.range(array_ops.shape(uncalibrated_tensor)[0])
-      mask_indices = data_flow_ops.dynamic_partition(mask_indices,
-                                                     math_ops.cast(
-                                                         missing_mask,
-                                                         dtypes.int32), 2)
+      mask_indices = data_flow_ops.dynamic_partition(
+          mask_indices, math_ops.cast(missing_mask, dtypes.int32), 2)
       (uncalibrated_tensor, missing_values) = data_flow_ops.dynamic_partition(
           uncalibrated_tensor, math_ops.cast(missing_mask, dtypes.int32), 2)
 
@@ -304,11 +299,8 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
     # Regularization
     regularization = regularizers.calibrator_regularization(
         keypoints_outputs,
-        l1_reg=l1_reg,
-        l2_reg=l2_reg,
-        l1_laplacian_reg=l1_laplacian_reg,
-        l2_laplacian_reg=l2_laplacian_reg,
-        name=signal_name + '_calibrator_regularization')
+        name=signal_name + '_calibrator_regularization',
+        **regularizer_amounts)
   return calibrated, projection_ops, regularization
 
 
@@ -321,11 +313,8 @@ def input_calibration_layer(columns_to_tensors,
                             monotonic=None,
                             missing_input_values=None,
                             missing_output_values=None,
-                            l1_reg=None,
-                            l2_reg=None,
-                            l1_laplacian_reg=None,
-                            l2_laplacian_reg=None,
-                            dtype=dtypes.float32):
+                            dtype=dtypes.float32,
+                            **regularizer_amounts):
   """Creates a calibration layer for the given input and feature_columns.
 
   Returns a tensor with the calibrated values of the given features, a list
@@ -371,18 +360,13 @@ def input_calibration_layer(columns_to_tensors,
       if will convert missing input to this value. Either one value for all
       inputs, or a dict mapping feature name to missing_input_value for the
       respective feature.
-    l1_reg: ({feature_name: float} dict or float) l1 regularization amount.
-      If float, then same value is applied to all features.
-    l2_reg: ({feature_name: float} dict or float) l2 regularization amount.
-      If float, then same value is applied to all features.
-    l1_laplacian_reg: ({feature_name: float} dict or float) l1 laplacian
-      regularization amount. If float, then same value is applied to all
-      features.
-    l2_laplacian_reg:  ({feature_name: float} dict or float) l2 laplacian
-      regularization amount. If float, then same value is applied to all
-      features.
     dtype: If any of the scalars are not given as tensors, they are converted
       to tensors with this dtype.
+    **regularizer_amounts: Keyword args of regularization amounts passed to
+      regularizers.calibrator_regularization(). Keyword names should be among
+      supported regularizers.CALIBRATOR_REGULARIZERS and values should be
+      either float or {feature_name: float}. If float, then same value is
+      applied to all features.
 
   Returns:
     A tuple of:
@@ -415,12 +399,11 @@ def input_calibration_layer(columns_to_tensors,
         missing_input_values, feature_names, 'missing_input_values')
     missing_output_values = tools.cast_to_dict(
         missing_output_values, feature_names, 'missing_output_values')
-    l1_regs = tools.cast_to_dict(l1_reg, feature_names, 'calibration_l1_reg')
-    l2_regs = tools.cast_to_dict(l2_reg, feature_names, 'calibration_l2_reg')
-    l1_laplacian_regs = tools.cast_to_dict(l1_laplacian_reg, feature_names,
-                                           'calibration_l1_laplacian_reg')
-    l2_laplacian_regs = tools.cast_to_dict(l2_laplacian_reg, feature_names,
-                                           'calibration_l2_laplacian_reg')
+    regularizer_amounts = {
+        regularizer_name: tools.cast_to_dict(
+            regularizer_amounts[regularizer_name], feature_names,
+            regularizer_name) for regularizer_name in regularizer_amounts
+    }
 
     per_dimension_feature_names = []
 
@@ -459,10 +442,10 @@ def input_calibration_layer(columns_to_tensors,
                 uncalibrated_feature.shape))
       missing_input_value = missing_input_values[name]
       missing_output_value = missing_output_values[name]
-      l1_reg = l1_regs[name]
-      l2_reg = l2_regs[name]
-      l1_laplacian_reg = l1_laplacian_regs[name]
-      l2_laplacian_reg = l2_laplacian_regs[name]
+      feature_regularizer_amounts = {
+          regularizer_name: regularizer_amounts[regularizer_name][name]
+          for regularizer_name in regularizer_amounts
+      }
 
       # FutureWork: make the interpolation ops handle multi-dimension values,
       #   so this step is not needed.
@@ -492,10 +475,7 @@ def input_calibration_layer(columns_to_tensors,
               monotonic=monotonic[name],
               missing_input_value=missing_input_value,
               missing_output_value=missing_output_value,
-              l1_reg=l1_reg,
-              l2_reg=l2_reg,
-              l1_laplacian_reg=l1_laplacian_reg,
-              l2_laplacian_reg=l2_laplacian_reg)
+              **feature_regularizer_amounts)
           calibrated_splits += [calibrated]
           if projection is not None:
             projection_ops += [projection]
@@ -516,11 +496,8 @@ def calibration_layer(uncalibrated_tensor,
                       monotonic=None,
                       missing_input_values=None,
                       missing_output_values=None,
-                      l1_reg=None,
-                      l2_reg=None,
-                      l1_laplacian_reg=None,
-                      l2_laplacian_reg=None,
-                      name=None):
+                      name=None,
+                      **regularizer_amounts):
   """Creates a calibration layer for uncalibrated values.
 
   Returns a calibrated tensor of the same shape as the uncalibrated continuous
@@ -565,17 +542,12 @@ def calibration_layer(uncalibrated_tensor,
     missing_output_values: Requires missing_input_value also to be set. If set
       if will convert missing input to this value. Either one value for all
       outputs, or a list with one value per uncalibrated value.
-    l1_reg: (list of floats or float) l1 regularization amount.
-      If float, then same value is applied to all dimensions.
-    l2_reg: (list of floats or float) l2 regularization amount.
-      If float, then same value is applied to all dimensions.
-    l1_laplacian_reg: (list of floats or float) l1 laplacian
-      regularization amount. If float, then same value is applied to all
-      dimensions.
-    l2_laplacian_reg:  (list of floats or float) l2 laplacian
-      regularization amount. If float, then same value is applied to all
-      dimensions.
     name: Name scope for operations.
+    **regularizer_amounts: Keyword args of regularization amounts passed to
+      regularizers.calibrator_regularization(). Keyword names should be among
+      supported regularizers.CALIBRATOR_REGULARIZERS and values should be
+      either float or list of floats. If float, then same value is applied to
+      all input signals.
 
   Returns:
     A tuple of:
@@ -610,12 +582,11 @@ def calibration_layer(uncalibrated_tensor,
                                               'missing_input_values')
     missing_output_values = tools.cast_to_list(missing_output_values, n,
                                                'missing_output_values')
-    l1_regs = tools.cast_to_list(l1_reg, n, 'calibration_l1_reg')
-    l2_regs = tools.cast_to_list(l2_reg, n, 'calibration_l2_reg')
-    l1_laplacian_regs = tools.cast_to_list(l1_laplacian_reg, n,
-                                           'calibration_l1_laplacian_reg')
-    l2_laplacian_regs = tools.cast_to_list(l2_laplacian_reg, n,
-                                           'calibration_l2_laplacian_reg')
+    regularizer_amounts = {
+        regularizer_name: tools.cast_to_list(
+            regularizer_amounts[regularizer_name], n, regularizer_name)
+        for regularizer_name in regularizer_amounts
+    }
 
     signal_names = ['signal_%d' % ii for ii in range(n)]
 
@@ -628,6 +599,10 @@ def calibration_layer(uncalibrated_tensor,
         # No calibration for this signal.
         calibrated_splits += [uncalibrated_splits[ii]]
       else:
+        signal_regularizer_amounts = {
+            regularizer_name: regularizer_amounts[regularizer_name][ii]
+            for regularizer_name in regularizer_amounts
+        }
         calibrated, projection, reg = one_dimensional_calibration_layer(
             uncalibrated_splits[ii],
             num_keypoints[ii],
@@ -638,10 +613,7 @@ def calibration_layer(uncalibrated_tensor,
             monotonic=monotonic[ii],
             missing_input_value=missing_input_values[ii],
             missing_output_value=missing_output_values[ii],
-            l1_reg=l1_regs[ii],
-            l2_reg=l2_regs[ii],
-            l1_laplacian_reg=l1_laplacian_regs[ii],
-            l2_laplacian_reg=l2_laplacian_regs[ii])
+            **signal_regularizer_amounts)
         calibrated_splits += [calibrated]
         if projection is not None:
           projection_ops += [projection]

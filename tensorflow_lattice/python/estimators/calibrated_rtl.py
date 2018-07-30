@@ -24,6 +24,7 @@ import six
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import lattice_layers
+from tensorflow_lattice.python.lib import regularizers
 
 from tensorflow.python.lib.io import file_io
 from tensorflow.python.ops import array_ops
@@ -111,11 +112,9 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     Returns:
       error_messages: (list of strings) error messages.
     """
-
-    not_allowed_feature_params = [
-        'lattice_l1_reg', 'lattice_l2_reg', 'lattice_l1_torsion_reg',
-        'lattice_l2_torsion_reg'
-    ]
+    not_allowed_feature_params = map(
+        'lattice_{}'.format,
+        regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS)
     error_messages = []
     for param in not_allowed_feature_params:
       for feature_name in hparams.get_feature_names():
@@ -185,8 +184,8 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     hparams = copy.deepcopy(hparams)
     feature_names = hparams.get_feature_names()
     packed_feature_values = hparams.get_global_and_feature_params(
-        ['lattice_size', 'missing_input_value',
-         'missing_vertex'], feature_names)
+        ['lattice_size', 'missing_input_value', 'missing_vertex'],
+        feature_names)
     default_feature_values, per_feature_values = packed_feature_values
     final_lattice_size, missing_output_value = self._calibration_params(
         *default_feature_values)
@@ -249,17 +248,16 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     rtl_random = random.Random(rtl_seed)
     structure = []
     for _ in range(num_lattices):
-      structure.append(rtl_random.sample(six.moves.xrange(input_dim),
-                                         lattice_rank))
+      structure.append(
+          rtl_random.sample(six.moves.xrange(input_dim), lattice_rank))
     return structure
 
-  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
-                                    hparams):
+  def calibration_structure_builder(self, columns_to_tensors, hparams):
     """Returns the calibration structure of the model. See base class."""
     return None
 
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
+  def prediction_builder_from_calibrated(
+      self, mode, per_dimension_feature_names, hparams, calibrated):
     """Construct the prediciton."""
 
     self.check_hparams(hparams, adjusted=True)
@@ -272,6 +270,7 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
     num_lattices = hparams.get_param('num_lattices')
     lattice_rank = hparams.get_param('lattice_rank')
     rtl_seed = hparams.get_param('rtl_seed')
+    interpolation_type = hparams.get_param('interpolation_type')
     # Create and save structure if it does not exists.
     if not file_io.file_exists(self._structure_file):
       structure = self._create_structure(
@@ -285,23 +284,19 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
           'structure: %s' % (num_lattices, len(structure), str(structure)))
     for each_lattice in structure:
       if len(each_lattice) != lattice_rank:
-        raise ValueError(
-            'Expect %d lattice rank, but found %d in structure: %s' %
-            (lattice_rank, len(each_lattice), str(structure)))
+        raise ValueError('Expect %d lattice rank, but found %d in structure: %s'
+                         % (lattice_rank, len(each_lattice), str(structure)))
 
-    lattice_l1_reg = hparams.get_param('lattice_l1_reg')
-    lattice_l2_reg = hparams.get_param('lattice_l2_reg')
-    lattice_l1_torsion_reg = hparams.get_param('lattice_l1_torsion_reg')
-    lattice_l2_torsion_reg = hparams.get_param('lattice_l2_torsion_reg')
-    lattice_l1_laplacian_reg = [
-        hparams.get_feature_param(f, 'lattice_l1_laplacian_reg')
-        for f in per_dimension_feature_names
-    ]
-    lattice_l2_laplacian_reg = [
-        hparams.get_feature_param(f, 'lattice_l2_laplacian_reg')
-        for f in per_dimension_feature_names
-    ]
-    interpolation_type = hparams.get_param('interpolation_type')
+    # Setup the regularization.
+    regularizer_amounts = {}
+    for reg_name in regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS:
+      regularizer_amounts[reg_name] = hparams.get_param(
+          'lattice_{}'.format(reg_name))
+    for reg_name in regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS:
+      regularizer_amounts[reg_name] = [
+          hparams.get_feature_param(feature_name, 'lattice_{}'.format(reg_name))
+          for feature_name in per_dimension_feature_names
+      ]
 
     packed_results = lattice_layers.ensemble_lattices_layer(
         calibrated,
@@ -310,12 +305,7 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
         is_monotone=lattice_monotonic,
         interpolation_type=interpolation_type,
         lattice_initializers=self.lattice_initializers_fn_,
-        l1_reg=lattice_l1_reg,
-        l2_reg=lattice_l2_reg,
-        l1_torsion_reg=lattice_l1_torsion_reg,
-        l2_torsion_reg=lattice_l2_torsion_reg,
-        l1_laplacian_reg=lattice_l1_laplacian_reg,
-        l2_laplacian_reg=lattice_l2_laplacian_reg)
+        **regularizer_amounts)
     (output_tensors, _, projection_ops, regularization) = packed_results
     # Take an average of output_tensors and add bias.
     output_tensor = array_ops.stack(

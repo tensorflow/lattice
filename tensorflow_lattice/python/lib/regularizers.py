@@ -21,11 +21,8 @@ from __future__ import print_function
 import copy
 
 # Dependency imports
+import tensorflow as tf
 from tensorflow_lattice.python.lib import tools
-
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
 
 
 def _calibrator_laplacian(output_keypoints,
@@ -61,23 +58,155 @@ def _calibrator_laplacian(output_keypoints,
   num_kpts = dims[0]
   if num_kpts is None:
     raise ValueError('calibrator_laplacian expects output_keypoints dimension '
-                     'is known, but the first dimension is not set.')
+                     'to be known, but the first dimension is not set.')
 
   if num_kpts <= 1 or (l1_reg is None and l2_reg is None):
     return None
 
   reg = None
-  with ops.name_scope(name):
-    diff = (array_ops.slice(output_keypoints, [1], [num_kpts - 1]) -
-            array_ops.slice(output_keypoints, [0], [num_kpts - 1]))
+  with tf.name_scope(name):
+    diff = (
+        tf.slice(output_keypoints, [1], [num_kpts - 1]) - tf.slice(
+            output_keypoints, [0], [num_kpts - 1]))
     if l1_reg:
-      reg = tools.add_if_not_none(
-          reg, l1_reg * math_ops.reduce_sum(math_ops.abs(diff)))
+      reg = tools.add_if_not_none(reg, l1_reg * tf.reduce_sum(tf.abs(diff)))
     if l2_reg:
-      reg = tools.add_if_not_none(
-          reg, l2_reg * math_ops.reduce_sum(math_ops.square(diff)))
+      reg = tools.add_if_not_none(reg, l2_reg * tf.reduce_sum(tf.square(diff)))
 
   return reg
+
+
+def _calibrator_hessian(output_keypoints,
+                        l1_reg=None,
+                        l2_reg=None,
+                        name='calibrator_hessian'):
+  """Returns a calibrator hessian regularization.
+
+  A calibrator hessian regularization (change in slope) =
+     l1_reg * ||nonlinearity||_1 + l2_reg * ||nonlinearity||_2^2
+  where nonlinearity is:
+     2 * output_keypoints[1:end-1]
+       - output_keypoints[0:end-2]
+       - output_keypoints[2:end].
+  This regularizer is zero when the output_keypoints form a linear function of
+  the index (and not necessarily linear in input values, e.g. when using
+  non-uniform input keypoints).
+
+  Args:
+    output_keypoints: (Rank-1 tensor with shape [num_keypoints]) 1d calibrator's
+      output keypoints tensor.
+    l1_reg: (float) l1 regularization amount.
+    l2_reg: (float) l2 regularization amount.
+    name: name scope of calibrator hessian regularizer.
+
+  Returns:
+    A rank-0 tensor (scalar) that contains regularizer or None if there is no
+    regularization. This can happen if l1_reg and l2_reg amounts are not set, or
+    num_keypoints <= 2.
+
+  Raises:
+    ValueError: * If output_keypoints is not rank-1 tensor.
+                * If the shape of output_keypoints is unknown.
+  """
+  dims = output_keypoints.shape.as_list()
+  if len(dims) != 1:
+    raise ValueError('calibrator_hessian expects output_keypoints as a '
+                     'rank-1 tensor but got shape: %s' % dims)
+  num_kpts = dims[0]
+  if num_kpts is None:
+    raise ValueError('calibrator_hessian expects output_keypoints dimension '
+                     'to be known, but the first dimension is not set.')
+
+  if num_kpts < 3 or (l1_reg is None and l2_reg is None):
+    return None
+
+  reg = None
+  with tf.name_scope(name):
+    slope_diff = (2 * tf.slice(output_keypoints, [1], [num_kpts - 2]) -
+                  tf.slice(output_keypoints, [0], [num_kpts - 2]) - tf.slice(
+                      output_keypoints, [2], [num_kpts - 2]))
+    if l1_reg:
+      reg = tools.add_if_not_none(reg,
+                                  l1_reg * tf.reduce_sum(tf.abs(slope_diff)))
+    if l2_reg:
+      reg = tools.add_if_not_none(reg,
+                                  l2_reg * tf.reduce_sum(tf.square(slope_diff)))
+
+  return reg
+
+
+def _calibrator_wrinkle(output_keypoints,
+                        l1_reg=None,
+                        l2_reg=None,
+                        name='calibrator_wrinkle'):
+  """Returns a calibrator wrinkle regularization.
+
+  A calibrator wrinkle regularization (change in second derivative) =
+     l1_reg * ||third_derivative||_1 + l2_reg * ||third_derivative||_2^2
+  where third_derivative is:
+     +3 * output_keypoints[1:end-2]
+     -3 * output_keypoints[2:end-1]
+        - output_keypoints[0:end-3]
+        + output_keypoints[3:end].
+  This regularizer is zero when the output_keypoints form a 2nd order polynomial
+  of the index (and not necessarily in input values, e.g. when using
+  non-uniform input keypoints).
+
+  Args:
+    output_keypoints: (Rank-1 tensor with shape [num_keypoints]) 1d calibrator's
+      output keypoints tensor.
+    l1_reg: (float) l1 regularization amount.
+    l2_reg: (float) l2 regularization amount.
+    name: name scope of calibrator wrinkle regularizer.
+
+  Returns:
+    A rank-0 tensor (scalar) that contains regularizer or None if there is no
+    regularization. This can happen if l1_reg and l2_reg amounts are not set, or
+    num_keypoints <= 3.
+
+  Raises:
+    ValueError: * If output_keypoints is not rank-1 tensor.
+                * If the shape of output_keypoints is unknown.
+  """
+  dims = output_keypoints.shape.as_list()
+  if len(dims) != 1:
+    raise ValueError('calibrator_wrinkle expects output_keypoints as a '
+                     'rank-1 tensor but got shape: %s' % dims)
+  num_kpts = dims[0]
+  if num_kpts is None:
+    raise ValueError('calibrator_wrinkle expects output_keypoints dimension '
+                     'to be known, but the first dimension is not set.')
+
+  if num_kpts < 4 or (l1_reg is None and l2_reg is None):
+    return None
+
+  reg = None
+  with tf.name_scope(name):
+    third_drv = (3 * tf.slice(output_keypoints, [1], [num_kpts - 3]) -
+                 3 * tf.slice(output_keypoints, [2], [num_kpts - 3]) - tf.slice(
+                     output_keypoints, [0], [num_kpts - 3]) + tf.slice(
+                         output_keypoints, [3], [num_kpts - 3]))
+    if l1_reg:
+      reg = tools.add_if_not_none(reg,
+                                  l1_reg * tf.reduce_sum(tf.abs(third_drv)))
+    if l2_reg:
+      reg = tools.add_if_not_none(reg,
+                                  l2_reg * tf.reduce_sum(tf.square(third_drv)))
+
+  return reg
+
+
+# List of supported calibrator regularizers.
+CALIBRATOR_REGULARIZERS = [
+    'l1_reg',
+    'l2_reg',
+    'l1_laplacian_reg',
+    'l2_laplacian_reg',
+    'l1_hessian_reg',
+    'l2_hessian_reg',
+    'l1_wrinkle_reg',
+    'l2_wrinkle_reg',
+]
 
 
 def calibrator_regularization(output_keypoints,
@@ -85,6 +214,10 @@ def calibrator_regularization(output_keypoints,
                               l2_reg=None,
                               l1_laplacian_reg=None,
                               l2_laplacian_reg=None,
+                              l1_hessian_reg=None,
+                              l2_hessian_reg=None,
+                              l1_wrinkle_reg=None,
+                              l2_wrinkle_reg=None,
                               name='calibrator_regularization'):
   """Returns a calibrator regularization op.
 
@@ -95,6 +228,10 @@ def calibrator_regularization(output_keypoints,
    l2_reg: (float) l2 regularization amount.
    l1_laplacian_reg: (float) l1 Laplacian regularization amount.
    l2_laplacian_reg: (float) l2 Laplacian regularization amount.
+   l1_hessian_reg: (float) l1 Hessian regularization amount.
+   l2_hessian_reg: (float) l2 Hessian regularization amount.
+   l1_wrinkle_reg: (float) l1 Wrinkle regularization amount.
+   l2_wrinkle_reg: (float) l2 Wrinkle regularization amount.
    name: name scope of calibrator regularization.
 
   Returns:
@@ -104,15 +241,23 @@ def calibrator_regularization(output_keypoints,
     ValueError: * If output_keypoints is not rank-1 tensor.
                 * If the shape of output_keypoints is unknown.
   """
-  with ops.name_scope(name):
+  with tf.name_scope(name):
     reg = _calibrator_laplacian(
         output_keypoints, l1_reg=l1_laplacian_reg, l2_reg=l2_laplacian_reg)
+    reg = tools.add_if_not_none(
+        reg,
+        _calibrator_hessian(
+            output_keypoints, l1_reg=l1_hessian_reg, l2_reg=l2_hessian_reg))
+    reg = tools.add_if_not_none(
+        reg,
+        _calibrator_wrinkle(
+            output_keypoints, l1_reg=l1_wrinkle_reg, l2_reg=l2_wrinkle_reg))
     if l1_reg:
       reg = tools.add_if_not_none(
-          reg, l1_reg * math_ops.reduce_sum(math_ops.abs(output_keypoints)))
+          reg, l1_reg * tf.reduce_sum(tf.abs(output_keypoints)))
     if l2_reg:
       reg = tools.add_if_not_none(
-          reg, l2_reg * math_ops.reduce_sum(math_ops.square(output_keypoints)))
+          reg, l2_reg * tf.reduce_sum(tf.square(output_keypoints)))
 
   return reg
 
@@ -169,13 +314,15 @@ def _lattice_laplacian(lattice_param,
   """
   dims = lattice_param.shape.as_list()
   if len(dims) != 2:
-    raise ValueError('lattice_laplacian expects lattice_param as a '
-                     'rank-2 tensor but got dimensions: ', dims)
+    raise ValueError(
+        'lattice_laplacian expects lattice_param as a '
+        'rank-2 tensor but got dimensions: ', dims)
   output_dim = dims[0]
   param_dim = dims[1]
   if output_dim is None or param_dim is None:
-    raise ValueError('lattice_laplacian expects all the dimensions in '
-                     'lattice_param is known, but got dimensions: ', dims)
+    raise ValueError(
+        'lattice_laplacian expects all the dimensions in '
+        'lattice_param to be known, but got dimensions: ', dims)
 
   l1_reg = tools.cast_to_list(l1_reg, len(lattice_sizes), 'laplacian_l1_reg')
   l2_reg = tools.cast_to_list(l2_reg, len(lattice_sizes), 'laplacian_l2_reg')
@@ -192,7 +339,7 @@ def _lattice_laplacian(lattice_param,
 
   regularization = None
 
-  with ops.name_scope(name):
+  with tf.name_scope(name):
     for dim in reg_dims:
       slice_size = lattice_sizes[dim] - 1
       per_dim_upper = tools.lattice_1d_slice(
@@ -210,12 +357,11 @@ def _lattice_laplacian(lattice_param,
       per_dim_diff = per_dim_upper - per_dim_lower
       if l1_reg[dim]:
         regularization = tools.add_if_not_none(
-            regularization,
-            l1_reg[dim] * math_ops.reduce_sum(math_ops.abs(per_dim_diff)))
+            regularization, l1_reg[dim] * tf.reduce_sum(tf.abs(per_dim_diff)))
       if l2_reg[dim]:
         regularization = tools.add_if_not_none(
             regularization,
-            l2_reg[dim] * math_ops.reduce_sum(math_ops.square(per_dim_diff)))
+            l2_reg[dim] * tf.reduce_sum(tf.square(per_dim_diff)))
 
   return regularization
 
@@ -268,21 +414,23 @@ def _lattice_torsion(lattice_param,
   """
   dims = lattice_param.shape.as_list()
   if len(dims) != 2:
-    raise ValueError('lattice_laplacian expects lattice_param as a '
-                     'rank-2 tensor but got dimensions: ', dims)
+    raise ValueError(
+        'lattice_laplacian expects lattice_param as a '
+        'rank-2 tensor but got dimensions: ', dims)
   output_dim = dims[0]
   param_dim = dims[1]
   lattice_rank = len(lattice_sizes)
   if output_dim is None or param_dim is None:
-    raise ValueError('lattice_laplacian expects all the dimensions in '
-                     'lattice_param is known, but got dimensions: ', dims)
+    raise ValueError(
+        'lattice_laplacian expects all the dimensions in '
+        'lattice_param to be known, but got dimensions: ', dims)
 
   if l1_reg is None and l2_reg is None:
     return None
 
   regularization = None
 
-  with ops.name_scope(name):
+  with tf.name_scope(name):
     for dim1 in range(lattice_rank - 1):
       slice_size1 = lattice_sizes[dim1] - 1
       param_0x = tools.lattice_1d_slice(
@@ -328,14 +476,32 @@ def _lattice_torsion(lattice_param,
         torsion = param_00 + param_11 - param_01 - param_10
         if l1_reg:
           regularization = tools.add_if_not_none(
-              regularization,
-              l1_reg * math_ops.reduce_sum(math_ops.abs(torsion)))
+              regularization, l1_reg * tf.reduce_sum(tf.abs(torsion)))
         if l2_reg:
           regularization = tools.add_if_not_none(
-              regularization,
-              l2_reg * math_ops.reduce_sum(math_ops.square(torsion)))
+              regularization, l2_reg * tf.reduce_sum(tf.square(torsion)))
 
   return regularization
+
+
+# List of supported one-dimensional lattice regularizers.
+LATTICE_ONE_DIMENSIONAL_REGULARIZERS = [
+    'l1_laplacian_reg',
+    'l2_laplacian_reg',
+]
+
+# List of supported multi-dimensional lattice regularizers.
+LATTICE_MULTI_DIMENSIONAL_REGULARIZERS = [
+    'l1_reg',
+    'l2_reg',
+    'l1_torsion_reg',
+    'l2_torsion_reg',
+]
+
+# List of supported lattice regularizers.
+LATTICE_REGULARIZERS = (
+    LATTICE_ONE_DIMENSIONAL_REGULARIZERS +
+    LATTICE_MULTI_DIMENSIONAL_REGULARIZERS)
 
 
 def lattice_regularization(lattice_params,
@@ -372,27 +538,61 @@ def lattice_regularization(lattice_params,
     ValueError: * lattice_param is not rank-2 tensor.
                 * output_dim or param_dim is unknown.
   """
-  with ops.name_scope(name):
+  with tf.name_scope(name):
     reg = _lattice_laplacian(
         lattice_params,
         lattice_sizes,
         l1_reg=l1_laplacian_reg,
         l2_reg=l2_laplacian_reg)
-    reg = tools.add_if_not_none(reg,
-                                _lattice_torsion(
-                                    lattice_params,
-                                    lattice_sizes,
-                                    l1_reg=l1_torsion_reg,
-                                    l2_reg=l2_torsion_reg))
+    reg = tools.add_if_not_none(
+        reg,
+        _lattice_torsion(
+            lattice_params,
+            lattice_sizes,
+            l1_reg=l1_torsion_reg,
+            l2_reg=l2_torsion_reg))
     if l1_reg:
       reg = tools.add_if_not_none(
-          reg,
-          l1_reg * math_ops.reduce_sum(
-              math_ops.reduce_sum(math_ops.abs(lattice_params))))
+          reg, l1_reg * tf.reduce_sum(tf.abs(lattice_params)))
     if l2_reg:
       reg = tools.add_if_not_none(
-          reg,
-          l2_reg * math_ops.reduce_sum(
-              math_ops.reduce_sum(math_ops.square(lattice_params))))
+          reg, l2_reg * tf.reduce_sum(tf.square(lattice_params)))
 
   return reg
+
+
+# List of supported linear regularizers.
+LINEAR_REGULARIZERS = [
+    'l1_reg',
+    'l2_reg',
+]
+
+
+
+def linear_regularization(linear_params,
+                          l1_reg=None,
+                          l2_reg=None,
+                          name='linear_regularization'):
+  """Returns a linear regularization op.
+
+  Args:
+   linear_params: Lattice parameter tensor.
+   l1_reg: (float) l1 regularization amount.
+   l2_reg: (float) l2 regularization amount.
+   name: name scope of linear regularization.
+
+  Returns:
+    Rank-0 tensor (scalar) that contains linear regularization.
+
+  Raises:
+    ValueError: * linear_param is not rank-2 tensor.
+                * output_dim or param_dim is unknown.
+  """
+  with tf.name_scope(name):
+    reg = 0
+    if l1_reg:
+      reg += l1_reg * tf.reduce_sum(tf.abs(linear_params))
+    if l2_reg:
+      reg += l2_reg * tf.reduce_sum(tf.square(linear_params))
+
+  return reg if l1_reg or l2_reg else None

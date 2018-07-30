@@ -28,9 +28,6 @@ from tensorflow.python.platform import test
 
 class LatticeParamTestCase(test.TestCase):
 
-  def setUp(self):
-    super(LatticeParamTestCase, self).setUp()
-
   def testTwoByTwoOneOutput(self):
     lattice_param = lattice_layers.lattice_param_as_linear(
         lattice_sizes=[2, 2], output_dim=1)
@@ -256,7 +253,8 @@ class LatticeLayersTestCase(test.TestCase):
         self.assertAlmostEqual(26.514278, sess.run(regularization), delta=1e-5)
 
   def _testLatticeLayerProjection(self, interpolation_type, lattice_sizes,
-                                  output_dim, is_monotone, parameters,
+                                  output_dim, output_min, output_max,
+                                  is_monotone, parameters,
                                   expected_projected_parameters):
     """Test monotonicity projection of lattice layers."""
     with ops.Graph().as_default():
@@ -267,6 +265,8 @@ class LatticeLayersTestCase(test.TestCase):
           lattice_sizes=lattice_sizes,
           is_monotone=is_monotone,
           output_dim=output_dim,
+          output_min=output_min,
+          output_max=output_max,
           interpolation_type=interpolation_type)
       with self.test_session() as sess:
         sess.run(variables.global_variables_initializer())
@@ -288,6 +288,8 @@ class LatticeLayersTestCase(test.TestCase):
         interpolation_type='hypercube',
         is_monotone=[False, False],
         output_dim=2,
+        output_min=None,
+        output_max=None,
         lattice_sizes=[2, 3],
         parameters=parameters,
         expected_projected_parameters=expected_projected_parameters)
@@ -300,6 +302,8 @@ class LatticeLayersTestCase(test.TestCase):
         interpolation_type='simplex',
         is_monotone=[False, False],
         output_dim=2,
+        output_min=None,
+        output_max=None,
         lattice_sizes=[2, 3],
         parameters=parameters,
         expected_projected_parameters=expected_projected_parameters)
@@ -313,6 +317,8 @@ class LatticeLayersTestCase(test.TestCase):
         interpolation_type='hypercube',
         is_monotone=[True, True],
         output_dim=2,
+        output_min=None,
+        output_max=None,
         lattice_sizes=[2, 3],
         parameters=parameters,
         expected_projected_parameters=expected_projected_parameters)
@@ -326,15 +332,29 @@ class LatticeLayersTestCase(test.TestCase):
         interpolation_type='simplex',
         is_monotone=[True, True],
         output_dim=2,
+        output_min=None,
+        output_max=None,
+        lattice_sizes=[2, 3],
+        parameters=parameters,
+        expected_projected_parameters=expected_projected_parameters)
+
+  def testProjectionWithBoundedFullMonotonicHypercube(self):
+    parameters = [[0.0, 0.1, 1.1, 2.3, 3.1, 4.2],
+                  [5.1, 2.11, 1.11, 3.21, -1.02, -2.2]]
+    expected_projected_parameters = [[0.3, 0.3, 1.1, 2.3, 3.0, 3.0],
+                                     [1.385, 1.385, 1.385, 1.385, 1.385, 1.385]]
+    self._testLatticeLayerProjection(
+        interpolation_type='hypercube',
+        is_monotone=[True, True],
+        output_dim=2,
+        output_min=0.3,
+        output_max=3.0,
         lattice_sizes=[2, 3],
         parameters=parameters,
         expected_projected_parameters=expected_projected_parameters)
 
 
 class EnsembleLatticesLayersTestCase(test.TestCase):
-
-  def setUp(self):
-    super(EnsembleLatticesLayersTestCase, self).setUp()
 
   def _testEnsembleLatticesLayerEvaluation(
       self, interpolation_type, lattice_sizes, structure, output_dim, inputs,

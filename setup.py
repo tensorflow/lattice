@@ -19,22 +19,20 @@ from __future__ import division
 from __future__ import print_function
 
 import sys
-from sys import version
+import warnings
 
 from setuptools import find_packages
 from setuptools import setup
 from setuptools.command.install import install as InstallCommandBase
 from setuptools.dist import Distribution
 
-import warnings
 
-
-__version__ = '0.9.6'
+__version__ = '0.9.7'
 
 
 REQUIRED_PACKAGES = [
-    'six >= 1.10.0',
-    'protobuf >= 3.4.0',
+    'six >= 1.11.0',
+    'protobuf == 3.5.*',
 ]
 
 
@@ -47,14 +45,15 @@ else:
 
 if use_gpu:
   project_name = 'tensorflow-lattice-gpu'
-  REQUIRED_PACKAGES.append('tensorflow-gpu==1.5.0')
+  REQUIRED_PACKAGES.append('tensorflow-gpu==1.9.0')
 else:
   project_name = 'tensorflow-lattice'
-  REQUIRED_PACKAGES.append('tensorflow==1.5.0')
+  REQUIRED_PACKAGES.append('tensorflow==1.9.0')
 
 
 class BinaryDistribution(Distribution):
   """This class is needed in order to create OS specific wheels."""
+
   def has_ext_modules(self):
     return True
 

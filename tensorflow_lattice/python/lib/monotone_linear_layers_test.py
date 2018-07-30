@@ -104,6 +104,38 @@ class MonotoneLinearTestCase(test.TestCase):
     self.assertAllClose(expected_pre_projection_weight, pre_projection_weight)
     self.assertAllClose(expected_projected_weight, projected_weight)
 
+  def testNoRegularizationExpectsNone(self):
+    """Create a monotone linear layer and check no regularization."""
+    input_dim = 10
+    input_placeholder = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[None, input_dim])
+    # We set the initial_weight_mean to -10.0.
+    (_, _, _, regularization) = monotone_linear_layers.monotone_linear_layer(
+        input_placeholder,
+        input_dim=input_dim,
+        output_dim=2,
+        init_weight_mean=-10.0,
+        init_weight_stddev=0.0)
+    self.assertIsNone(regularization)
+
+  def testRegularization(self):
+    """Create a monotone linear layer and check regularization."""
+    input_dim = 10
+    input_placeholder = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[None, input_dim])
+    # We set the initial_weight_mean to -10.0.
+    (_, _, _, regularization) = monotone_linear_layers.monotone_linear_layer(
+        input_placeholder,
+        input_dim=input_dim,
+        output_dim=2,
+        init_weight_mean=-10.0,
+        init_weight_stddev=0.0,
+        l1_reg=0.1,
+        l2_reg=0.1)
+    with self.test_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      self.assertAlmostEqual(220.0, sess.run(regularization), delta=1e-5)
+
 
 class SplitMonotoneLinearTestCase(test.TestCase):
 
@@ -247,6 +279,50 @@ class SplitMonotoneLinearTestCase(test.TestCase):
           is_monotone=is_monotone,
           init_weight_mean=-10.0,
           init_weight_stddev=0.0)
+
+  def testNoRegularizationExpectsNone(self):
+    """Create a split monotone linear layer and check no regularization."""
+    input_dim = 2
+    monotonic_output_dim = 2
+    non_monotonic_output_dim = 2
+    is_monotone = [True, False]
+    input_placeholder = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[None, input_dim])
+    # We set the initial_weight_mean to -10.0.
+    (_, _, _, _, _,
+     regularization) = monotone_linear_layers.split_monotone_linear_layer(
+         input_placeholder,
+         input_dim=input_dim,
+         monotonic_output_dim=monotonic_output_dim,
+         non_monotonic_output_dim=non_monotonic_output_dim,
+         is_monotone=is_monotone,
+         init_weight_mean=-10.0,
+         init_weight_stddev=0.0)
+    self.assertIsNone(regularization)
+
+  def testRegularization(self):
+    """Create a split monotone linear layer and check regularization."""
+    input_dim = 2
+    monotonic_output_dim = 2
+    non_monotonic_output_dim = 2
+    is_monotone = [True, False]
+    input_placeholder = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[None, input_dim])
+    # We set the initial_weight_mean to -10.0.
+    (_, _, _, _, _,
+     regularization) = monotone_linear_layers.split_monotone_linear_layer(
+         input_placeholder,
+         input_dim=input_dim,
+         monotonic_output_dim=monotonic_output_dim,
+         non_monotonic_output_dim=non_monotonic_output_dim,
+         is_monotone=is_monotone,
+         init_weight_mean=-10.0,
+         init_weight_stddev=0.0,
+         l1_reg=0.1,
+         l2_reg=0.1)
+    with self.test_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      self.assertAlmostEqual(66.0, sess.run(regularization), delta=1e-5)
 
 
 if __name__ == '__main__':

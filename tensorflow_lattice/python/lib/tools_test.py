@@ -14,11 +14,11 @@
 # ==============================================================================
 """Tests for TensorFlow Lattice's tools module."""
 # Dependency imports
+import numpy as np
 
 from tensorflow_lattice.python.lib import test_data
 from tensorflow_lattice.python.lib import tools
 
-import numpy as np
 
 from tensorflow.python.estimator.inputs import numpy_io
 from tensorflow.python.feature_column import feature_column_lib
@@ -122,6 +122,34 @@ class ToolsTestCase(test.TestCase):
     self.assertTrue(
         self._np_array_close(expect, materialized),
         'expect:{} != got:{}'.format(expect, materialized))
+
+  def testSaveOnceOrWaitForChief(self):
+    write_fn = test.mock.Mock()
+    tools.save_once_or_wait_for_chief(
+        write_fn, self.get_temp_dir(), is_chief=True)
+    write_fn.assert_called_once_with()
+    write_fn.reset_mock()
+    write_fn.assert_not_called()
+    tools.save_once_or_wait_for_chief(
+        write_fn, self.get_temp_dir(), is_chief=True)
+    write_fn.assert_not_called()
+    tools.save_once_or_wait_for_chief(
+        write_fn, self.get_temp_dir(), is_chief=False)
+    write_fn.assert_not_called()
+
+  @test.mock.patch('time.time')
+  def testSaveOnceOrWaitForChief_Timeout(self, mock_time):
+    write_fn = test.mock.Mock()
+    # Return 0 on the first call to 'time.time' and 1000 on the second.
+    mock_time.side_effect = [0, 1000]
+    self.assertRaises(tools.SaveOnceOrWaitTimeOutError,
+                      tools.save_once_or_wait_for_chief,
+                      write_fn,
+                      self.get_temp_dir(),
+                      is_chief=False,
+                      timeout_secs=999)
+    call = test.mock.call
+    self.assertEqual(mock_time.mock_calls, [call(), call()])
 
   def _np_array_close(self, a, b):
     return np.alltrue(np.isclose(a, b))

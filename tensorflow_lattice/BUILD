@@ -34,6 +34,8 @@ py_library(
         "//tensorflow_lattice/python:pwl_calibration_ops_py",
         "//tensorflow_lattice/python:regularizers",
         "//tensorflow_lattice/python:tools",
+        "//tensorflow_lattice/python/estimators:base",
+        "//tensorflow_lattice/python/estimators:calibrated",
         "//tensorflow_lattice/python/estimators:calibrated_etl",
         "//tensorflow_lattice/python/estimators:calibrated_lattice",
         "//tensorflow_lattice/python/estimators:calibrated_linear",

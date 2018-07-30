@@ -20,6 +20,7 @@ import copy
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import lattice_layers
+from tensorflow_lattice.python.lib import regularizers
 
 _EPSILON = 1e-7
 
@@ -86,10 +87,9 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
     return error_messages
 
   def _check_not_allowed_feature_params(self, hparams):
-    not_allowed_feature_params = [
-        'lattice_l1_reg', 'lattice_l2_reg', 'lattice_l1_torsion_reg',
-        'lattice_l2_torsion_reg'
-    ]
+    not_allowed_feature_params = map(
+        'lattice_{}'.format,
+        regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS)
     error_messages = []
     for param in not_allowed_feature_params:
       for feature_name in hparams.get_feature_names():
@@ -114,7 +114,7 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
 
     # Check global params.
     feature_names = hparams.get_feature_names()
-    global_values, per_feature_values = hparams.get_global_and_feature_params([
+    param_list = [
         'monotonicity',
         'lattice_size',
         'calibration_output_min',
@@ -122,13 +122,10 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
         'calibration_bound',
         'missing_input_value',
         'missing_vertex',
-        'lattice_l1_reg',
-        'lattice_l2_reg',
-        'lattice_l1_torsion_reg',
-        'lattice_l2_torsion_reg',
-        'lattice_l1_laplacian_reg',
-        'lattice_l2_laplacian_reg',
-    ], feature_names)
+    ] + ['lattice_{}'.format(r) for r in regularizers.LATTICE_REGULARIZERS]
+
+    global_values, per_feature_values = hparams.get_global_and_feature_params(
+        param_list, feature_names)
     global_param_error_messages = self._check_param_configuration(
         adjusted, *global_values)
     if global_param_error_messages:
@@ -156,8 +153,8 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
     hparams = copy.deepcopy(hparams)
     feature_names = hparams.get_feature_names()
     global_values, per_feature_values = hparams.get_global_and_feature_params(
-        ['lattice_size', 'missing_input_value',
-         'missing_vertex'], feature_names)
+        ['lattice_size', 'missing_input_value', 'missing_vertex'],
+        feature_names)
 
     final_lattice_size, missing_output_value = self._calibration_params(
         *global_values)
@@ -190,13 +187,12 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
     # Last vertex of the lattice is reserved for missing values.
     return lattice_size + 1, lattice_size
 
-  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
-                                    hparams):
+  def calibration_structure_builder(self, columns_to_tensors, hparams):
     """Returns the calibration structure of the model. See base class."""
     return None
 
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
+  def prediction_builder_from_calibrated(
+      self, mode, per_dimension_feature_names, hparams, calibrated):
     """Construct the prediciton."""
     self.check_hparams(hparams, adjusted=True)
     lattice_sizes = [
@@ -205,19 +201,18 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
     ]
     lattice_monotonic = [(hparams.get_feature_param(f, 'monotonicity') != 0)
                          for f in per_dimension_feature_names]
-    lattice_l1_reg = hparams.get_param('lattice_l1_reg')
-    lattice_l2_reg = hparams.get_param('lattice_l2_reg')
-    lattice_l1_torsion_reg = hparams.get_param('lattice_l1_torsion_reg')
-    lattice_l2_torsion_reg = hparams.get_param('lattice_l2_torsion_reg')
-    lattice_l1_laplacian_reg = [
-        hparams.get_feature_param(f, 'lattice_l1_laplacian_reg')
-        for f in per_dimension_feature_names
-    ]
-    lattice_l2_laplacian_reg = [
-        hparams.get_feature_param(f, 'lattice_l2_laplacian_reg')
-        for f in per_dimension_feature_names
-    ]
     interpolation_type = hparams.get_param('interpolation_type')
+
+    # Setup the regularization.
+    regularizer_amounts = {}
+    for reg_name in regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS:
+      regularizer_amounts[reg_name] = hparams.get_param(
+          'lattice_{}'.format(reg_name))
+    for reg_name in regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS:
+      regularizer_amounts[reg_name] = [
+          hparams.get_feature_param(feature_name, 'lattice_{}'.format(reg_name))
+          for feature_name in per_dimension_feature_names
+      ]
 
     packed_results = lattice_layers.lattice_layer(
         calibrated,
@@ -225,12 +220,7 @@ class _CalibratedLattice(calibrated_lib.Calibrated):
         is_monotone=lattice_monotonic,
         interpolation_type=interpolation_type,
         lattice_initializer=self.lattice_initializers_fn_,
-        l1_reg=lattice_l1_reg,
-        l2_reg=lattice_l2_reg,
-        l1_torsion_reg=lattice_l1_torsion_reg,
-        l2_torsion_reg=lattice_l2_torsion_reg,
-        l1_laplacian_reg=lattice_l1_laplacian_reg,
-        l2_laplacian_reg=lattice_l2_laplacian_reg)
+        **regularizer_amounts)
     (prediction, _, projection_ops, regularization) = packed_results
     # Returns prediction Tensor, projection ops, and regularization.
     return prediction, projection_ops, regularization

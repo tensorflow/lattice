@@ -20,11 +20,15 @@ function build_pip_pkg {
   if [  "${TFL_NATIVE}" = true  ]; then
     # Build pip install package.
     bazel build \
+      --define framework_shared_object=true \
+      --copt="-D_GLIBCXX_USE_CXX11_ABI=0" \
       --compilation_mode=opt \
       --distinct_host_configuration=false \
       :pip_pkg
   else
     bazel build \
+      --define framework_shared_object=true \
+      --copt="-D_GLIBCXX_USE_CXX11_ABI=0" \
       --compilation_mode=opt \
       --cpu=k8 \
       --distinct_host_configuration=false \

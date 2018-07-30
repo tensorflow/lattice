@@ -105,7 +105,8 @@ flags.DEFINE_string("hparams", None,
 
 # Calibration quantiles flags.
 flags.DEFINE_bool("create_quantiles", False,
-                  "Run once to create histogram of features for calibration.")
+                  "Run once to create histogram of features for calibration. "
+                  "It will use the --train dataset for that.")
 flags.DEFINE_string(
     "quantiles_dir", None,
     "Directory where to store quantile information, defaults to the model "
@@ -288,7 +289,7 @@ def create_feature_columns():
 def create_quantiles(quantiles_dir):
   """Creates quantiles directory if it doesn't yet exist."""
   batch_size = 10000
-  input_fn = get_test_input_fn(
+  input_fn = get_train_input_fn(
       batch_size=batch_size, num_epochs=1, shuffle=False)
   # Reads until input is exhausted, 10000 at a time.
   tfl.save_quantiles_for_keypoints(

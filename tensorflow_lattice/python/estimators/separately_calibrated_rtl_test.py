@@ -172,7 +172,7 @@ class CalibratedRtlTest(test.TestCase):
     feature_columns = [feature_column_lib.numeric_column('x')]
     weight_column = feature_column_lib.numeric_column('zero')
     estimator = self._CalibratedRtlRegressor(
-        ['x'], feature_columns, weight_column=weight_column)
+        ['x'], feature_columns, num_lattices=2, weight_column=weight_column)
     estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.oned_zero_weight_input_fn())
@@ -216,7 +216,7 @@ class CalibratedRtlTest(test.TestCase):
     estimator = self._CalibratedRtlRegressor(
         ['x0', 'x1'],
         feature_columns,
-        num_lattics=5,
+        num_lattices=2,
         lattice_rank=2,
         lattice_l1_reg=1.0,
         lattice_l2_reg=1.0,
@@ -238,7 +238,7 @@ class CalibratedRtlTest(test.TestCase):
     estimator = self._CalibratedRtlRegressor(
         ['x0', 'x1'],
         feature_columns,
-        num_lattics=5,
+        num_lattices=2,
         lattice_rank=2,
         feature__x0__lattice_l1_laplacian_reg=100.0,
         feature__x1__lattice_l2_laplacian_reg=1.0)
@@ -319,7 +319,7 @@ class CalibratedRtlTest(test.TestCase):
         input_fn=self._test_data.twod_classificer_input_fn())
     # We expect AUC is worse than the model without regularization.
     self.assertLess(results['auc'], 0.98)
-    self.assertGreater(results['auc'], 0.8)
+    self.assertGreater(results['auc'], 0.7)
 
   def testCalibratedRtlMonotonicClassifierTraining(self):
     # Construct the following training/testing pair.

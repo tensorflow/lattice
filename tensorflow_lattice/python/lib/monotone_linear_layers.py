@@ -15,6 +15,7 @@
 """Monotonic linear embedding layers library for TensorFlow."""
 # Dependency imports
 
+from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
 
 from tensorflow.python.framework import ops
@@ -30,7 +31,9 @@ def monotone_linear_layer(input_tensor,
                           is_monotone=None,
                           init_weight_mean=2.0,
                           init_weight_stddev=0.5,
-                          init_bias=None):
+                          init_bias=None,
+                          l1_reg=None,
+                          l2_reg=None):
   """Creates a partially monotonic linear embedding layer.
 
   Returns an output of partially monotonic linear embedding layer, weights in
@@ -61,6 +64,8 @@ def monotone_linear_layer(input_tensor,
       initializer.
     init_bias: (float) initial bias. If not provided,
       -1/2 * init_weight_mean * input_dim is used.
+    l1_reg: (float) amount of l1 regularization.
+    l2_reg: (float) amount of l2 regularization.
 
   Returns:
     A tuple of:
@@ -115,8 +120,11 @@ def monotone_linear_layer(input_tensor,
         diff = projected_w - masked_w
         projection = w.assign_add(diff)
 
-
+    # Constructing a regularization op.
     regularizer = None
+    if l1_reg is not None or l2_reg is not None:
+      with ops.name_scope('linear_regularization'):
+        regularizer = regularizers.linear_regularization(w, l1_reg, l2_reg)
 
     return (output_tensor, w, projection, regularizer)
 
@@ -128,7 +136,9 @@ def split_monotone_linear_layer(input_tensor,
                                 is_monotone=None,
                                 init_weight_mean=2.0,
                                 init_weight_stddev=0.5,
-                                init_bias=None):
+                                init_bias=None,
+                                l1_reg=None,
+                                l2_reg=None):
   """Creates a split monotonic linear embedding layer.
 
   Returns outputs of partially monotonic linear embedding layers, weights in
@@ -159,6 +169,8 @@ def split_monotone_linear_layer(input_tensor,
       initializer.
     init_bias: (float) initial bias. If not provided,
       -1/2 * init_weight_mean * input_dim is used.
+    l1_reg: (float) amount of l1 regularization.
+    l2_reg: (float) amount of l2 regularization.
 
   Returns:
     A tuple of:
@@ -187,7 +199,6 @@ def split_monotone_linear_layer(input_tensor,
   non_monotonic_output = None
   n_weight = None
   projections = []
-
   regularization = None
   if monotonic_output_dim > 0:
     with variable_scope.variable_scope('split_monotone'):
@@ -198,7 +209,9 @@ def split_monotone_linear_layer(input_tensor,
           is_monotone=is_monotone,
           init_weight_mean=init_weight_mean,
           init_weight_stddev=init_weight_stddev,
-          init_bias=init_bias)
+          init_bias=init_bias,
+          l1_reg=l1_reg,
+          l2_reg=l2_reg)
       (monotonic_output, m_weight, projection, regularizer) = packed_results
       projections.append(projection)
       regularization = tools.add_if_not_none(regularization, regularizer)
@@ -234,7 +247,9 @@ def split_monotone_linear_layer(input_tensor,
           is_monotone=None,
           init_weight_mean=init_weight_mean,
           init_weight_stddev=init_weight_stddev,
-          init_bias=init_bias)
+          init_bias=init_bias,
+          l1_reg=l1_reg,
+          l2_reg=l2_reg)
       (non_monotonic_output, n_weight, _, regularizer) = packed_results
       regularization = tools.add_if_not_none(regularization, regularizer)
 

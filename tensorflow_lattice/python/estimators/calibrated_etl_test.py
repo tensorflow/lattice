@@ -71,16 +71,6 @@ class CalibratedEtlHParamsTest(test.TestCase):
         'estimator.'):
       calibrated_etl.calibrated_etl_classifier(hparams=hparams)
 
-  def testWrongLatticeRegularization(self):
-    hparams = tfl_hparams.CalibratedEtlHParams(feature_names=['x'])
-    hparams.set_param('non_monotonic_num_lattices', 2)
-    hparams.set_param('non_monotonic_lattice_size', 2)
-    hparams.set_param('nno_monotonic_lattice_rank', 2)
-    hparams.set_feature_param('x', 'lattice_l1_reg', 0.1)
-    hparams.set_feature_param('x', 'lattice_l2_reg', 0.1)
-    hparams.set_feature_param('x', 'lattice_l1_torsion_reg', 0.1)
-    hparams.set_feature_param('x', 'lattice_l1_torsion_reg', 0.1)
-
     with self.assertRaisesRegexp(
         ValueError,
         'Hyperparameter configuration cannot be used in the calibrated etl '
@@ -237,8 +227,7 @@ class CalibratedEtlTest(test.TestCase):
     estimator.train(input_fn=self._test_data.multid_feature_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
-    _ = estimator.evaluate(
-        input_fn=self._test_data.multid_feature_input_fn())
+    _ = estimator.evaluate(input_fn=self._test_data.multid_feature_input_fn())
 
   def testCalibratedEtlClassifierTraining(self):
     feature_columns = [
@@ -249,8 +238,7 @@ class CalibratedEtlTest(test.TestCase):
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
-    _ = estimator.evaluate(
-        input_fn=self._test_data.twod_classificer_input_fn())
+    _ = estimator.evaluate(input_fn=self._test_data.twod_classificer_input_fn())
 
   def testCalibratedEtlClassifierTrainingWithCalibrationRegularizer(self):
     feature_columns = [
@@ -268,8 +256,7 @@ class CalibratedEtlTest(test.TestCase):
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
-    _ = estimator.evaluate(
-        input_fn=self._test_data.twod_classificer_input_fn())
+    _ = estimator.evaluate(input_fn=self._test_data.twod_classificer_input_fn())
 
   def testCalibratedEtlClassifierTrainingWithLatticeRegularizer(self):
     feature_columns = [
@@ -289,8 +276,7 @@ class CalibratedEtlTest(test.TestCase):
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
-    _ = estimator.evaluate(
-        input_fn=self._test_data.twod_classificer_input_fn())
+    _ = estimator.evaluate(input_fn=self._test_data.twod_classificer_input_fn())
 
   def testCalibratedEtlMonotonicClassifierTraining(self):
     # Construct the following training pair.
@@ -346,10 +332,10 @@ class CalibratedEtlTest(test.TestCase):
     self.assertEqual(len(predictions), 4)
     # Check monotonicity. Note that projection has its own precision, so we
     # add a small number.
-    self.assertLess(predictions[0], predictions[1] + 1e-6)
-    self.assertLess(predictions[0], predictions[2] + 1e-6)
-    self.assertLess(predictions[1], predictions[3] + 1e-6)
-    self.assertLess(predictions[2], predictions[3] + 1e-6)
+    self.assertLess(predictions[0], predictions[1] + 1e-4)
+    self.assertLess(predictions[0], predictions[2] + 1e-4)
+    self.assertLess(predictions[1], predictions[3] + 1e-4)
+    self.assertLess(predictions[2], predictions[3] + 1e-4)
 
   def testCalibratedEtlWithMissingTraining(self):
     # x0 is missing with it's own vertex: so it can take very different values,

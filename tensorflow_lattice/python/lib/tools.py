@@ -13,9 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 """Library of internal functions used by TensorFlow Lattice modules."""
+
+import datetime
+import os
+import socket
+import time
+import traceback
+
 from tensorflow.python.feature_column import feature_column as feature_column_lib
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.lib.io import file_io
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 
@@ -140,8 +148,18 @@ def input_from_feature_column(columns_to_tensors,
                    'your column to float32 until this FeatureColumn is '
                    'supported'.format(feature_column))
 
+def get_sorted_feature_columns(feature_columns):
+  """Sorts an iterable of feature columns by their names in ascending order.
 
-def get_sorted_feature_names(columns_to_tensors, feature_columns):
+  Args:
+    feature_columns: An iterable that yields instances of a tensorflow
+      FeatureColumn.
+  Returns:
+    A copy of the input sorted by name in ascending order.
+  """
+  return sorted(feature_columns, key=lambda fc : fc.name)
+
+def get_sorted_feature_names(columns_to_tensors, feature_columns=None):
   """List feature names: from feature_columns or columns_to_tensors.
 
   This function will return the list of feature names for layers or Estimators
@@ -149,10 +167,8 @@ def get_sorted_feature_names(columns_to_tensors, feature_columns):
   input_fn.
 
   Args:
-    columns_to_tensors: A mapping from feature column to tensors. 'string' key
-      means a base feature (not-transformed). It can have FeatureColumn as a key
-      too. That means that FeatureColumn is already transformed by input
-      pipeline. For example, inflow may have handled transformations.
+    columns_to_tensors: str-->tf.Tensor dict. A mapping from feature name to
+      tensors.
     feature_columns: Optional set containing all the feature columns. If not
       set it is assumed all features come from columns_to_tensors. Otherwise
       this defines the list of features to use.
@@ -163,9 +179,8 @@ def get_sorted_feature_names(columns_to_tensors, feature_columns):
     List of feature names.
   """
   if feature_columns is not None:
-    return [f_col.name for f_col in sorted(list(feature_columns))]
+    return [f_col.name for f_col in get_sorted_feature_columns(feature_columns)]
   return [k for k in sorted(columns_to_tensors.keys())]
-
 
 def assert_shape(tensor, expected_shape, tensor_name):
   """Assert shapes that must be known in graph construction time."""
@@ -333,3 +348,70 @@ def lattice_1d_slice(lattice_param_tensor, lattice_sizes, lattice_axis, begin,
   final_slice = array_ops.reshape(sliced_param, shape=[output_dim, -1])
 
   return final_slice
+
+
+class SaveOnceOrWaitTimeOutError(Exception):
+  pass
+
+
+def save_once_or_wait_for_chief(
+    write_fn,
+    metadata_dir,
+    is_chief,
+    timeout_secs=600):
+  """Synchronizes saving data to disk across multiple tensorflow processes.
+
+  This function can be used for synchronizing creation of data on disk that
+  needs to be available to all processes in a Tensorflow cluster. Each process
+  should call this function prior to using the data. The function makes the
+  designated chief process write the data and every other process blocks until
+  the data has been written.
+
+  Args:
+    write_fn: A function taking no arguments that executes the write to disk.
+    metadata_dir: A path on the filesystem used for storing internal data
+      used in this function (currently, a "done" sentinal file). If this
+      directory doesn't exist it would be created; otherwise it should be
+      writeable.
+    is_chief: Whether the current process is the designated chief. Only one
+      process should pass this as "True".
+    timeout_secs: The (approximate) time in seconds a non-chief process should
+      wait for the data to be created.
+  Raises:
+    SaveOnceOrWaitTimeOutError if this is a non-chief process and the data has
+      not been created by the chief after timeout_secs seconds.
+  """
+  done_file = os.path.join(metadata_dir, '__tensorflow_lattice__done')
+  if not is_chief:
+    _poll_for_file(done_file, timeout_secs)
+    return
+
+  if file_io.file_exists(done_file):
+    return
+
+  write_fn()
+
+  # Create an empty done file.
+  file_io.recursive_create_dir(metadata_dir)
+  file_io.write_string_to_file(done_file,
+                               'Time created [UTC]: %s'
+                               '\nHostname: %s'
+                               '\nProcess id: %s'
+                               '\nTraceback:\n%s' % (
+                                   datetime.datetime.utcnow(),
+                                   socket.gethostname(),
+                                   os.getpid(),
+                                   '\n'.join(traceback.format_stack())
+                               ))
+
+
+POLL_INTERVAL_SECS = 30
+
+
+def _poll_for_file(filename, timeout_secs):
+  start = time.time()
+  while not file_io.file_exists(filename):
+    time.sleep(POLL_INTERVAL_SECS)
+    if time.time() - start > timeout_secs:
+      raise SaveOnceOrWaitTimeOutError('Waiting for file %s timed-out' %
+                                       filename)
