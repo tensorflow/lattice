@@ -16,6 +16,7 @@
 from distutils.util import strtobool
 
 import six
+from tensorflow_lattice.python.lib import regularizers
 
 
 class PerFeatureHParams(object):
@@ -188,8 +189,9 @@ class PerFeatureHParams(object):
     elif value_type is bool:
       return strtobool(value_str)
 
-    raise ValueError('Do not know who to parse types {} -- value was "{}"'.
-                     format(value_type, value_str))
+    raise ValueError(
+        'Do not know how to parse types {} -- value was {!r}'.format(
+            value_type, value_str))
 
   def _set_param(self, param_name, value, parse):
     """Sets parameter, optionally parse it."""
@@ -355,9 +357,8 @@ class CalibratedHParams(PerFeatureHParams):
     set
       if will convert missing input to this value. Leave it undefined and the
       output will be learned.
-    * `calibration_l1_reg`, `calibration_l2_reg`,
-      `calibration_l1_laplacian_reg`, `calibration_l2_laplacian_reg`: Calibrator
-      regularizers regularization amount. Default is `None`.
+    * `calibration_<regularizer_name>` for all regularizer_name's in
+      regularizers.CALIBRATOR_REGULARIZERS. e.g. `calibration_l2_reg`.
   """
 
   def __init__(self, feature_names=None, **kwargs):
@@ -368,24 +369,25 @@ class CalibratedHParams(PerFeatureHParams):
         'calibration_output_max': None,
         'calibration_bound': False,
         'monotonicity': 0,
-        'calibration_l1_reg': None,
-        'calibration_l2_reg': None,
-        'calibration_l1_laplacian_reg': None,
-        'calibration_l2_laplacian_reg': None,
         'missing_input_value': None,
         'missing_output_value': None,
     }
+    regularizer_hparam_names = [
+        'calibration_{}'.format(regularizer_name)
+        for regularizer_name in regularizers.CALIBRATOR_REGULARIZERS
+    ]
+    args.update({
+        regularizer_name: None for regularizer_name in regularizer_hparam_names
+    })
     args.update(kwargs)
     super(CalibratedHParams, self).__init__(feature_names, **args)
     self.set_param_type('monotonicity', int)
     self.set_param_type('calibration_output_min', float)
     self.set_param_type('calibration_output_max', float)
-    self.set_param_type('calibration_l1_reg', float)
-    self.set_param_type('calibration_l2_reg', float)
-    self.set_param_type('calibration_l1_laplacian_reg', float)
-    self.set_param_type('calibration_l2_laplacian_reg', float)
     self.set_param_type('missing_input_value', float)
     self.set_param_type('missing_output_value', float)
+    for regularizer_name in regularizer_hparam_names:
+      self.set_param_type(regularizer_name, float)
 
 
 class CalibratedLinearHParams(CalibratedHParams):
@@ -417,7 +419,7 @@ class CalibratedLatticeHParams(CalibratedHParams):
   """Hyper-parameters for CalibratedLattice models.
 
   Supports regularization and monotonicity like described in `CalibratedHParam`.
-  Values for `calibration_output_min`, `calibration_output_max` and 
+  Values for `calibration_output_min`, `calibration_output_max` and
   `missing_output_value` get set automatically.
 
   Added parameters:
@@ -438,10 +440,8 @@ class CalibratedLatticeHParams(CalibratedHParams):
     if missing_vertex is set, they get their own value in the lattice.
   * `missing_vertex`: if missing_input_value is set, this boolean value indicate
     whether to create an extra vertex for missing values.
-  * `lattice_l1_reg`, `lattice_l2_reg`, `lattice_l1_torsion_reg`,
-    `lattice_l2_torsion_reg`, `lattice_l1_laplacian_reg`,
-    `lattice_l2_laplacian_reg`: Lattice regularizers regularization amount.
-    Default is `None`.
+  * `lattice_<regularizer_name>` for all regularizer_name's in
+    regularizers.LATTICE_REGULARIZERS. e.g. `lattice_l2_reg`.
   """
 
   def __init__(self, feature_names=None, **kwargs):
@@ -453,29 +453,26 @@ class CalibratedLatticeHParams(CalibratedHParams):
         'calibration_bound': True,
         'missing_input_value': None,
         'missing_vertex': False,
-        'lattice_l1_reg': None,
-        'lattice_l2_reg': None,
-        'lattice_l1_torsion_reg': None,
-        'lattice_l2_torsion_reg': None,
-        'lattice_l1_laplacian_reg': None,
-        'lattice_l2_laplacian_reg': None,
     }
+    regularizer_hparam_names = [
+        'lattice_{}'.format(regularizer_name)
+        for regularizer_name in regularizers.LATTICE_REGULARIZERS
+    ]
+    args.update({
+        regularizer_name: None for regularizer_name in regularizer_hparam_names
+    })
     args.update(kwargs)
     super(CalibratedLatticeHParams, self).__init__(feature_names, **args)
     self.set_param_type('missing_input_value', float)
-    self.set_param_type('lattice_l1_reg', float)
-    self.set_param_type('lattice_l2_reg', float)
-    self.set_param_type('lattice_l1_torsion_reg', float)
-    self.set_param_type('lattice_l2_torsion_reg', float)
-    self.set_param_type('lattice_l1_laplacian_reg', float)
-    self.set_param_type('lattice_l2_laplacian_reg', float)
+    for regularizer_name in regularizer_hparam_names:
+      self.set_param_type(regularizer_name, float)
 
 
 class CalibratedRtlHParams(CalibratedHParams):
   """Hyper-parameters for CalibratedRtl (RandomTinyLattices) models.
 
   Supports regularization and monotonicity like described in `CalibratedHParam`.
-  Values for `calibration_output_min`, `calibration_output_max` and 
+  Values for `calibration_output_min`, `calibration_output_max` and
   `missing_output_value` get set automatically.
 
   Added parameters:
@@ -502,10 +499,8 @@ class CalibratedRtlHParams(CalibratedHParams):
     if missing_vertex is set, they get their own value in the lattice.
   * `missing_vertex`: if missing_input_value is set, this boolean value indicate
     whether to create an extra vertex for missing values.
-  * `lattice_l1_reg`, `lattice_l2_reg`, `lattice_l1_torsion_reg`,
-    `lattice_l2_torsion_reg`, `lattice_l1_laplacian_reg`,
-    `lattice_l2_laplacian_reg`: Latticer regularizers regularization amount.
-    Default is `None`.
+  * `lattice_<regularizer_name>` for all regularizer_name's in
+    regularizers.LATTICE_REGULARIZERS. e.g. `lattice_l2_reg`.
   """
 
   def __init__(self, feature_names=None, **kwargs):
@@ -521,31 +516,28 @@ class CalibratedRtlHParams(CalibratedHParams):
         'missing_input_value': None,
         'missing_vertex': False,
         'ensemble_bias': 0.0,
-        'lattice_l1_reg': None,
-        'lattice_l2_reg': None,
-        'lattice_l1_torsion_reg': None,
-        'lattice_l2_torsion_reg': None,
-        'lattice_l1_laplacian_reg': None,
-        'lattice_l2_laplacian_reg': None,
     }
+    regularizer_hparam_names = [
+        'lattice_{}'.format(regularizer_name)
+        for regularizer_name in regularizers.LATTICE_REGULARIZERS
+    ]
+    args.update({
+        regularizer_name: None for regularizer_name in regularizer_hparam_names
+    })
     args.update(kwargs)
     super(CalibratedRtlHParams, self).__init__(feature_names, **args)
     self.set_param_type('num_lattices', int)
     self.set_param_type('lattice_rank', int)
     self.set_param_type('missing_input_value', float)
-    self.set_param_type('lattice_l1_reg', float)
-    self.set_param_type('lattice_l2_reg', float)
-    self.set_param_type('lattice_l1_torsion_reg', float)
-    self.set_param_type('lattice_l2_torsion_reg', float)
-    self.set_param_type('lattice_l1_laplacian_reg', float)
-    self.set_param_type('lattice_l2_laplacian_reg', float)
+    for regularizer_name in regularizer_hparam_names:
+      self.set_param_type(regularizer_name, float)
 
 
 class CalibratedEtlHParams(CalibratedHParams):
   """Hyper-parameters for CalibratedEtl (Embedded tiny lattices) models.
 
   Supports regularization and monotonicity like described in `CalibratedHParam`.
-  Values for `calibration_output_min`, `calibration_output_max` and 
+  Values for `calibration_output_min`, `calibration_output_max` and
   `missing_output_value` get set automatically.
 
   Note that this architecture does not support any of per-feature based lattice
@@ -587,6 +579,8 @@ class CalibratedEtlHParams(CalibratedHParams):
   * `linear_embedding_calibration_num_keypoints`: (float) a global parameter
     that controls a `num_keypoints` in intermediate calibration layers. Default
     is 100.
+  * `lattice_<regularizer_name>` for all regularizer_name's in
+    regularizers.LATTICE_REGULARIZERS. e.g. `lattice_l2_reg`.
   """
 
   def __init__(self, feature_names=None, **kwargs):
@@ -601,16 +595,17 @@ class CalibratedEtlHParams(CalibratedHParams):
         'non_monotonic_lattice_size': None,
         'interpolation_type': 'hypercube',
         'calibration_bound': True,
-        'linear_embedding_calibration_min': -100,
-        'linear_embedding_calibration_max': 100,
+        'linear_embedding_calibration_min': -100.0,
+        'linear_embedding_calibration_max': 100.0,
         'linear_embedding_calibration_num_keypoints': 100,
-        'lattice_l1_reg': None,
-        'lattice_l2_reg': None,
-        'lattice_l1_torsion_reg': None,
-        'lattice_l2_torsion_reg': None,
-        'lattice_l1_laplacian_reg': None,
-        'lattice_l2_laplacian_reg': None,
     }
+    regularizer_hparam_names = [
+        'lattice_{}'.format(regularizer_name)
+        for regularizer_name in regularizers.LATTICE_REGULARIZERS
+    ]
+    args.update({
+        regularizer_name: None for regularizer_name in regularizer_hparam_names
+    })
     args.update(kwargs)
     super(CalibratedEtlHParams, self).__init__(feature_names, **args)
     self.set_param_type('monotonic_lattice_rank', int)
@@ -619,14 +614,8 @@ class CalibratedEtlHParams(CalibratedHParams):
     self.set_param_type('non_monotonic_lattice_rank', int)
     self.set_param_type('non_monotonic_num_lattices', int)
     self.set_param_type('non_monotonic_lattice_size', int)
-
     self.set_param_type('linear_embedding_calibration_min', float)
     self.set_param_type('linear_embedding_calibration_max', float)
     self.set_param_type('linear_embedding_calibration_num_keypoints', int)
-
-    self.set_param_type('lattice_l1_reg', float)
-    self.set_param_type('lattice_l2_reg', float)
-    self.set_param_type('lattice_l1_torsion_reg', float)
-    self.set_param_type('lattice_l2_torsion_reg', float)
-    self.set_param_type('lattice_l1_laplacian_reg', float)
-    self.set_param_type('lattice_l2_laplacian_reg', float)
+    for regularizer_name in regularizer_hparam_names:
+      self.set_param_type(regularizer_name, float)

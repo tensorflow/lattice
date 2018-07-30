@@ -20,6 +20,8 @@ models.
 This modules provides functions used when building models, as opposed to the
 basic operators exported by lattice_ops.py
 """
+import functools
+
 from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
 from tensorflow_lattice.python.ops import lattice_ops
@@ -27,6 +29,7 @@ from tensorflow_lattice.python.ops.gen_monotone_lattice import monotone_lattice
 
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 
 _VALID_INTERPOLATION_TYPES = ['hypercube', 'simplex']
@@ -124,8 +127,9 @@ def lattice_param_as_linear(lattice_sizes, output_dim, linear_weights=1.0):
     lattice_parameter = [-sum_of_weights] * lattice_structure.num_vertices
     for (idx, vertex) in tools.lattice_indices_generator(lattice_structure):
       for dim in range(lattice_rank):
-        lattice_parameter[idx] += (linear_weight_per_output[dim] * float(
-            vertex[dim]) / float(lattice_rank * (lattice_sizes[dim] - 1)))
+        lattice_parameter[idx] += (
+            linear_weight_per_output[dim] * float(vertex[dim]) / float(
+                lattice_rank * (lattice_sizes[dim] - 1)))
     lattice_parameters.append(lattice_parameter)
 
   return lattice_parameters
@@ -134,15 +138,12 @@ def lattice_param_as_linear(lattice_sizes, output_dim, linear_weights=1.0):
 def lattice_layer(input_tensor,
                   lattice_sizes,
                   is_monotone=None,
+                  output_min=None,
+                  output_max=None,
                   output_dim=1,
                   interpolation_type='hypercube',
                   lattice_initializer=None,
-                  l1_reg=None,
-                  l2_reg=None,
-                  l1_torsion_reg=None,
-                  l2_torsion_reg=None,
-                  l1_laplacian_reg=None,
-                  l2_laplacian_reg=None):
+                  **regularizer_amounts):
   """Creates a lattice layer.
 
   Returns an output of lattice, lattice parameters, and projection ops.
@@ -155,6 +156,8 @@ def lattice_layer(input_tensor,
       is_monotone[k] == True, then the lattice output has the non-decreasing
       monotonicity with respect to input_tensor[?, k] (the kth coordinate). If
       True, all the input coordinate will have the non-decreasing monotonicity.
+    output_min: Optional output lower bound.
+    output_max: Optional output upper bound.
     output_dim: Number of outputs.
     interpolation_type: 'hypercube' or 'simplex'.
     lattice_initializer: (Optional) Initializer for lattice parameter vectors,
@@ -162,16 +165,14 @@ def lattice_layer(input_tensor,
       lattice_sizes[0] * ... * lattice_sizes[input_dim - 1]). If None,
       lattice_param_as_linear initializer will be used with
       linear_weights=[1] * len(lattice_sizes).
-    l1_reg: (float) l1 regularization amount.
-    l2_reg: (float) l2 regularization amount.
-    l1_torsion_reg: (float) l1 torsion regularization amount.
-    l2_torsion_reg: (float) l2 torsion regularization amount.
-    l1_laplacian_reg: (list of floats or float) list of L1 Laplacian
-       regularization amount per each dimension. If a single float value is
-       provided, then all diemnsion will get the same value.
-    l2_laplacian_reg: (list of floats or float) list of L2 Laplacian
-       regularization amount per each dimension. If a single float value is
-       provided, then all diemnsion will get the same value.
+    **regularizer_amounts: Keyword args of regularization amounts passed to
+      regularizers.lattice_regularization(). Keyword names should be among
+      regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS or
+      regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS. For
+      multi-dimensional regularizers the value should be float. For
+      one-dimensional regularizers the values should be float or list of floats.
+      If a single float value is provided, then all dimensions will get the same
+      value.
 
   Returns:
     A tuple of:
@@ -205,28 +206,32 @@ def lattice_layer(input_tensor,
       interpolation_type=interpolation_type)
 
   with ops.name_scope('lattice_monotonic_projection'):
-    if is_monotone:
-      is_monotone = tools.cast_to_list(is_monotone,
-                                       len(lattice_sizes), 'is_monotone')
-      projected_parameter_tensor = monotone_lattice(
-          parameter_tensor,
-          lattice_sizes=lattice_sizes,
-          is_monotone=is_monotone)
+    if is_monotone or output_min or output_max:
+      projected_parameter_tensor = parameter_tensor
+      if is_monotone:
+        is_monotone = tools.cast_to_list(is_monotone, len(lattice_sizes),
+                                         'is_monotone')
+        projected_parameter_tensor = monotone_lattice(
+            projected_parameter_tensor,
+            lattice_sizes=lattice_sizes,
+            is_monotone=is_monotone)
+
+      if output_min:
+        projected_parameter_tensor = math_ops.maximum(
+            projected_parameter_tensor, output_min)
+
+      if output_min:
+        projected_parameter_tensor = math_ops.minimum(
+            projected_parameter_tensor, output_max)
+
       delta = projected_parameter_tensor - parameter_tensor
       projection_ops = [parameter_tensor.assign_add(delta)]
     else:
       projection_ops = None
 
   with ops.name_scope('lattice_regularization'):
-    reg = regularizers.lattice_regularization(
-        parameter_tensor,
-        lattice_sizes,
-        l1_reg=l1_reg,
-        l2_reg=l2_reg,
-        l1_torsion_reg=l1_torsion_reg,
-        l2_torsion_reg=l2_torsion_reg,
-        l1_laplacian_reg=l1_laplacian_reg,
-        l2_laplacian_reg=l2_laplacian_reg)
+    reg = regularizers.lattice_regularization(parameter_tensor, lattice_sizes,
+                                              **regularizer_amounts)
 
   return (output_tensor, parameter_tensor, projection_ops, reg)
 
@@ -238,12 +243,7 @@ def ensemble_lattices_layer(input_tensor,
                             output_dim=1,
                             interpolation_type='hypercube',
                             lattice_initializers=None,
-                            l1_reg=None,
-                            l2_reg=None,
-                            l1_torsion_reg=None,
-                            l2_torsion_reg=None,
-                            l1_laplacian_reg=None,
-                            l2_laplacian_reg=None):
+                            **regularizer_amounts):
   """Creates a ensemble of lattices layer.
 
   Returns a list of output of lattices, lattice parameters, and projection ops.
@@ -266,16 +266,14 @@ def ensemble_lattices_layer(input_tensor,
       parameter in the kth lattice. If None, lattice_param_as_linear initializer
       will be used with
       linear_weights=[1 if monotone else 0 for monotone in is_monotone].
-    l1_reg: (float) l1 regularization amount.
-    l2_reg: (float) l2 regularization amount.
-    l1_torsion_reg: (float) l1 torsion regularization amount.
-    l2_torsion_reg: (float) l2 torsion regularization amount.
-    l1_laplacian_reg: (list of floats or float) list of L1 Laplacian
-       regularization amount per each dimension. If a single float value is
-       provided, then all diemnsion will get the same value.
-    l2_laplacian_reg: (list of floats or float) list of L2 Laplacian
-       regularization amount per each dimension. If a single float value is
-       provided, then all diemnsion will get the same value.
+    **regularizer_amounts: Keyword args of regularization amounts passed to
+      regularizers.lattice_regularization(). Keyword names should be among
+      regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS or
+      regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS. For
+      multi-dimensional regularizers the value should be float. For
+      one-dimensional regularizers the values should be float or list of floats.
+      If a single float value is provided, then all dimensions will get the same
+      value.
 
   Returns:
     A tuple of:
@@ -290,14 +288,14 @@ def ensemble_lattices_layer(input_tensor,
   num_lattices = len(structure_indices)
   lattice_initializers = tools.cast_to_list(lattice_initializers, num_lattices,
                                             'lattice initializers')
-  if l1_laplacian_reg is not None:
-    l1_laplacian_reg = tools.cast_to_list(l1_laplacian_reg,
-                                          len(lattice_sizes),
-                                          'l1_laplacian_reg')
-  if l2_laplacian_reg is not None:
-    l2_laplacian_reg = tools.cast_to_list(l2_laplacian_reg,
-                                          len(lattice_sizes),
-                                          'l2_laplacian_reg')
+  one_dimensional_regularizers = \
+    regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS
+  for regularizer_name in regularizer_amounts:
+    if regularizer_name in one_dimensional_regularizers:
+      regularizer_amounts[regularizer_name] = tools.cast_to_list(
+          regularizer_amounts[regularizer_name], len(lattice_sizes),
+          regularizer_name)
+
   # input_slices[k] = input_tensor[:, k].
   input_slices = array_ops.unstack(input_tensor, axis=1)
 
@@ -306,28 +304,29 @@ def ensemble_lattices_layer(input_tensor,
   projections = []
   regularization = None
   if is_monotone:
-    is_monotone = tools.cast_to_list(is_monotone,
-                                     len(lattice_sizes), 'is_monotone')
+    is_monotone = tools.cast_to_list(is_monotone, len(lattice_sizes),
+                                     'is_monotone')
   # Now iterate through structure_indices to construct lattices.
+  get_indices = lambda indices, iterable: [iterable[index] for index in indices]
   for (cnt, structure) in enumerate(structure_indices):
     with variable_scope.variable_scope('lattice_%d' % cnt):
-      sub_lattice_sizes = [lattice_sizes[idx] for idx in structure]
+      sub = functools.partial(get_indices, structure)
+      sub_lattice_sizes = sub(lattice_sizes)
       sub_is_monotone = None
       if is_monotone:
-        sub_is_monotone = [is_monotone[idx] for idx in structure]
+        sub_is_monotone = sub(is_monotone)
 
-      sub_input_tensor_list = [input_slices[idx] for idx in structure]
+      sub_input_tensor_list = sub(input_slices)
       sub_input_tensor = array_ops.stack(sub_input_tensor_list, axis=1)
 
-      if l1_laplacian_reg is not None:
-        sub_l1_laplacian_reg = [l1_laplacian_reg[idx] for idx in structure]
-      else:
-        sub_l1_laplacian_reg = None
-
-      if l2_laplacian_reg is not None:
-        sub_l2_laplacian_reg = [l2_laplacian_reg[idx] for idx in structure]
-      else:
-        sub_l2_laplacian_reg = None
+      sub_regularizer_amounts = {}
+      for regularizer_name in regularizer_amounts:
+        if regularizer_name in one_dimensional_regularizers:
+          sub_regularizer_amounts[regularizer_name] = sub(
+              regularizer_amounts[regularizer_name])
+        else:
+          sub_regularizer_amounts[regularizer_name] = regularizer_amounts[
+              regularizer_name]
 
       packed_results = lattice_layer(
           sub_input_tensor,
@@ -336,12 +335,7 @@ def ensemble_lattices_layer(input_tensor,
           output_dim=output_dim,
           interpolation_type=interpolation_type,
           lattice_initializer=lattice_initializers[cnt],
-          l1_reg=l1_reg,
-          l2_reg=l2_reg,
-          l1_torsion_reg=l1_torsion_reg,
-          l2_torsion_reg=l2_torsion_reg,
-          l1_laplacian_reg=sub_l1_laplacian_reg,
-          l2_laplacian_reg=sub_l2_laplacian_reg)
+          **sub_regularizer_amounts)
       (sub_output, sub_param, sub_proj, sub_reg) = packed_results
 
       output_tensors.append(sub_output)

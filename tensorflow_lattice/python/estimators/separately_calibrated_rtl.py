@@ -24,6 +24,7 @@ import six
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import lattice_layers
+from tensorflow_lattice.python.lib import regularizers
 
 from tensorflow.python.lib.io import file_io
 
@@ -108,11 +109,9 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
     Returns:
       error_messages: (list of strings) error messages.
     """
-
-    not_allowed_feature_params = [
-        'lattice_l1_reg', 'lattice_l2_reg', 'lattice_l1_torsion_reg',
-        'lattice_l2_torsion_reg'
-    ]
+    not_allowed_feature_params = map(
+        'lattice_{}'.format,
+        regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS)
     error_messages = []
     for param in not_allowed_feature_params:
       for feature_name in hparams.get_feature_names():
@@ -250,30 +249,24 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
           rtl_random.sample(six.moves.xrange(input_dim), lattice_rank))
     return structure
 
-  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
-                                    hparams):
+  def calibration_structure_builder(self, columns_to_tensors, hparams):
     """Returns the calibration structure of the model. See base class."""
 
 
     # Check to make sure input features are single dimensional.
-    if feature_columns is None:
-      for (column, t) in six.iteritems(columns_to_tensors):
-        if len(t.shape) > 1 and t.shape.dims[1].value > 1:
-          raise ValueError(
-              'Separately calibrated RTLs do not support multi dimensional '
-              'features: %s with shape %s' % (column, t.shape))
+    for (column, tensor) in six.iteritems(columns_to_tensors):
+      if len(tensor.shape) > 1 and tensor.shape.dims[1].value > 1:
+        raise ValueError(
+            'Separately calibrated RTLs do not support multi dimensional '
+            'features: %s with shape %s' % (column, tensor.shape))
     sorted_columns = sorted(columns_to_tensors.keys())
-
-    # We need to find subsets of feature_columns or columns_to_tensors.
-    if feature_columns is not None:
-      n_inputs = len(feature_columns)
-    else:
-      n_inputs = len(columns_to_tensors)
+    n_inputs = len(columns_to_tensors)
 
     num_lattices = hparams.get_param('num_lattices')
     lattice_rank = hparams.get_param('lattice_rank')
     rtl_seed = hparams.get_param('rtl_seed')
     # Create and save structure if it does not exists.
+
     if not file_io.file_exists(self._structure_file):
       structure = self._create_structure(n_inputs, num_lattices, lattice_rank,
                                          rtl_seed)
@@ -287,23 +280,18 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
     calibration_structure = []
     for indices in structure:
       if len(indices) != lattice_rank:
-        raise ValueError(
-            'Expect %d lattice rank, but found %d in structure: %s' %
-            (lattice_rank, len(indices), str(structure)))
-      if feature_columns is not None:
-        sub_feature_columns = [feature_columns[i] for i in indices]
-        calibration_structure.append((columns_to_tensors, sub_feature_columns))
-      else:
-        sub_columns_to_tensors = {
-            sorted_columns[i]: columns_to_tensors[sorted_columns[i]]
-            for i in indices
-        }
-        calibration_structure.append((sub_columns_to_tensors, feature_columns))
+        raise ValueError('Expect %d lattice rank, but found %d in structure: %s'
+                         % (lattice_rank, len(indices), str(structure)))
+      sub_columns_to_tensors = {
+          sorted_columns[i]: columns_to_tensors[sorted_columns[i]]
+          for i in indices
+      }
+      calibration_structure.append(sub_columns_to_tensors)
 
     return calibration_structure
 
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
+  def prediction_builder_from_calibrated(
+      self, mode, per_dimension_feature_names, hparams, calibrated):
     """Construct the prediciton."""
     self.check_hparams(hparams, adjusted=True)
     lattice_sizes = [
@@ -312,19 +300,17 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
     ]
     lattice_monotonic = [(hparams.get_feature_param(f, 'monotonicity') != 0)
                          for f in per_dimension_feature_names]
-    lattice_l1_reg = hparams.get_param('lattice_l1_reg')
-    lattice_l2_reg = hparams.get_param('lattice_l2_reg')
-    lattice_l1_torsion_reg = hparams.get_param('lattice_l1_torsion_reg')
-    lattice_l2_torsion_reg = hparams.get_param('lattice_l2_torsion_reg')
-    lattice_l1_laplacian_reg = [
-        hparams.get_feature_param(f, 'lattice_l1_laplacian_reg')
-        for f in per_dimension_feature_names
-    ]
-    lattice_l2_laplacian_reg = [
-        hparams.get_feature_param(f, 'lattice_l2_laplacian_reg')
-        for f in per_dimension_feature_names
-    ]
     interpolation_type = hparams.get_param('interpolation_type')
+    # Setup the regularization.
+    regularizer_amounts = {}
+    for reg_name in regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS:
+      regularizer_amounts[reg_name] = hparams.get_param(
+          'lattice_{}'.format(reg_name))
+    for reg_name in regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS:
+      regularizer_amounts[reg_name] = [
+          hparams.get_feature_param(feature_name, 'lattice_{}'.format(reg_name))
+          for feature_name in per_dimension_feature_names
+      ]
 
     (prediction, _, projection_ops,
      regularization) = lattice_layers.lattice_layer(
@@ -333,12 +319,7 @@ class _SeparatelyCalibratedRtl(calibrated_lib.Calibrated):
          is_monotone=lattice_monotonic,
          interpolation_type=interpolation_type,
          lattice_initializer=self.lattice_initializers_fn_,
-         l1_reg=lattice_l1_reg,
-         l2_reg=lattice_l2_reg,
-         l1_torsion_reg=lattice_l1_torsion_reg,
-         l2_torsion_reg=lattice_l2_torsion_reg,
-         l1_laplacian_reg=lattice_l1_laplacian_reg,
-         l2_laplacian_reg=lattice_l2_laplacian_reg)
+         **regularizer_amounts)
     # Returns prediction Tensor, projection ops, and regularization.
     return prediction, projection_ops, regularization
 

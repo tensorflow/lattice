@@ -79,8 +79,8 @@ class _CalibratedLinear(calibrated_lib.Calibrated):
     # Check global params.
     feature_names = hparams.get_feature_names()
     global_values, per_feature_values = hparams.get_global_and_feature_params(
-        ['num_keypoints', 'missing_input_value',
-         'missing_output_value'], feature_names)
+        ['num_keypoints', 'missing_input_value', 'missing_output_value'],
+        feature_names)
     global_param_error_messages = self._check_param_configuration(
         *global_values)
     if global_param_error_messages:
@@ -104,20 +104,19 @@ class _CalibratedLinear(calibrated_lib.Calibrated):
           ' the parameter may be inherited from global parameter.\nDetailed '
           'error messsages\n%s' % '\n'.join(error_messages))
 
-  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
-                                    hparams):
+  def calibration_structure_builder(self, columns_to_tensors, hparams):
     """Returns the calibration structure of the model. See base class."""
     return None
 
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
+  def prediction_builder_from_calibrated(
+      self, mode, per_dimension_feature_names, hparams, calibrated):
     # No need for linear weights: since they are redundant, the calibration
     # can accommodate the weights. Same could be said for the bias, but
     # it turns out that a bias makes it easier to train in the presence of
     # many features.
 
     self.check_hparams(hparams)
-    prediction = math_ops.reduce_sum(calibrated, 1, keep_dims=True)
+    prediction = math_ops.reduce_sum(calibrated, 1, keepdims=True)
     bias = variable_scope.get_variable(
         _SCOPE_BIAS_WEIGHT,
         initializer=array_ops.zeros(shape=[], dtype=self._dtype))

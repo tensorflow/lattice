@@ -346,7 +346,7 @@ class CalibratedRtlTest(test.TestCase):
         input_fn=self._test_data.twod_classificer_input_fn())
     # We expect AUC is worse than the model without regularization.
     self.assertLess(results['auc'], 0.98)
-    self.assertGreater(results['auc'], 0.8)
+    self.assertGreater(results['auc'], 0.75)
 
   def testCalibratedRtlMonotonicClassifierTraining(self):
     # Construct the following training/testing pair.

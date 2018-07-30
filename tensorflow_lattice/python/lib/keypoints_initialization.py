@@ -136,6 +136,9 @@ def _materialize_locally(tensors, num_steps=1, feed_dict=None, safety_size=1e9):
 
 
 def _path_for_quantile(subdir, feature_name):
+  # Change slashes to dashes to make quantile filenames valid.
+  # Note that there is a slight chance of name collision here.
+  feature_name = feature_name.replace("/", "-")
   return os.path.join(subdir, "%s.txt" % feature_name)
 
 
@@ -314,6 +317,47 @@ def save_quantiles_for_keypoints(input_fn,
     quantiles = np.percentile(values, percentiles, interpolation="nearest")
     quantiles = list(quantiles)
     _save_quantiles(subdir, key, quantiles)
+
+
+def save_quantiles_for_keypoints_once(input_fn,
+                                      save_dir,
+                                      is_chief,
+                                      feature_columns=None,
+                                      num_steps=1,
+                                      num_quantiles=1000,
+                                      dtype=dtypes.float32,
+                                      timeout_secs=600):
+  """Concurrency-safe version of save_quantiles_for_keypoints.
+
+  If is_chief is True and the quantiles do not already exist in 'save_dir',
+  calls save_quantiles_for_keypoints; otherwise waits for up to timeout_secs
+  seconds for the quantiles to be created and returns. Raises
+  tools.SaveOrWaitTimeOutError if the timeout expires before the quantiles have
+  been created.
+
+  In multi-process tensorflow training, one must ensure that
+  save_quantiles_for_keypoints is called by a single process before any process
+  calls load_keypoints_from_quantiles. This function facilitates this, by making
+  the chief worker save the quantiles and all the other processes wait for the
+  quantiles to be created. Simply call this function in each process before
+  the process calls load_keypoints_from_quantiles.
+
+  Note that for a given 'save_dir', the quantiles will only be created on the
+  first execution of the program. Successive executions will not overwrite the
+  quantiles. To recreate the quantiles, the save_dir directory must be deleted.
+  """
+  tools.save_once_or_wait_for_chief(
+      write_fn=lambda: save_quantiles_for_keypoints(
+          input_fn,
+          save_dir,
+          feature_columns,
+          num_steps,
+          override=False,
+          num_quantiles=num_quantiles,
+          dtype=dtype),
+      metadata_dir=save_dir,
+      is_chief=is_chief,
+      timeout_secs=timeout_secs)
 
 
 def load_keypoints_from_quantiles(feature_names,

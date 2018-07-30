@@ -18,17 +18,16 @@ import abc
 # Dependency imports
 import six
 
+from tensorflow_lattice.python.estimators import base
 from tensorflow_lattice.python.estimators import hparams as tf_lattice_hparams
 from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import pwl_calibration_layers
+from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
 
-from tensorflow.python.estimator import estimator
 from tensorflow.python.estimator import model_fn as model_fn_lib
-from tensorflow.python.estimator.canned import head as head_lib
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.lib.io import file_io
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
@@ -36,12 +35,10 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training import training
-from tensorflow.python.training import training_util
 
 # Scope for variable names.
-_SCOPE_CALIBRATED_TENSORFLOW_LATTICE = "calibrated_tf_lattice_model"
+_SCOPE_CALIBRATED_PREFIX = "calibrated_"
 _SCOPE_INPUT_CALIBRATION = "input_calibration"
-_SCOPE_TRAIN_OP = "calibrated_tf_lattice_train_op"
 
 
 def _get_feature_dict(features):
@@ -51,8 +48,15 @@ def _get_feature_dict(features):
 
 
 def _get_optimizer(optimizer, hparams):
+  """Materializes the optimizer into a tf.train optimizer object."""
+  if optimizer is None:
+    optimizer = training.AdamOptimizer
   if callable(optimizer):
-    return optimizer(learning_rate=hparams.learning_rate)
+    learning_rate = hparams.get_param("learning_rate")
+    if learning_rate is None:
+      return optimizer()
+    else:
+      return optimizer(learning_rate=learning_rate)
   else:
     return optimizer
 
@@ -109,31 +113,7 @@ def _update_keypoints(feature_name, asked_keypoints, kp_init_keypoints):
                        kp_init_keypoints, asked_keypoints, feature_name))
 
 
-def add_feature_names_to_hparams(columns_to_tensors, feature_columns, hparams):
-  """Adds feature names to hparams.
-
-  Args:
-    columns_to_tensors: A mapping from feature name to tensors. 'string' key
-      means a base feature (not-transformed). If feature_columns is not set
-      these are the features calibrated. Otherwise the transformed
-      feature_columns are the ones calibrated.
-    feature_columns: An iterable containing all the feature columns used by the
-      model. Optional, if not set the model will use all features given in
-      columns_to_tensors. All items in the set should be instances of
-      classes derived from `FeatureColumn`.
-    hparams: Hyper-parameters, need to inherit from `CalibratedHParams`.
-      It is changed to include all feature names found in `feature_columns`.
-
-  """
-  # Sort out list of feature names.
-  unique_feature_names = tools.get_sorted_feature_names(
-      columns_to_tensors=columns_to_tensors, feature_columns=feature_columns)
-  for feature_name in unique_feature_names:
-    hparams.add_feature(feature_name)
-
-
 def input_calibration_layer_from_hparams(columns_to_tensors,
-                                         feature_columns,
                                          hparams,
                                          quantiles_dir=None,
                                          keypoints_initializers=None,
@@ -145,14 +125,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
   `CalibratedHParams` object.
 
   Args:
-    columns_to_tensors: A mapping from feature name to tensors. 'string' key
-      means a base feature (not-transformed). If feature_columns is not set
-      these are the features calibrated. Otherwise the transformed
-      feature_columns are the ones calibrated.
-    feature_columns: An iterable containing all the feature columns used by the
-      model. Optional, if not set the model will use all features given in
-      columns_to_tensors. All items in the set should be instances of
-      classes derived from `FeatureColumn`.
+    columns_to_tensors: A mapping from feature name to tensors.
     hparams: Hyper-parameters, need to inherit from `CalibratedHParams`.
       See `CalibratedHParams` and `input_calibration_layer` for descriptions of
       how these hyper-parameters work.
@@ -170,7 +143,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
       initialization (must match `num_keypoints` configured in `hparams`).
       Alternatively can be given as a dict mapping feature name to pairs,
       for initialization per feature. If `quantiles_dir` and
-      `keypoints_initializer` are set, the later takes precendence, and the
+      `keypoints_initializer` are set, the latter takes precendence, and the
       features for which `keypoints_initializers` are not defined fallback to
       using the quantiles found in `quantiles_dir`.
     name: Name scope for layer.
@@ -180,13 +153,13 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
   Returns:
     A tuple of:
     * calibrated tensor of shape [batch_size, sum(features dimensions)].
-    * list of the feature names in the order they feature in the calibrated
+    * list of the feature names in the order they appear in the calibrated
       tensor. A name may appear more than once if the feature is
       multi-dimension (for instance a multi-dimension embedding)
     * list of projection ops, that must be applied at each step (or every so
       many steps) to project the model to a feasible space: used for bounding
       the outputs or for imposing monotonicity. Empty if none are requested.
-    * None or tensor with regularization loss.
+    * tensor with regularization loss, or None for no regularization.
 
   Raises:
     ValueError: if dtypes are incompatible.
@@ -197,7 +170,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
 
     # Sort out list of feature names.
     unique_feature_names = tools.get_sorted_feature_names(
-        columns_to_tensors=columns_to_tensors, feature_columns=feature_columns)
+        columns_to_tensors=columns_to_tensors)
 
     # Get per-feature parameters.
     num_keypoints = _get_per_feature_dict(hparams, "num_keypoints")
@@ -210,32 +183,38 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
     missing_input_values = _get_per_feature_dict(hparams, "missing_input_value")
     missing_output_values = _get_per_feature_dict(hparams,
                                                   "missing_output_value")
-    # Define keypoints_initializers to use in this invocation of model_fn.
-    kp_init = None
+
+    # Convert keypoints_initializers to a dict if needed, or otherwise make a
+    # copy of the original keypoints_initializers dict.
+    if keypoints_initializers is None:
+      keypoints_initializers = {}
+    elif not isinstance(keypoints_initializers, dict):
+      keypoints_initializers = {
+          name: keypoints_initializers for name in unique_feature_names
+      }
+    else:
+      keypoints_initializers = keypoints_initializers.copy()
+
+    # If quantiles_dir is given, add any missing keypoint initializers with
+    # keypoints based on quantiles.
     if quantiles_dir is not None:
-      # Skip features for which an explicit initializer was given.
-      if isinstance(keypoints_initializers, dict):
-        quantiles_feature_names = []
-        for name in unique_feature_names:
-          if name not in keypoints_initializers:
-            quantiles_feature_names.append(name)
-      else:
-        quantiles_feature_names = unique_feature_names
+      quantiles_feature_names = [
+          name for name in unique_feature_names
+          if name not in keypoints_initializers
+      ]
 
       # Reverse initial output keypoints for decreasing monotonic features.
-      reversed_dict = {}
-      for feature_name in quantiles_feature_names:
-        if monotonicity[feature_name] == -1:
-          reversed_dict[feature_name] = True
-        else:
-          reversed_dict[feature_name] = False
+      reversed_dict = {
+          feature_name: (monotonicity[feature_name] == -1)
+          for feature_name in quantiles_feature_names
+      }
 
       # Read initializers from quantiles_dir, for those not already
       # defined.
       #
       # Notice that output_min and output_max won't matter much if
       # they are not bounded, since they will be adjusted during training.
-      kp_init = keypoints_initialization.load_keypoints_from_quantiles(
+      quantiles_init = keypoints_initialization.load_keypoints_from_quantiles(
           feature_names=quantiles_feature_names,
           save_dir=quantiles_dir,
           num_keypoints=num_keypoints,
@@ -246,50 +225,31 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
           dtype=dtype)
 
       # Merge with explicit initializers.
-      if isinstance(keypoints_initializers, dict):
-        kp_init.update(keypoints_initializers)
-
-    else:
-      # Take given initializers.
-      kp_init = keypoints_initializers
+      keypoints_initializers.update(quantiles_init)
 
     # Update num_keypoints according to keypoints actually used by the
     # initialization functions: some initialization functions may change
     # them, for instance if there are not enough unique values.
-    if isinstance(kp_init, dict):
-      # One initializer (kp_init) per feature.
-      for (feature_name, initializers) in six.iteritems(kp_init):
-        kp_init_keypoints = initializers[0].shape.as_list()[0]
-        num_keypoints[feature_name] = _update_keypoints(
-            feature_name, num_keypoints[feature_name], kp_init_keypoints)
-    else:
-      # Check generic initializer (kp_init).
-      kp_init_keypoints = kp_init[0].shape.as_list()[0]
-      for feature_name in six.iterkeys(num_keypoints):
-        num_keypoints[feature_name] = _update_keypoints(
-            feature_name, num_keypoints[feature_name], kp_init_keypoints)
+    for (feature_name, initializers) in six.iteritems(keypoints_initializers):
+      kp_init_keypoints = initializers[0].shape.as_list()[0]
+      num_keypoints[feature_name] = _update_keypoints(
+          feature_name, num_keypoints[feature_name], kp_init_keypoints)
 
     # Setup the regularization.
-    calibration_l1_regs = _get_per_feature_dict(hparams, "calibration_l1_reg")
-    calibration_l2_regs = _get_per_feature_dict(hparams, "calibration_l2_reg")
-    calibration_l1_laplacian_regs = _get_per_feature_dict(
-        hparams, "calibration_l1_laplacian_reg")
-    calibration_l2_laplacian_regs = _get_per_feature_dict(
-        hparams, "calibration_l2_laplacian_reg")
+    regularizer_amounts = {}
+    for regularizer_name in regularizers.CALIBRATOR_REGULARIZERS:
+      regularizer_amounts[regularizer_name] = _get_per_feature_dict(
+          hparams, "calibration_{}".format(regularizer_name))
 
     return pwl_calibration_layers.input_calibration_layer(
         columns_to_tensors=columns_to_tensors,
-        feature_columns=feature_columns,
         num_keypoints=num_keypoints,
-        keypoints_initializers=kp_init,
+        keypoints_initializers=keypoints_initializers,
         bound=calibration_bound,
         monotonic=monotonicity,
         missing_input_values=missing_input_values,
         missing_output_values=missing_output_values,
-        l1_reg=calibration_l1_regs,
-        l2_reg=calibration_l2_regs,
-        l1_laplacian_reg=calibration_l1_laplacian_regs,
-        l2_laplacian_reg=calibration_l2_laplacian_regs)
+        **regularizer_amounts)
 
 
 class _ProjectionHook(session_run_hook.SessionRunHook):
@@ -303,15 +263,15 @@ class _ProjectionHook(session_run_hook.SessionRunHook):
     self._projection_ops = projection_ops
 
   def after_run(self, run_context, run_values):
-    if self._projection_ops:
+    if self._projection_ops is not None:
       run_context.session.run(self._projection_ops)
 
 
-class Calibrated(estimator.Estimator):
-  """Base class for TensorFlow Lattice models.
+class Calibrated(base.Base):
+  """Base class for TensorFlow calibrated models.
 
   It provides preprocessing and calibration of the input features, and
-  set up the hook that runs projections at each step -- typically used
+  sets up the hook that runs projections at each step -- typically used
   to project parameters to be monotone and within bounds.
 
   To extend one has to implement the method prediction_builder()
@@ -329,7 +289,7 @@ class Calibrated(estimator.Estimator):
                hparams=None,
                head=None,
                weight_column=None,
-               name=None):
+               name="model"):
     """Construct CalibrateLinearClassifier/Regressor.
 
     Args:
@@ -360,9 +320,9 @@ class Calibrated(estimator.Estimator):
         closure instead of the tensors themselves because the graph has to be
         created at the time the model is being build, which happens at a later
         time.
-      optimizer: string, `Optimizer` object, or callable that defines the
+      optimizer: `Optimizer` object, or callable that defines the
         optimizer to use for training -- if a callable, it will be called with
-        learning_rate=hparams.learning_rate.
+        learning_rate=hparams.learning_rate if provided.
       config: RunConfig object to configure the runtime settings. Typically set
         to learn_runner.EstimatorConfig().
       hparams: an instance of tf_lattice_hparams.CalibrationHParams. If set to
@@ -375,68 +335,36 @@ class Calibrated(estimator.Estimator):
         feature column representing weights. It is used to down weight or boost
         examples during training. It will be multiplied by the loss of the
         example.
-      name: Name to be used as top-level variable scope for model.
-
-    Returns:
-      A `Calibrated` base class: it doesn't fully implement an estimator yet,
-      and needs to be extended.
+      name: Name to be used as suffix to top-level variable scope for model.
 
     Raises:
       ValueError: invalid parameters.
       KeyError: type of feature not supported.
     """
-    self._feature_columns = feature_columns
-    self._weight_column = weight_column
+    super(Calibrated, self).__init__(
+        n_classes=n_classes,
+        feature_columns=feature_columns,
+        model_dir=model_dir,
+        optimizer=_get_optimizer(optimizer, hparams),
+        config=config,
+        hparams=hparams,
+        head=head,
+        weight_column=weight_column,
+        dtype=dtypes.float32,
+        name=_SCOPE_CALIBRATED_PREFIX + name)
+
     self._quantiles_dir = quantiles_dir
     self._keypoints_initializers_fn = keypoints_initializers_fn
-    self._optimizer = optimizer
 
-    self._config = config
-    if self._optimizer is None:
-      self._optimizer = training.AdamOptimizer
-    self._hparams = hparams
     if self._hparams is None:
       raise ValueError("hparams cannot be none")
     if not issubclass(
         type(self._hparams), tf_lattice_hparams.CalibratedHParams):
-      raise ValueError("hparams is not instance of hparams.CalibratedHParams, "
-                       "got type(params)=%s" % type(self._hparams))
-    self._name = name
-    self._n_classes = n_classes
-
-    self._dtype = dtypes.float32
-
-
-    if head is not None:
-      self._head = head
-    else:
-      if n_classes == 0:
-        self._head = (
-            head_lib.  # pylint: disable=protected-access
-            _regression_head_with_mean_squared_error_loss(
-                label_dimension=1, weight_column=self._weight_column))
-      elif n_classes == 2:
-        self._head = (
-            head_lib.  # pylint: disable=protected-access
-            _binary_logistic_head_with_sigmoid_cross_entropy_loss(
-                weight_column=self._weight_column))
-      else:
-        raise ValueError("Invalid value for n_classes=%d" % n_classes)
-
-    super(Calibrated, self).__init__(
-        model_fn=self._calibrated_model_builder(),
-        model_dir=model_dir,
-        config=config)
-
-    # Make sure model directory exists after initialization.
-    # Notice self.model_dir is set by Estimator class.
-    file_io.recursive_create_dir(self.model_dir)
-
-    self._projection_hook = _ProjectionHook()
+      raise ValueError("hparams is not an instance of hparams.CalibratedHParams"
+                       ", got type(params)=%s" % type(self._hparams))
 
   @abc.abstractmethod
-  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
-                                    hparams):
+  def calibration_structure_builder(self, columns_to_tensors, hparams):
     """Method to be specialized that builds the calibration structure.
 
     Derived classes should override this method to return the set of features
@@ -444,34 +372,23 @@ class Calibrated(estimator.Estimator):
     all features should be calibrated only once.
 
     Args:
-      columns_to_tensors: A mapping from feature name to tensors. 'string' key
-        means a base feature (not-transformed). If feature_columns is not set
-        these are the features calibrated. Otherwise the transformed
-        feature_columns are the ones calibrated.
-      feature_columns: An iterable containing all the feature columns used by
-        the model. Optional, if not set the model will use all features given in
-        columns_to_tensors. All items in the set should be instances of
-        classes derived from `FeatureColumn`.
+      columns_to_tensors: A mapping from feature name to tensors.
       hparams: hyperparameters passed to object constructor.
 
     Returns:
-      calibration_structure: list of (columns_to_tensors, feature_columns)
-        tuples corresponding to the features used in each sub-model, or None to
-        indicate that this is a single model structure that uses all features.
-        Depending on the input to this method, the output can be in two formats:
-        A) Using feature_columns: when input feature_columns is not None,
-        the output feature_columns in the list will contain only the sub-set of
-        the input feature_columns, and columns_to_tensors is returned untouched.
-        B) Not using feature_columns: in this case each columns_to_tensors in
-        the list should contain only a subset of all columns_to_tensors.
+      calibration_structure: list of sub_columns_to_tensors corresponding to the
+        features used in each sub-model, or None to indicate that this is a
+        single model structure that uses all features. Each element is a dict
+        from feature name to tensors in the same format as the input
+        columns_to_tensors.
     """
     raise NotImplementedError(
-        "This method is expected to be implemented in a child class")
+        "This method must be implemented in a child class")
 
 
   @abc.abstractmethod
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
+  def prediction_builder_from_calibrated(
+      self, mode, per_dimension_feature_names, hparams, calibrated):
     """Method to be specialized that builds the prediction graph.
 
     Args:
@@ -484,6 +401,8 @@ class Calibrated(estimator.Estimator):
       calibrated: calibrated feature tensor, shaped `[batch_size, num_features]`
 
     Returns:
+      A tuple of (prediction_tensor, oprojection_ops, regularization_loss) of
+      type (tf.Tensor, list[], tf.Tensor):
       prediction_tensor: shaped `[batch_size/?,1]` for regression or binary
         classification, or `[batch_size, n_classes]` for multi-class
         classifiers. For classifier this will be the logit(s) value(s).
@@ -492,148 +411,111 @@ class Calibrated(estimator.Estimator):
       regularization_loss: loss related to regularization or None.
     """
     raise NotImplementedError(
-        "This method is expected to be implemented in a child class")
+        "This method must be implemented in a child class")
 
-  def _calibrated_model_builder(self):
-    """Returns a model_fn function, uses attributes in object (`self`)."""
+  def prediction_builder(self, columns_to_tensors, mode, hparams, dtype):
+    """Method that builds the prediction graph.
 
+    Args:
+      columns_to_tensors: A map from feature_name to raw features tensors,
+      each with shape `[batch_size]` or `[batch_size, feature_dim]`.
+      mode: Estimator's `ModeKeys`.
+      hparams: hyperparameters object passed to prediction builder. This is not
+        used by the Base estimator itself and is passed without checks or
+        any processing and can be of any type.
+      dtype: The dtype to be used for tensors.
 
-    def model_fn(features, labels, mode, config):  # pylint: disable=unused-argument
-      """Creates the prediction, loss, and train ops.
+    Returns:
+      A tuple of (prediction_tensor, oprojection_ops, regularization_loss) of
+      type (tf.Tensor, list[], tf.Tensor):
+      prediction_tensor: shaped `[batch_size/?,1]` for regression or binary
+        classification, or `[batch_size, n_classes]` for multi-class
+        classifiers. For classifier this will be the logit(s) value(s).
+      projection_ops: list of projection ops to be applied after each batch,
+        or None.
+      regularization_loss: loss related to regularization or None.
+    Raises:
+      ValueError: invalid parameters.
+    """
+    if (mode == model_fn_lib.ModeKeys.TRAIN and self._quantiles_dir is None and
+        self._keypoints_initializers_fn is None):
+      raise ValueError(
+          "At least one of quantiles_dir or keypoints_initializers_fn "
+          "must be given for training")
 
-      Args:
-        features: A dictionary of tensors keyed by the feature name.
-        labels: A tensor representing the label.
-        mode: The execution mode, as defined in model_fn_lib.ModeKeys.
-        config: Optional configuration object. Will receive what is passed
-          to Estimator in `config` parameter, or the default `config`.
-          Allows updating things in your model_fn based on configuration
-          such as `num_ps_replicas`.
-      Returns:
-        ModelFnOps, with the predictions, loss, and train_op.
+    # If keypoint_initializer closures were given, call them to create the
+    # initializers tensors.
+    kp_init_explicit = None
+    if self._keypoints_initializers_fn is not None:
+      kp_init_explicit = _call_keypoints_inializers_fn(
+          self._keypoints_initializers_fn)
 
-      Raises:
-        ValueError: if incompatible parameters are given, or if the keypoints
-          initializers given during construction return invalid number of
-          keypoints.
-      """
-      with variable_scope.variable_scope("/".join(
-          [_SCOPE_CALIBRATED_TENSORFLOW_LATTICE, self._name])):
+    # Add feature names to hparams so that builders can make use of them.
+    for feature_name in columns_to_tensors:
+      self._hparams.add_feature(feature_name)
 
-        if mode == model_fn_lib.ModeKeys.TRAIN:
-          if (self._quantiles_dir is None and
-              self._keypoints_initializers_fn is None):
-            raise ValueError(
-                "At least one of quantiles_dir or keypoints_initializers_fn "
-                "must be given for training")
+    total_projection_ops = None
+    total_regularization = None
+    total_prediction = None
 
-        # If keypoint_initializer closures were given, now it materializes
-        # them, into the initializers tensors.
-        kp_init_explicit = None
-        if self._keypoints_initializers_fn is not None:
-          kp_init_explicit = _call_keypoints_inializers_fn(
-              self._keypoints_initializers_fn)
+    # Get the ensemble structure.
+    calibration_structure = self.calibration_structure_builder(
+        columns_to_tensors, self._hparams)
 
-        # Add feature names to hparams so that builders can make use of them.
-        add_feature_names_to_hparams(features, self._feature_columns,
-                                     self._hparams)
-
-        total_projection_ops = None
-        total_regularization = None
-        total_prediction = None
-
-        # Get the ensemble structure.
-        calibration_structure = self.calibration_structure_builder(
-            features, self._feature_columns, self._hparams)
-
-        if calibration_structure is None:
-          # Single model or shared calibration.
+    if calibration_structure is None:
+      # Single model or shared calibration.
+      (calibrated, per_dimension_feature_names, calibration_projections,
+       calibration_regularization) = (
+           input_calibration_layer_from_hparams(
+               columns_to_tensors=columns_to_tensors,
+               hparams=self._hparams,
+               quantiles_dir=self._quantiles_dir,
+               keypoints_initializers=kp_init_explicit,
+               name=_SCOPE_INPUT_CALIBRATION,
+               dtype=self._dtype))
+      (total_prediction, prediction_projections,
+       prediction_regularization) = self.prediction_builder_from_calibrated(
+           mode, per_dimension_feature_names, self._hparams, calibrated)
+      total_projection_ops = tools.add_if_not_none(calibration_projections,
+                                                   prediction_projections)
+      total_regularization = tools.add_if_not_none(calibration_regularization,
+                                                   prediction_regularization)
+    else:
+      # Ensemble model with separate calibration.
+      predictions = []
+      for (index, sub_columns_to_tensors) in enumerate(calibration_structure):
+        # Calibrate.
+        with variable_scope.variable_scope("submodel_{}".format(index)):
           (calibrated, per_dimension_feature_names, calibration_projections,
            calibration_regularization) = (
                input_calibration_layer_from_hparams(
-                   columns_to_tensors=features,
-                   feature_columns=self._feature_columns,
+                   columns_to_tensors=sub_columns_to_tensors,
                    hparams=self._hparams,
                    quantiles_dir=self._quantiles_dir,
                    keypoints_initializers=kp_init_explicit,
                    name=_SCOPE_INPUT_CALIBRATION,
                    dtype=self._dtype))
-          (total_prediction, prediction_projections,
-           prediction_regularization) = self.prediction_builder(
+          (prediction, prediction_projections,
+           prediction_regularization) = self.prediction_builder_from_calibrated(
                mode, per_dimension_feature_names, self._hparams, calibrated)
-          total_projection_ops = tools.add_if_not_none(calibration_projections,
-                                                       prediction_projections)
-          total_regularization = tools.add_if_not_none(
-              calibration_regularization, prediction_regularization)
-        else:
-          # Ensemble model with separate calibration.
-          predictions = []
-          for (index,
-               (sub_columns_to_tensors,
-                sub_feature_columns)) in enumerate(calibration_structure):
-            # Calibrate.
-            with variable_scope.variable_scope("submodel_{}".format(index)):
-              (calibrated, per_dimension_feature_names, calibration_projections,
-               calibration_regularization) = (
-                   input_calibration_layer_from_hparams(
-                       columns_to_tensors=sub_columns_to_tensors,
-                       feature_columns=sub_feature_columns,
-                       hparams=self._hparams,
-                       quantiles_dir=self._quantiles_dir,
-                       keypoints_initializers=kp_init_explicit,
-                       name=_SCOPE_INPUT_CALIBRATION,
-                       dtype=self._dtype))
-              (prediction, prediction_projections,
-               prediction_regularization) = self.prediction_builder(
-                   mode, per_dimension_feature_names, self._hparams, calibrated)
-              projection_ops = tools.add_if_not_none(calibration_projections,
-                                                     prediction_projections)
-              regularization = tools.add_if_not_none(calibration_regularization,
-                                                     prediction_regularization)
+          projection_ops = tools.add_if_not_none(calibration_projections,
+                                                 prediction_projections)
+          regularization = tools.add_if_not_none(calibration_regularization,
+                                                 prediction_regularization)
 
-            # Merge back the results.
-            total_projection_ops = tools.add_if_not_none(
-                total_projection_ops, projection_ops)
-            total_regularization = tools.add_if_not_none(
-                total_regularization, regularization)
-            predictions.append(prediction)
+        # Merge back the results.
+        total_projection_ops = tools.add_if_not_none(total_projection_ops,
+                                                     projection_ops)
+        total_regularization = tools.add_if_not_none(total_regularization,
+                                                     regularization)
+        predictions.append(prediction)
 
-          # Final prediction is a mean of predictions, plus a bias term.
-          stacked_predictions = array_ops.stack(
-              predictions, axis=0, name="stacked_predictions")
-          ensemble_output = math_ops.reduce_mean(stacked_predictions, axis=0)
-          ensemble_bias_init = self._hparams.get_param("ensemble_bias")
-          b = variables.Variable([ensemble_bias_init], name="ensemble_bias")
-          total_prediction = ensemble_output + b
+      # Final prediction is a mean of predictions, plus a bias term.
+      stacked_predictions = array_ops.stack(
+          predictions, axis=0, name="stacked_predictions")
+      ensemble_output = math_ops.reduce_mean(stacked_predictions, axis=0)
+      ensemble_bias_init = self._hparams.get_param("ensemble_bias")
+      bias = variables.Variable([ensemble_bias_init], name="ensemble_bias")
+      total_prediction = ensemble_output + bias
 
-        def _train_op_fn(loss):
-          """Returns train_op tensor if TRAIN mode, or None."""
-          train_op = None
-          if mode == model_fn_lib.ModeKeys.TRAIN:
-            if total_regularization is not None:
-              loss += total_regularization
-            optimizer = _get_optimizer(self._optimizer, self._hparams)
-            train_op = optimizer.minimize(
-                loss,
-                global_step=training_util.get_global_step(),
-                name=_SCOPE_TRAIN_OP)
-            self._projection_hook.set_projection_ops(total_projection_ops)
-          return train_op
-
-        # Use head to generate model_fn outputs.
-        estimator_spec = self._head.create_estimator_spec(
-            features=features,
-            labels=labels,
-            mode=mode,
-            train_op_fn=_train_op_fn,
-            logits=total_prediction)
-        # Update training hooks to include projection_hook in the training mode.
-        if mode == model_fn_lib.ModeKeys.TRAIN:
-          updated_training_hooks = (
-              estimator_spec.training_hooks + (self._projection_hook,))
-          estimator_spec = estimator_spec._replace(
-              training_hooks=updated_training_hooks)
-
-        return estimator_spec
-
-    return model_fn
+    return total_prediction, total_projection_ops, total_regularization

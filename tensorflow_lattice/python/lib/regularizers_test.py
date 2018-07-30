@@ -25,9 +25,12 @@ class CalibratorLaplacianTestCase(test.TestCase):
 
   def setUp(self):
     self._num_examples = 4
-    self._keypoint_lists = [[0.0, 0.1, 1.0], [-1.0, 0.2, 0.3,
-                                              0.5], [1.11, 2.11, -1.5, -10.232],
-                            [2.22, -51.1, 321.0, 33.22, -201.0, -50.0]]
+    self._keypoint_lists = [
+        [0.0, 0.1, 1.0],  # for better formatting
+        [-1.0, 0.2, 0.3, 0.5],
+        [1.11, 2.11, -1.5, -10.232],
+        [2.22, -51.1, 321.0, 33.22, -201.0, -50.0]
+    ]
     # L1 regularization amount assuming 1.0 weight.
     self._l1_regs = [1.0, 1.4999999999999998, 13.34199999999999, 1098.42]
     # L2 regularization amount assuming 1.0 weight.
@@ -107,13 +110,190 @@ class CalibratorLaplacianTestCase(test.TestCase):
         regularizers.calibrator_regularization(output_keypoints_tensor), None)
 
 
+class CalibratorHessianTestCase(test.TestCase):
+
+  def setUp(self):
+    self._num_examples = 4
+    self._keypoint_lists = [
+        [0.0, 0.1, 1.0],  # for better formatting
+        [-1.0, 0.2, 0.3, 0.5],
+        [1.11, 2.11, -1.5, -10.232],
+        [2.22, -51.1, 321.0, 33.22, -201.0, -50.0]
+    ]
+    # L1 regularization amount assuming 1.0 weight.
+    self._l1_regs = [0.8, 1.2, 9.732, 1524.08]
+    # L2 regularization amount assuming 1.0 weight.
+    self._l2_regs = [0.64, 1.22, 47.486984, 767686.9128]
+
+    super(CalibratorHessianTestCase, self).setUp()
+
+  def _runAndCheckValues(self,
+                         output_keypoints,
+                         expected_value,
+                         l1_reg=None,
+                         l2_reg=None):
+    output_keypoints_tensor = array_ops.constant(
+        output_keypoints, dtype=dtypes.float32)
+    reg = regularizers.calibrator_regularization(
+        output_keypoints_tensor, l1_hessian_reg=l1_reg, l2_hessian_reg=l2_reg)
+    with self.test_session() as sess:
+      reg_value = sess.run(reg)
+    self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
+
+  def testL1Regularizer(self):
+    """Check l1 regularization amount."""
+    l1_reg = 1.0
+    for cnt in range(self._num_examples):
+      expected_value = l1_reg * self._l1_regs[cnt]
+      self._runAndCheckValues(
+          self._keypoint_lists[cnt], expected_value, l1_reg=l1_reg)
+
+  def testL2Regularizer(self):
+    """Check l2 regularization amount."""
+    l2_reg = 1.0
+    for cnt in range(self._num_examples):
+      expected_value = l2_reg * self._l2_regs[cnt]
+      self._runAndCheckValues(
+          self._keypoint_lists[cnt], expected_value, l2_reg=l2_reg)
+
+  def testL1AndL2Regularizers(self):
+    """Check l1 and l2 regularization amount."""
+    l1_reg = 0.5
+    l2_reg = 0.5
+    for cnt in range(self._num_examples):
+      expected_value = l1_reg * self._l1_regs[cnt] + l2_reg * self._l2_regs[cnt]
+      self._runAndCheckValues(
+          self._keypoint_lists[cnt],
+          expected_value,
+          l1_reg=l1_reg,
+          l2_reg=l2_reg)
+
+  def testRank2TensorExpectsError(self):
+    """Pass rank-2 tensor output keypoints and check the error."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[10, 10])
+    with self.assertRaises(ValueError):
+      regularizers.calibrator_regularization(output_keypoints_tensor)
+
+  def testUnknownShapeTensorExpectsError(self):
+    """Pass rank-1 tensor with unknown shape and check the error."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[None])
+    with self.assertRaises(ValueError):
+      regularizers.calibrator_regularization(output_keypoints_tensor)
+
+  def testTwoKeypointsExpectsNone(self):
+    """Pass a tensor with one keypoints and check None regularizer."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[2])
+    self.assertEqual(
+        regularizers.calibrator_regularization(output_keypoints_tensor), None)
+
+  def testNoRegularizerExpectsNone(self):
+    """Set no l1_reg and l2_reg and check None regularizer."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[2])
+    self.assertEqual(
+        regularizers.calibrator_regularization(output_keypoints_tensor), None)
+
+
+class CalibratorWrinkleTestCase(test.TestCase):
+
+  def setUp(self):
+    self._num_examples = 4
+    self._keypoint_lists = [
+        [0.1, 0.1, 0.1, 0.1],  # constant
+        [1.0, 2.0, 3.0, 4.0],  # linear
+        [0.0, 1.0, 4.0, 9.0],  # 2nd degree polynomial
+        [0.0, 1.0, 4.0, 11.0]
+    ]
+    # L1 regularization amount assuming 1.0 weight.
+    self._l1_regs = [0.0, 0.0, 0.0, 2.0]
+    # L2 regularization amount assuming 1.0 weight.
+    self._l2_regs = [0.0, 0.0, 0.0, 4.0]
+
+    super(CalibratorWrinkleTestCase, self).setUp()
+
+  def _runAndCheckValues(self,
+                         output_keypoints,
+                         expected_value,
+                         l1_reg=None,
+                         l2_reg=None):
+    output_keypoints_tensor = array_ops.constant(
+        output_keypoints, dtype=dtypes.float32)
+    reg = regularizers.calibrator_regularization(
+        output_keypoints_tensor, l1_wrinkle_reg=l1_reg, l2_wrinkle_reg=l2_reg)
+    with self.test_session() as sess:
+      reg_value = sess.run(reg)
+    self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
+
+  def testL1Regularizer(self):
+    """Check l1 regularization amount."""
+    l1_reg = 1.0
+    for cnt in range(self._num_examples):
+      expected_value = l1_reg * self._l1_regs[cnt]
+      self._runAndCheckValues(
+          self._keypoint_lists[cnt], expected_value, l1_reg=l1_reg)
+
+  def testL2Regularizer(self):
+    """Check l2 regularization amount."""
+    l2_reg = 1.0
+    for cnt in range(self._num_examples):
+      expected_value = l2_reg * self._l2_regs[cnt]
+      self._runAndCheckValues(
+          self._keypoint_lists[cnt], expected_value, l2_reg=l2_reg)
+
+  def testL1AndL2Regularizers(self):
+    """Check l1 and l2 regularization amount."""
+    l1_reg = 0.5
+    l2_reg = 0.5
+    for cnt in range(self._num_examples):
+      expected_value = l1_reg * self._l1_regs[cnt] + l2_reg * self._l2_regs[cnt]
+      self._runAndCheckValues(
+          self._keypoint_lists[cnt],
+          expected_value,
+          l1_reg=l1_reg,
+          l2_reg=l2_reg)
+
+  def testRank2TensorExpectsError(self):
+    """Pass rank-2 tensor output keypoints and check the error."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[10, 10])
+    with self.assertRaises(ValueError):
+      regularizers.calibrator_regularization(output_keypoints_tensor)
+
+  def testUnknownShapeTensorExpectsError(self):
+    """Pass rank-1 tensor with unknown shape and check the error."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[None])
+    with self.assertRaises(ValueError):
+      regularizers.calibrator_regularization(output_keypoints_tensor)
+
+  def testTwoKeypointsExpectsNone(self):
+    """Pass a tensor with one keypoints and check None regularizer."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[2])
+    self.assertEqual(
+        regularizers.calibrator_regularization(output_keypoints_tensor), None)
+
+  def testNoRegularizerExpectsNone(self):
+    """Set no l1_reg and l2_reg and check None regularizer."""
+    output_keypoints_tensor = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[2])
+    self.assertEqual(
+        regularizers.calibrator_regularization(output_keypoints_tensor), None)
+
+
 class CalibratorRegularizersTestCase(test.TestCase):
 
   def setUp(self):
     self._num_examples = 4
-    self._keypoint_lists = [[0.0, 0.1, 1.0], [-1.0, 0.2, 0.3,
-                                              0.5], [1.11, 2.11, -1.5, -10.232],
-                            [2.22, -51.1, 321.0, 33.22, -201.0, -50.0]]
+    self._keypoint_lists = [
+        [0.0, 0.1, 1.0],  # for better formatting
+        [-1.0, 0.2, 0.3, 0.5],
+        [1.11, 2.11, -1.5, -10.232],
+        [2.22, -51.1, 321.0, 33.22, -201.0, -50.0]
+    ]
     # L1 regularization amount assuming 1.0 weight.
     self._l1_regs = [1.1, 2.0, 14.952, 658.54]
     # L2 regularization amount assuming 1.0 weight.
@@ -195,9 +375,6 @@ class CalibratorRegularizersTestCase(test.TestCase):
 
 
 class LatticeLaplacianTestCase(test.TestCase):
-
-  def setUp(self):
-    super(LatticeLaplacianTestCase, self).setUp()
 
   def _runAndCheckValues(self,
                          lattice_param,
@@ -459,9 +636,8 @@ class LatticeLaplacianTestCase(test.TestCase):
     """Set no l1_reg and l2_reg and check None regularizer."""
     lattice_param = array_ops.placeholder(dtype=dtypes.float32, shape=[2, 4])
     lattice_sizes = [2, 2]
-    self.assertEqual(None,
-                     regularizers.lattice_regularization(
-                         lattice_param, lattice_sizes))
+    self.assertEqual(
+        None, regularizers.lattice_regularization(lattice_param, lattice_sizes))
 
   def testRank1TensorExpectsError(self):
     """Pass rank-1 lattice_param tensor and check the error."""
@@ -502,9 +678,6 @@ class LatticeLaplacianTestCase(test.TestCase):
 
 
 class LatticeTorsionTestCase(test.TestCase):
-
-  def setUp(self):
-    super(LatticeTorsionTestCase, self).setUp()
 
   def _runAndCheckValues(self,
                          lattice_param,
@@ -799,6 +972,47 @@ class LatticeRegularizersTestCase(test.TestCase):
         l2_laplacian_reg=0.5,
         l1_torsion_reg=0.5,
         l2_torsion_reg=0.5)
+
+
+class LinearRegularizersTestCase(test.TestCase):
+
+  def setUp(self):
+    super(LinearRegularizersTestCase, self).setUp()
+    self._linear_param = [[0.3312, -0.3217, -0.5, 0.1]]
+    # Regularzation amounts for weight = 1.0
+    self._l1_reg = 1.2529
+    self._l2_reg = 0.47318433
+
+  def _runAndCheckValues(self,
+                         linear_param,
+                         expected_value,
+                         l1_reg=None,
+                         l2_reg=None):
+    linear_param_tensor = array_ops.constant(linear_param, dtype=dtypes.float32)
+    reg = regularizers.linear_regularization(
+        linear_param_tensor, l1_reg=l1_reg, l2_reg=l2_reg)
+    with self.test_session() as sess:
+      reg_value = sess.run(reg)
+    self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
+
+  def testL1Regularizer(self):
+    """Check l1 regularization amount."""
+    self._runAndCheckValues(
+        self._linear_param, expected_value=self._l1_reg, l1_reg=1.0)
+
+  def testL2Regularizer(self):
+    """Check l2 regularization amount."""
+    self._runAndCheckValues(
+        self._linear_param, expected_value=self._l2_reg, l2_reg=1.0)
+
+  def testL1AndL2Regularizers(self):
+    """Check l1 and l2 regularization amount."""
+    expected_value = 0.5 * self._l1_reg + 0.5 * self._l2_reg
+    self._runAndCheckValues(
+        self._linear_param,
+        expected_value=expected_value,
+        l1_reg=0.5,
+        l2_reg=0.5)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ are fast-to-evaluate and interpretable (optionally monotonic) models, also known
 as __interpolated look-up tables__. It includes a collection of [TensorFlow
 Lattice Estimators](#tensorflow-lattice-estimators-walk-through), which you can
 use like any [TensorFlow
-Estimator](https://www.tensorflow.org/programmers_guide/estimators), and it also
+Estimator](https://www.tensorflow.org/guide/estimators), and it also
 includes lattices and piecewise linear calibration as layers that can be
 composed into custom models.
 
@@ -161,7 +161,7 @@ regularization"__:
 ## TensorFlow Lattice Estimators Walk-through
 
 TensorFlow Lattice library provides generic models formatted as pre-made
-[estimators](https://www.tensorflow.org/programmers_guide/estimators), which we
+[estimators](https://www.tensorflow.org/guide/estimators), which we
 hope will cover the typical use cases, or serve as example for those creating
 their own models.
 

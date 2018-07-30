@@ -36,16 +36,15 @@ class CalibratedFake(calibrated_lib.Calibrated):
                optimizer=None,
                config=None,
                hparams=None):
-    super(CalibratedFake,
-          self).__init__(n_classes, feature_columns, model_dir, quantiles_dir,
-                         keypoints_initializers_fn, optimizer, config, hparams,
-                         'Fake')
+    super(CalibratedFake, self).__init__(
+        n_classes, feature_columns, model_dir, quantiles_dir,
+        keypoints_initializers_fn, optimizer, config, hparams, 'Fake')
 
-  def calibration_structure_builder(self, hparams):
+  def calibration_structure_builder(self, columns_to_tensors, hparams):
     return None
 
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
+  def prediction_builder_from_calibrated(
+      self, mode, per_dimension_feature_names, hparams, calibrated):
     return None
 
 
@@ -109,6 +108,7 @@ class CalibratedTest(test.TestCase):
         feature__x0__num_keypoints=10)
     CalibratedFake(n_classes=2, hparams=hparams, model_dir=model_dir)
     self.assertTrue(os.path.exists(model_dir))
+
 
 if __name__ == '__main__':
   test.main()

@@ -70,7 +70,7 @@ template <typename Dtype>
 InterpolationPoints<Dtype> FindInterpolationPoints(
     const Dtype uncalibrated,
     const typename TTypes<const Dtype>::Vec& kp_inputs) {
-  if (uncalibrated < kp_inputs(0)) {
+  if (uncalibrated <= kp_inputs(0)) {
     return InterpolationPoints<Dtype>{1, 0};
   }
   const int64_t kp_inputs_last_idx = static_cast<int64_t>(kp_inputs.size() - 1);
@@ -459,7 +459,7 @@ InterpolationPoints<Dtype> FindExpandedInterpolationPointsWithWeights(
       FindInterpolationPointsWithWeights<Dtype>(uncalibrated, kp_inputs);
 
   // Nothing changes for interpolation between keypoints.
-  if (interpolation_points.num_points == 2) {
+  if (interpolation_points.num_points == 2 || kp_inputs.size() == 1) {
     return interpolation_points;
   }
 

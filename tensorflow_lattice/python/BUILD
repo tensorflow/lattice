@@ -192,6 +192,7 @@ py_library(
     srcs = ["lib/monotone_linear_layers.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":regularizers",
         ":tools",
         "@org_tensorflow//tensorflow:tensorflow_py",
     ],

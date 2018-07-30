@@ -23,6 +23,7 @@ from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import lattice_layers
 from tensorflow_lattice.python.lib import monotone_linear_layers
 from tensorflow_lattice.python.lib import pwl_calibration_layers
+from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
 
 from tensorflow.python.ops import math_ops
@@ -51,23 +52,10 @@ def _calibration_layer(input_tensor, input_dim, input_min, input_max,
   return (calibrated_input_tensor, projection_ops)
 
 
-def _ensemble_lattices_layer(input_tensor,
-                             input_dim,
-                             output_dim,
-                             interpolation_type,
-                             calibration_min,
-                             calibration_max,
-                             calibration_num_keypoints,
-                             num_lattices,
-                             lattice_rank,
-                             lattice_size,
-                             is_monotone,
-                             l1_reg=None,
-                             l2_reg=None,
-                             l1_torsion_reg=None,
-                             l2_torsion_reg=None,
-                             l1_laplacian_reg=None,
-                             l2_laplacian_reg=None):
+def _ensemble_lattices_layer(
+    input_tensor, input_dim, output_dim, interpolation_type, calibration_min,
+    calibration_max, calibration_num_keypoints, num_lattices, lattice_rank,
+    lattice_size, regularizer_amounts, is_monotone):
   """Creates an ensemble of lattices layer."""
   projections = []
   structures = [
@@ -90,12 +78,7 @@ def _ensemble_lattices_layer(input_tensor,
       is_monotone=is_monotone,
       output_dim=output_dim,
       interpolation_type=interpolation_type,
-      l1_reg=l1_reg,
-      l2_reg=l2_reg,
-      l1_torsion_reg=l1_torsion_reg,
-      l2_torsion_reg=l2_torsion_reg,
-      l1_laplacian_reg=l1_laplacian_reg,
-      l2_laplacian_reg=l2_laplacian_reg)
+      **regularizer_amounts)
   if proj:
     projections += proj
   return lattice_outputs, projections, reg
@@ -114,13 +97,8 @@ def _embedded_lattices(calibrated_input_tensor,
                        linear_embedding_calibration_min,
                        linear_embedding_calibration_max,
                        linear_embedding_calibration_num_keypoints,
-                       is_monotone=None,
-                       lattice_l1_reg=None,
-                       lattice_l2_reg=None,
-                       lattice_l1_torsion_reg=None,
-                       lattice_l2_torsion_reg=None,
-                       lattice_l1_laplacian_reg=None,
-                       lattice_l2_laplacian_reg=None):
+                       regularizer_amounts,
+                       is_monotone=None):
   """Creates an ensemble of lattices with a linear embedding.
 
   This function constructs the following deep lattice network:
@@ -163,16 +141,10 @@ def _embedded_lattices(calibrated_input_tensor,
       for linear_embedding calibration.
     linear_embedding_calibration_num_keypoints: (int) a number of eypoints for
       linear_embedding calibration.
+    regularizer_amounts: Dict of regularization amounts passed as keyword args
+      to regularizers.lattice_regularization().
     is_monotone: (bool, list of booleans) is_monotone[k] == true then
       calibrated_input_tensor[:, k] is considered to be a monotonic input.
-    lattice_l1_reg: (float) lattice l1 regularization amount.
-    lattice_l2_reg: (float) lattice l2 regularization amount.
-    lattice_l1_torsion_reg: (float) lattice l1 torsion regularization amount.
-    lattice_l2_torsion_reg: (float) lattice l2 torsion regularization amount.
-    lattice_l1_laplacian_reg: (float) lattice l1 laplacian regularization
-      amount.
-    lattice_l2_laplacian_reg: (float) lattice l2 laplacian regularization
-      amount.
   Returns:
     A tuple of (output_tensor, projection_ops, regularization).
   Raises:
@@ -230,13 +202,8 @@ def _embedded_lattices(calibrated_input_tensor,
           monotonic_num_lattices,
           monotonic_lattice_rank,
           monotonic_lattice_size,
-          is_monotone=True,
-          l1_reg=lattice_l1_reg,
-          l2_reg=lattice_l2_reg,
-          l1_torsion_reg=lattice_l1_torsion_reg,
-          l2_torsion_reg=lattice_l2_torsion_reg,
-          l1_laplacian_reg=lattice_l1_laplacian_reg,
-          l2_laplacian_reg=lattice_l2_laplacian_reg)
+          regularizer_amounts,
+          is_monotone=True)
       if projs:
         projections += projs
       regularization = tools.add_if_not_none(regularization, reg)
@@ -261,13 +228,8 @@ def _embedded_lattices(calibrated_input_tensor,
           non_monotonic_num_lattices,
           non_monotonic_lattice_rank,
           non_monotonic_lattice_size,
-          is_monotone=False,
-          l1_reg=lattice_l1_reg,
-          l2_reg=lattice_l2_reg,
-          l1_torsion_reg=lattice_l1_torsion_reg,
-          l2_torsion_reg=lattice_l2_torsion_reg,
-          l1_laplacian_reg=lattice_l1_laplacian_reg,
-          l2_laplacian_reg=lattice_l2_laplacian_reg)
+          regularizer_amounts,
+          is_monotone=False)
       if projs:
         projections += projs
       regularization = tools.add_if_not_none(regularization, reg)
@@ -361,11 +323,9 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
     return hparams
 
   def _check_not_allowed_feature_params(self, hparams):
-    not_allowed_feature_params = [
-        'lattice_l1_reg', 'lattice_l2_reg', 'lattice_l1_torsion_reg',
-        'lattice_l2_torsion_reg', 'lattice_l1_laplacian_reg',
-        'lattice_l2_laplacian_reg'
-    ]
+    not_allowed_feature_params = map(
+        'lattice_{}'.format,
+        regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS)
     error_messages = []
     for param in not_allowed_feature_params:
       for feature_name in hparams.get_feature_names():
@@ -431,13 +391,12 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
           ' the parameter may be inherited from global parameter.\nDetailed '
           'error messsages\n%s' % '\n'.join(error_messages))
 
-  def calibration_structure_builder(self, columns_to_tensors, feature_columns,
-                                    hparams):
+  def calibration_structure_builder(self, columns_to_tensors, hparams):
     """Returns the calibration structure of the model. See base class."""
     return None
 
-  def prediction_builder(self, mode, per_dimension_feature_names, hparams,
-                         calibrated):
+  def prediction_builder_from_calibrated(
+      self, mode, per_dimension_feature_names, hparams, calibrated):
     """Construct the prediciton."""
     self.check_hparams(hparams)
     lattice_monotonic = [(hparams.get_feature_param(f, 'monotonicity') != 0)
@@ -454,13 +413,13 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
         'linear_embedding_calibration_max')
     linear_embedding_calibration_num_keypoints = hparams.get_param(
         'linear_embedding_calibration_num_keypoints')
-    lattice_l1_reg = hparams.get_param('lattice_l1_reg')
-    lattice_l2_reg = hparams.get_param('lattice_l2_reg')
-    lattice_l1_torsion_reg = hparams.get_param('lattice_l1_torsion_reg')
-    lattice_l2_torsion_reg = hparams.get_param('lattice_l2_torsion_reg')
-    lattice_l1_laplacian_reg = hparams.get_param('lattice_l1_laplacian_reg')
-    lattice_l2_laplacian_reg = hparams.get_param('lattice_l2_laplacian_reg')
     interpolation_type = hparams.get_param('interpolation_type')
+
+    # Setup the regularization.
+    regularizer_amounts = {}
+    for regularizer_name in regularizers.LATTICE_REGULARIZERS:
+      regularizer_amounts[regularizer_name] = hparams.get_param(
+          'lattice_{}'.format(regularizer_name))
 
     input_dim = len(per_dimension_feature_names)
     output_dim = 1
@@ -478,13 +437,8 @@ class _CalibratedEtl(calibrated_lib.Calibrated):
         linear_embedding_calibration_min,
         linear_embedding_calibration_max,
         linear_embedding_calibration_num_keypoints,
-        is_monotone=lattice_monotonic,
-        lattice_l1_reg=lattice_l1_reg,
-        lattice_l2_reg=lattice_l2_reg,
-        lattice_l1_torsion_reg=lattice_l1_torsion_reg,
-        lattice_l2_torsion_reg=lattice_l2_torsion_reg,
-        lattice_l1_laplacian_reg=lattice_l1_laplacian_reg,
-        lattice_l2_laplacian_reg=lattice_l2_laplacian_reg)
+        regularizer_amounts,
+        is_monotone=lattice_monotonic)
 
 
 def calibrated_etl_classifier(feature_columns=None,

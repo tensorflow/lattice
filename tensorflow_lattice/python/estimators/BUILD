@@ -22,6 +22,8 @@ package(
 
 exports_files(["LICENSE"])
 
+# All python tests can run under python 2 and 3.
+
 # estimators.
 py_library(
     name = "hparams",
@@ -29,6 +31,7 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         "@six_archive//:six",
+        "//tensorflow_lattice/python:regularizers",
     ],
 )
 
@@ -45,15 +48,39 @@ py_test(
 )
 
 py_library(
+    name = "base",
+    srcs = ["base.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "@org_tensorflow//tensorflow:tensorflow_py",
+        "//tensorflow_lattice/python:tools",
+    ],
+)
+
+py_test(
+    name = "base_test",
+    size = "medium",
+    srcs = ["base_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":base",
+        "@org_tensorflow//tensorflow:tensorflow_py",
+        "//tensorflow_lattice/python:test_data",
+    ],
+)
+
+py_library(
     name = "calibrated",
     srcs = ["calibrated.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":base",
         ":hparams",
         "@six_archive//:six",
         "@org_tensorflow//tensorflow:tensorflow_py",
         "//tensorflow_lattice/python:keypoints_initialization",
         "//tensorflow_lattice/python:pwl_calibration_layers",
+        "//tensorflow_lattice/python:regularizers",
         "//tensorflow_lattice/python:tools",
     ],
 )
@@ -101,6 +128,7 @@ py_library(
         ":hparams",
         "@org_tensorflow//tensorflow:tensorflow_py",
         "//tensorflow_lattice/python:lattice_layers",
+        "//tensorflow_lattice/python:regularizers",
     ],
 )
 
@@ -126,6 +154,7 @@ py_library(
         "@six_archive//:six",
         "@org_tensorflow//tensorflow:tensorflow_py",
         "//tensorflow_lattice/python:lattice_layers",
+        "//tensorflow_lattice/python:regularizers",
     ],
 )
 
@@ -152,6 +181,7 @@ py_library(
         "//tensorflow_lattice/python:lattice_layers",
         "//tensorflow_lattice/python:monotone_linear_layers",
         "//tensorflow_lattice/python:pwl_calibration_layers",
+        "//tensorflow_lattice/python:regularizers",
     ],
 )
 
@@ -177,6 +207,7 @@ py_library(
         "@six_archive//:six",
         "@org_tensorflow//tensorflow:tensorflow_py",
         "//tensorflow_lattice/python:lattice_layers",
+        "//tensorflow_lattice/python:regularizers",
     ],
 )
 
