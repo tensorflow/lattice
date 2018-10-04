@@ -25,13 +25,13 @@ function git_init {
   git init
 
   if [  -d "tensorflow"  ]; then
-    echo "TensorFlow submodule exist. Checkout r1.9"
+    echo "TensorFlow submodule exist. Checkout r1.10"
     cd tensorflow
-    git checkout r1.9
+    git checkout r1.10
     cd -
   else
-    echo "Add TensorFlow r1.9 submodule."
-    git submodule add -b r1.9 https://github.com/tensorflow/tensorflow.git
+    echo "Add TensorFlow r1.10 submodule."
+    git submodule add -b r1.10 https://github.com/tensorflow/tensorflow.git
   fi
 
   # Fetch all submodules.
@@ -39,11 +39,6 @@ function git_init {
 
   # Configure tensorflow.
   cd tensorflow
-  # patch in TF commit 0cc0166a97f95499f0af673f3004d6bb748dc7e4
-  # otherwise GPU builds will fail due to a linking issue
-  sed -i.bu '1318s/.*/      data=if_static([name + "_check_deps"]),/' \
-    tensorflow/tensorflow.bzl
-  sed -n '1310,1330p' tensorflow/tensorflow.bzl
   git show --oneline -s
   yes "" | ./configure
 

@@ -124,8 +124,9 @@ def _materialize_locally(tensors, num_steps=1, feed_dict=None, safety_size=1e9):
       if isinstance(splits[0], dict):
         materialized = {}
         for k in splits[0].keys():
-          materialized[k] = np.concatenate(
-              [splits[i][k] for i in range(len(splits))])
+          materialized[k] = np.concatenate([
+              splits[i][k] for i in range(len(splits))
+              if len(splits[i][k]) > 0])
       else:
         materialized = np.concatenate(splits)
     except (errors.OutOfRangeError, StopIteration) as ex:

@@ -104,6 +104,36 @@ class MonotoneLinearTestCase(test.TestCase):
     self.assertAllClose(expected_pre_projection_weight, pre_projection_weight)
     self.assertAllClose(expected_projected_weight, projected_weight)
 
+  def testNormalizationProjection(self):
+    """Test projection when l1 normalization is requested."""
+    input_dim = 10
+    is_monotone = [True, False] * 5
+    input_placeholder = array_ops.placeholder(
+        dtype=dtypes.float32, shape=[None, input_dim])
+    # We set the initial_weight_mean to -10.0. After projection, we expect
+    # elements corresponding to monotonic input becomes 0.
+    packed_results = monotone_linear_layers.monotone_linear_layer(
+        input_placeholder,
+        input_dim=input_dim,
+        output_dim=2,
+        is_monotone=is_monotone,
+        init_weight_mean=-10.0,
+        init_weight_stddev=0.0,
+        add_bias=False,
+        normalization_order=1,
+    )
+    (_, weight_tensor, projection_op, _) = packed_results
+    # The weight is in shape (output_dim, input_dim).
+    expected_pre_projection_weight = [[-10.0] * 10] * 2
+    expected_projected_weight = [[0.0, -0.2] * 5] * 2
+    with self.test_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      pre_projection_weight = sess.run(weight_tensor)
+      sess.run(projection_op)
+      projected_weight = sess.run(weight_tensor)
+    self.assertAllClose(expected_pre_projection_weight, pre_projection_weight)
+    self.assertAllClose(expected_projected_weight, projected_weight)
+
   def testNoRegularizationExpectsNone(self):
     """Create a monotone linear layer and check no regularization."""
     input_dim = 10

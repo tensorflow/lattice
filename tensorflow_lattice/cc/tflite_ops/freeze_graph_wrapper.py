@@ -18,17 +18,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import sys
-
 # Dependency imports
 # tensorflow_lattice must be imported in order for tensorflow to recognize its
-# custom ops, which is necessary for toco to find them
-import tensorflow_lattice  # pylint: disable=unused-import
-from tensorflow.contrib.lite.python import tflite_convert
+# custom ops, which is necessary for freeze_graph to find them
+import tensorflow_lattice as tfl  # pylint: disable=unused-import
+from tensorflow.python.tools import freeze_graph
 
 
 def main():
-  return tflite_convert.app.run(main=tflite_convert.run_main, argv=sys.argv[:1])
+  return freeze_graph.run_main()
 
 
 if __name__ == '__main__':

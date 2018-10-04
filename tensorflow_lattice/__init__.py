@@ -54,6 +54,8 @@ from tensorflow_lattice.python.lib.keypoints_initialization import uniform_keypo
 from tensorflow_lattice.python.lib.lattice_layers import ensemble_lattices_layer
 from tensorflow_lattice.python.lib.lattice_layers import lattice_layer
 from tensorflow_lattice.python.lib.lattice_layers import monotone_lattice
+from tensorflow_lattice.python.lib.monotone_linear_layers import monotone_linear_layer
+from tensorflow_lattice.python.lib.monotone_linear_layers import split_monotone_linear_layer
 from tensorflow_lattice.python.lib.pwl_calibration_layers import calibration_layer
 from tensorflow_lattice.python.lib.pwl_calibration_layers import input_calibration_layer
 from tensorflow_lattice.python.lib.regularizers import calibrator_regularization
