@@ -59,7 +59,7 @@ function create_virtualenv {
   source ${TFL_ENV_PATH}/bin/activate
   python -V
   pip install --upgrade pip
-  pip install six numpy wheel enum34
+  pip install six numpy wheel enum34 keras_applications keras_preprocessing
   deactivate
 }
 
