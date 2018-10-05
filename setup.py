@@ -32,7 +32,7 @@ __version__ = '0.9.8'
 
 REQUIRED_PACKAGES = [
     'six >= 1.11.0',
-    'protobuf == 3.5.*',
+    'protobuf >= 3.6.0',
 ]
 
 
