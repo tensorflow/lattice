@@ -61,11 +61,12 @@ def lattice_param_as_linear(lattice_sizes, output_dim, linear_weights=1.0):
     output_dim: (int) number of outputs.
     linear_weights: (float, list of floats, list of list of floats) linear
       function's weight terms. linear_weights[k][n] == kth output's nth weight.
-      If float, then all the weights uses one value as
-      [[linear_weights] * len(lattice_sizes)] * output_dim.
-      If list of floats, then the len(linear_weights) == len(lattice_sizes) is
-      expected, and the weights are [linear_weights] * output_dim, i.e., all
-      output_dimension will get same linear_weights.
+      If float, then all the weights uses one value as [[linear_weights] *
+      len(lattice_sizes)] * output_dim. If list of floats, then the
+      len(linear_weights) == len(lattice_sizes) is expected, and the weights are
+      [linear_weights] * output_dim, i.e., all output_dimension will get same
+      linear_weights.
+
   Returns:
     List of list of floats with size (output_dim, number_of_lattice_param).
   Raises:
@@ -135,6 +136,63 @@ def lattice_param_as_linear(lattice_sizes, output_dim, linear_weights=1.0):
   return lattice_parameters
 
 
+def lattice_param_as_linear_monotonic(lattice_sizes,
+                                      output_dim,
+                                      is_monotone=True,
+                                      output_min=-0.5,
+                                      output_max=0.5):
+  """Returns lattice parameter that represents a monotonic linear function.
+
+  The returned lattice_param can be used to initialize a lattice layer as a
+  linear function. The linear coefficients are such that the function is
+  uniformly increasing in the specified monotonic features and has 0 coefficient
+  in others, spanning the given range.
+
+  Args:
+    lattice_sizes: (list of ints) A list of lattice sizes of each dimension.
+    output_dim: (int) number of outputs.
+    is_monotone: (bool or list of bools) monotonicity constraint for each of the
+      input dimensions. The output forms a linear function that is monotonic in
+      the specified dimensions and has 0 coefficients for non-monotonic
+      dimensions. All-false monotonicity is not supported.
+    output_min: (float) The value of the linear function when all inputs are at
+      minimum.
+    output_max: (float) The value of the linear function when all inputs are at
+      maximum.
+
+  Returns:
+    List of list of floats with size (output_dim, number_of_lattice_param).
+  Raises:
+    ValueError: * Any element in lattice_sizes is less than 2.
+      * lattice_sizes is empty.
+      * If no feature is monotonic.
+  """
+  # Find linear_weights that sum to len(lattice_sizes), such that all
+  # non-monotonic inputs that 0 coefficients and all monotonic inputs have the
+  # same coefficients.
+  if isinstance(is_monotone, bool):
+    is_monotone = [is_monotone] * len(lattice_sizes)
+  is_monotone_float = [float(m) for m in is_monotone]
+  n_monotone_dims = sum(is_monotone_float)
+  if n_monotone_dims == 0:
+    raise ValueError(
+        'At least one feature for the lattice parameters linear initialization '
+        'needs to be monotonic')
+  linear_weights = [
+      m * len(lattice_sizes) / n_monotone_dims for m in is_monotone_float
+  ]
+
+  # With linear_weights that sum to len(lattice_sizes) calling
+  # lattice_param_as_linear will return a linear function in range -0.5 and 0.5.
+  # Shift and scale the parameters to have the range: (output_min, output_max).
+  lattice_initializer = lattice_param_as_linear(lattice_sizes, output_dim,
+                                                linear_weights)
+  lattice_initializer = [[
+      output_min + (v + 0.5) * (output_max - output_min) for v in l
+  ] for l in lattice_initializer]
+  return lattice_initializer
+
+
 def lattice_layer(input_tensor,
                   lattice_sizes,
                   is_monotone=None,
@@ -152,27 +210,26 @@ def lattice_layer(input_tensor,
     input_tensor: [batch_size, input_dim] tensor.
     lattice_sizes: A list of lattice sizes of each dimension.
     is_monotone: A list of input_dim booleans, boolean or None. If None or
-      False, lattice will not have monotonicity constraints. If
-      is_monotone[k] == True, then the lattice output has the non-decreasing
-      monotonicity with respect to input_tensor[?, k] (the kth coordinate). If
-      True, all the input coordinate will have the non-decreasing monotonicity.
+      False, lattice will not have monotonicity constraints. If is_monotone[k]
+      == True, then the lattice output has the non-decreasing monotonicity with
+      respect to input_tensor[?, k] (the kth coordinate). If True, all the input
+      coordinate will have the non-decreasing monotonicity.
     output_min: Optional output lower bound.
     output_max: Optional output upper bound.
     output_dim: Number of outputs.
     interpolation_type: 'hypercube' or 'simplex'.
-    lattice_initializer: (Optional) Initializer for lattice parameter vectors,
-      a 2D tensor [output_dim, parameter_dim] (where parameter_dim ==
+    lattice_initializer: (Optional) Initializer for lattice parameter vectors, a
+      2D tensor [output_dim, parameter_dim] (where parameter_dim ==
       lattice_sizes[0] * ... * lattice_sizes[input_dim - 1]). If None,
-      lattice_param_as_linear initializer will be used with
-      linear_weights=[1] * len(lattice_sizes).
+      lattice_param_as_linear initializer will be used with linear_weights=[1] *
+      len(lattice_sizes).
     **regularizer_amounts: Keyword args of regularization amounts passed to
       regularizers.lattice_regularization(). Keyword names should be among
       regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS or
-      regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS. For
-      multi-dimensional regularizers the value should be float. For
-      one-dimensional regularizers the values should be float or list of floats.
-      If a single float value is provided, then all dimensions will get the same
-      value.
+      regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS. For multi-dimensional
+      regularizers the value should be float. For one-dimensional regularizers
+      the values should be float or list of floats. If a single float value is
+      provided, then all dimensions will get the same value.
 
   Returns:
     A tuple of:
@@ -206,7 +263,7 @@ def lattice_layer(input_tensor,
       interpolation_type=interpolation_type)
 
   with ops.name_scope('lattice_monotonic_projection'):
-    if is_monotone or output_min or output_max:
+    if is_monotone or output_min is not None or output_max is not None:
       projected_parameter_tensor = parameter_tensor
       if is_monotone:
         is_monotone = tools.cast_to_list(is_monotone, len(lattice_sizes),
@@ -216,11 +273,11 @@ def lattice_layer(input_tensor,
             lattice_sizes=lattice_sizes,
             is_monotone=is_monotone)
 
-      if output_min:
+      if output_min is not None:
         projected_parameter_tensor = math_ops.maximum(
             projected_parameter_tensor, output_min)
 
-      if output_min:
+      if output_max is not None:
         projected_parameter_tensor = math_ops.minimum(
             projected_parameter_tensor, output_max)
 
@@ -251,29 +308,27 @@ def ensemble_lattices_layer(input_tensor,
   Args:
     input_tensor: [batch_size, input_dim] tensor.
     lattice_sizes: A list of lattice sizes of each dimension.
-    structure_indices: A list of list of ints. structure_indices[k] is a list
-    of indices that belongs to kth lattices.
+    structure_indices: A list of list of ints. structure_indices[k] is a list of
+      indices that belongs to kth lattices.
     is_monotone: A list of input_dim booleans, boolean or None. If None or
-      False, lattice will not have monotonicity constraints. If
-      is_monotone[k] == True, then the lattice output has the non-decreasing
-      monotonicity with respect to input_tensor[?, k] (the kth coordinate). If
-      True, all the input coordinate will have the non-decreasing monotonicity.
+      False, lattice will not have monotonicity constraints. If is_monotone[k]
+      == True, then the lattice output has the non-decreasing monotonicity with
+      respect to input_tensor[?, k] (the kth coordinate). If True, all the input
+      coordinate will have the non-decreasing monotonicity.
     output_dim: Number of outputs.
     interpolation_type: 'hypercube' or 'simplex'.
     lattice_initializers: (Optional) A list of initializer for each lattice
-      parameter vectors. lattice_initializer[k] is a 2D tensor
-      [output_dim, parameter_dim[k]], where parameter_dim[k] is the number of
-      parameter in the kth lattice. If None, lattice_param_as_linear initializer
-      will be used with
-      linear_weights=[1 if monotone else 0 for monotone in is_monotone].
+      parameter vectors. lattice_initializer[k] is a 2D tensor [output_dim,
+      parameter_dim[k]], where parameter_dim[k] is the number of parameter in
+      the kth lattice. If None, lattice_param_as_linear initializer will be used
+      with linear_weights=[1 if monotone else 0 for monotone in is_monotone].
     **regularizer_amounts: Keyword args of regularization amounts passed to
       regularizers.lattice_regularization(). Keyword names should be among
       regularizers.LATTICE_ONE_DIMENSIONAL_REGULARIZERS or
-      regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS. For
-      multi-dimensional regularizers the value should be float. For
-      one-dimensional regularizers the values should be float or list of floats.
-      If a single float value is provided, then all dimensions will get the same
-      value.
+      regularizers.LATTICE_MULTI_DIMENSIONAL_REGULARIZERS. For multi-dimensional
+      regularizers the value should be float. For one-dimensional regularizers
+      the values should be float or list of floats. If a single float value is
+      provided, then all dimensions will get the same value.
 
   Returns:
     A tuple of:

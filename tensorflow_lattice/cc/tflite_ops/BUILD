@@ -138,3 +138,13 @@ py_binary(
         "@org_tensorflow//tensorflow/contrib/lite/python:tflite_convert",
     ],
 )
+
+py_binary(
+    name = "freeze_graph_wrapper",
+    srcs = ["freeze_graph_wrapper.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow_lattice",
+        "@org_tensorflow//tensorflow/python/tools:freeze_graph",
+    ],
+)

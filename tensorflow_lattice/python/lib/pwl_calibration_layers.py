@@ -177,8 +177,8 @@ def one_dimensional_calibration_layer(uncalibrated_tensor,
           kp_in_name, shape=[num_keypoints], dtype=uncalibrated_tensor.dtype)
       keypoints_outputs = variable_scope.get_variable(
           kp_out_name, shape=[num_keypoints], dtype=uncalibrated_tensor.dtype)
-      if missing_input_value:
-        if missing_output_value:
+      if missing_input_value is not None:
+        if missing_output_value is not None:
           missing_out_calibrated = constant_op.constant(
               missing_output_value, dtype=uncalibrated_tensor.dtype)
         else:

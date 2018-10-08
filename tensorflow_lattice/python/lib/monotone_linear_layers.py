@@ -20,6 +20,7 @@ from tensorflow_lattice.python.lib import tools
 
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
@@ -29,6 +30,8 @@ def monotone_linear_layer(input_tensor,
                           input_dim,
                           output_dim,
                           is_monotone=None,
+                          add_bias=True,
+                          normalization_order=None,
                           init_weight_mean=2.0,
                           init_weight_stddev=0.5,
                           init_bias=None,
@@ -55,15 +58,19 @@ def monotone_linear_layer(input_tensor,
     input_tensor: [batch_size, input_dim] tensor.
     input_dim: (int) input dimension.
     output_dim: (int) output dimension.
-    is_monotone:  A list of input_dim booleans, a single boolean, or None.
-      If None or False, linear layer will not have monotonicity constraints.
-      If True, all of inputs are set to be monotonic. In the case of boolean
-      list, input_tensor[:, k] is set to be monotonic if is_monotone[k] == True.
+    is_monotone:  A list of input_dim booleans, a single boolean, or None. If
+      None or False, linear layer will not have monotonicity constraints. If
+      True, all of inputs are set to be monotonic. In the case of boolean list,
+      input_tensor[:, k] is set to be monotonic if is_monotone[k] == True.
+    add_bias: (bool) If a bias term should be added.
+    normalization_order: If specified, the returned projection will normalize
+      the weight vector across each output dimension to have norm 1. The norm
+      order can be 1, 2 or np.inf. Norm is lower bounded by 1e-12.
     init_weight_mean: (float) A mean for Normal random weight initializer.
     init_weight_stddev: (float) A standard deviation for Normal random weight
       initializer.
-    init_bias: (float) initial bias. If not provided,
-      -1/2 * init_weight_mean * input_dim is used.
+    init_bias: (float) initial bias. If not provided, -1/2 * init_weight_mean *
+      input_dim is used.
     l1_reg: (float) amount of l1 regularization.
     l2_reg: (float) amount of l2 regularization.
 
@@ -91,33 +98,51 @@ def monotone_linear_layer(input_tensor,
     else:
       init_biases = [init_bias] * output_dim
 
-    w = variable_scope.get_variable(name='weight',
-                                    initializer=init_weights,
-                                    dtype=input_tensor.dtype)
-    b = variable_scope.get_variable(name='bias',
-                                    initializer=init_biases,
-                                    dtype=input_tensor.dtype)
-
-    output_tensor = math_ops.matmul(input_tensor, w, transpose_b=True) + b
+    w = variable_scope.get_variable(
+        name='weight', initializer=init_weights, dtype=input_tensor.dtype)
+    output_tensor = math_ops.matmul(input_tensor, w, transpose_b=True)
+    if add_bias:
+      b = variable_scope.get_variable(
+          name='bias', initializer=init_biases, dtype=input_tensor.dtype)
+      output_tensor = output_tensor + b
 
     # Constructing a projection op.
     projection = None
-    if is_monotone:
+    if is_monotone or normalization_order:
       with ops.name_scope('monotonic_projection'):
-        is_monotone = tools.cast_to_list(is_monotone, input_dim, 'is_monotone')
-        if input_dim != len(is_monotone):
-          raise ValueError('input_dim (%d) != is_monotone length (%d)' %
-                           (input_dim, len(is_monotone)))
-        # Construct a multiplicative mask for monotonic dimension
-        # selection.
-        monotone_mask = array_ops.constant(
-            [1.0 if monotone else 0.0 for monotone in is_monotone],
-            dtype=w.dtype)
-        # Since input_dim is the last dimension of the weight, we can use
-        # broadcasting.
-        masked_w = math_ops.multiply(w, monotone_mask)
-        projected_w = math_ops.maximum(masked_w, 0.0)
-        diff = projected_w - masked_w
+        diff = None
+        if is_monotone:
+          if isinstance(is_monotone, list):
+            # is_monotone is given as a list. We should only apply positivity
+            # constraints to a masked version of the weights.
+            if input_dim != len(is_monotone):
+              raise ValueError('input_dim (%d) != is_monotone length (%d)' %
+                               (input_dim, len(is_monotone)))
+            # Construct a multiplicative mask for monotonic dimension
+            # selection.
+            monotone_mask = array_ops.constant(
+                [1.0 if monotone else 0.0 for monotone in is_monotone],
+                dtype=w.dtype)
+            # Since input_dim is the last dimension of the weight, we can use
+            # broadcasting.
+            masked_w = math_ops.multiply(w, monotone_mask)
+          else:
+            # is_monotone is set to True.
+            masked_w = w
+
+          projected_w = math_ops.maximum(masked_w, 0.0)
+          diff = projected_w - masked_w
+
+        if normalization_order:
+          unnormalized_w = w if diff is None else w + diff
+          normalized_w = unnormalized_w / math_ops.maximum(
+              linalg_ops.norm(
+                  unnormalized_w,
+                  ord=normalization_order,
+                  axis=1,
+                  keepdims=True), 1e-12)
+          diff = normalized_w - w
+
         projection = w.assign_add(diff)
 
     # Constructing a regularization op.

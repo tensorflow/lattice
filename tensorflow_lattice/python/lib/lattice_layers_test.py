@@ -73,11 +73,19 @@ class LatticeParamTestCase(test.TestCase):
       _ = lattice_layers.lattice_param_as_linear(
           lattice_sizes=[2, 2], output_dim=2, linear_weights=[[1], [1, 2]])
 
+  def testTwoByThreeByTwoOneOutputMonotonic(self):
+    lattice_param = lattice_layers.lattice_param_as_linear_monotonic(
+        lattice_sizes=[2, 3, 2],
+        output_dim=1,
+        is_monotone=[True, False, True],
+        output_min=-2.0,
+        output_max=4.0)
+    self.assertAllClose(
+        [[-2.0, 1.0, -2.0, 1.0, -2.0, 1.0, 1.0, 4.0, 1.0, 4.0, 1.0, 4.0]],
+        lattice_param)
+
 
 class LatticeLayersTestCase(test.TestCase):
-
-  def setUp(self):
-    super(LatticeLayersTestCase, self).setUp()
 
   def _testLatticeLayerEvaluation(self, interpolation_type, lattice_sizes,
                                   output_dim, inputs, parameters,
@@ -252,14 +260,13 @@ class LatticeLayersTestCase(test.TestCase):
         sess.run(variables.global_variables_initializer())
         self.assertAlmostEqual(26.514278, sess.run(regularization), delta=1e-5)
 
-  def _testLatticeLayerProjection(self, interpolation_type, lattice_sizes,
-                                  output_dim, output_min, output_max,
-                                  is_monotone, parameters,
-                                  expected_projected_parameters):
+  def _testLatticeLayerProjection(
+      self, interpolation_type, lattice_sizes, output_dim, output_min,
+      output_max, is_monotone, parameters, expected_projected_parameters):
     """Test monotonicity projection of lattice layers."""
     with ops.Graph().as_default():
-      input_tensor = array_ops.zeros(
-          [1, len(lattice_sizes)], dtype=dtypes.float32)
+      input_tensor = array_ops.zeros([1, len(lattice_sizes)],
+                                     dtype=dtypes.float32)
       (_, param_tensor, projection_op, _) = lattice_layers.lattice_layer(
           input_tensor,
           lattice_sizes=lattice_sizes,
@@ -271,9 +278,9 @@ class LatticeLayersTestCase(test.TestCase):
       with self.test_session() as sess:
         sess.run(variables.global_variables_initializer())
         sess.run(
-            state_ops.assign(param_tensor,
-                             array_ops.constant(
-                                 parameters, dtype=dtypes.float32)))
+            state_ops.assign(
+                param_tensor,
+                array_ops.constant(parameters, dtype=dtypes.float32)))
         sess.run(projection_op)
         param_tensor_values = param_tensor.eval()
 
@@ -532,8 +539,8 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
       is_monotone, parameters, expected_projected_parameters):
     """Test monotonicity projection of lattice layers."""
     with ops.Graph().as_default():
-      input_tensor = array_ops.zeros(
-          [1, len(lattice_sizes)], dtype=dtypes.float32)
+      input_tensor = array_ops.zeros([1, len(lattice_sizes)],
+                                     dtype=dtypes.float32)
       (_, param_tensors, proj, _) = lattice_layers.ensemble_lattices_layer(
           input_tensor,
           structure_indices=structure,
