@@ -13,29 +13,20 @@
 # limitations under the License.
 # ==============================================================================
 """Tests for piecewise-linear calibration gradient."""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# Dependency imports
+import numpy as np
+import tensorflow as tf
 
 from tensorflow_lattice.python.ops import pwl_calibration_ops
-
-import numpy as np
-
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import gradient_checker
-from tensorflow.python.ops import sparse_ops
-from tensorflow.python.platform import test
-from tensorflow.python.platform import tf_logging
-
 
 _MAX_ABSOLUTE_NUMERIC_ERROR = 1e-4
 
 
-class PWLCalibrationOpsTest(test.TestCase):
+class PWLCalibrationOpsTest(tf.test.TestCase):
 
   def _testInBetweenGradients(self, kp_inputs):
     """Compares numerical with the calculated gradient and checks the error."""
@@ -45,45 +36,41 @@ class PWLCalibrationOpsTest(test.TestCase):
       x_values += [(kp_inputs[ii] + kp_inputs[ii + 1]) / 2]
     x_values = np.asarray(x_values, dtype=np.float32)
 
-    tf_logging.info("kp_inputs = %s" % kp_inputs)
-    tf_logging.info("x_values = %s" % x_values)
-    with ops.Graph().as_default():
-      with self.test_session(use_gpu=False):
+    tf.compat.v1.logging.info("kp_inputs = %s" % kp_inputs)
+    tf.compat.v1.logging.info("x_values = %s" % x_values)
+    with tf.Graph().as_default():
+      with self.session(use_gpu=False):
         x_shape = [x_values.size]
-        x = array_ops.placeholder(dtype=np.float32, shape=x_shape, name="x")
+        x = tf.compat.v1.placeholder(dtype=np.float32, shape=x_shape, name="x")
         y_shape = [x_values.size, len(kp_inputs)]
 
         # Dense version.
         y_dense = pwl_calibration_ops.pwl_indexing_calibrator(
-            input=x,
-            kp_inputs=array_ops.constant(
-                kp_inputs, dtype=dtypes.float32))
+            input=x, kp_inputs=tf.constant(kp_inputs, dtype=tf.float32))
         y_dense_values = y_dense.eval(feed_dict={x: x_values})
-        tf_logging.info("y_dense=%s" % (y_dense_values,))
-        dense_error = gradient_checker.compute_gradient_error(
+        tf.compat.v1.logging.info("y_dense=%s" % (y_dense_values,))
+        dense_error = tf.compat.v1.test.compute_gradient_error(
             x, x_shape, y_dense, y_shape, x_init_value=x_values)
-        tf_logging.info("dense_error = %f" % dense_error)
-        self.assertTrue(dense_error < _MAX_ABSOLUTE_NUMERIC_ERROR)
+        tf.compat.v1.logging.info("dense_error = %f" % dense_error)
+        self.assertLess(dense_error, _MAX_ABSOLUTE_NUMERIC_ERROR)
 
         # Sparse version.
         sparse_indices, sparse_weights = (
             pwl_calibration_ops.pwl_indexing_calibrator_sparse(
-                input=x,
-                kp_inputs=array_ops.constant(
-                    kp_inputs, dtype=dtypes.float32)))
-        y_sparse = sparse_ops.sparse_to_dense(sparse_indices, y_shape,
-                                              sparse_weights)
+                input=x, kp_inputs=tf.constant(kp_inputs, dtype=tf.float32)))
+        y_sparse = tf.sparse.to_dense(
+            tf.SparseTensor(sparse_indices, sparse_weights, y_shape))
         y_sparse_values = y_sparse.eval(feed_dict={x: x_values})
-        tf_logging.info("y_sparse=%s" % (y_sparse_values,))
+        tf.compat.v1.logging.info("y_sparse=%s" % (y_sparse_values,))
         sparse_weights_values = sparse_weights.eval(feed_dict={x: x_values})
-        sparse_error = gradient_checker.compute_gradient_error(
+        sparse_error = tf.compat.v1.test.compute_gradient_error(
             x,
             x_shape,
             sparse_weights,
             sparse_weights_values.shape,
             x_init_value=x_values)
-        tf_logging.info("sparse_error = %f" % sparse_error)
-        self.assertTrue(sparse_error < _MAX_ABSOLUTE_NUMERIC_ERROR)
+        tf.compat.v1.logging.info("sparse_error = %f" % sparse_error)
+        self.assertLess(sparse_error, _MAX_ABSOLUTE_NUMERIC_ERROR)
 
     self.assertTrue(  # Checks dense and sparse y's are the same.
         np.allclose(
@@ -102,4 +89,4 @@ class PWLCalibrationOpsTest(test.TestCase):
 
 
 if __name__ == "__main__":
-  test.main()
+  tf.test.main()

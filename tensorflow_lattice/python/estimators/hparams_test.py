@@ -13,17 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 """Tests for hyper-parameters support class for TensorFlow Lattice."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import hparams
 
-from tensorflow.python.platform import test
 
-
-class TensorFlowLatticeHParamsTest(test.TestCase):
-
-  def setUp(self):
-    super(TensorFlowLatticeHParamsTest, self).setUp()
+class TensorFlowLatticeHParamsTest(tf.test.TestCase):
 
   def testPerFeatureHParams(self):
     default_num_keypoints = 10
@@ -179,4 +179,4 @@ class TensorFlowLatticeHParamsTest(test.TestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

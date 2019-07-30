@@ -13,9 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 """Hyper-parameters support classes for TensorFlow Lattice estimators."""
-from distutils.util import strtobool
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+from distutils.util import strtobool
 import six
+
 from tensorflow_lattice.python.lib import regularizers
 
 

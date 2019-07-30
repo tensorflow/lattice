@@ -13,17 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 """Monotonic linear embedding layers library for TensorFlow."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
 
 from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
-
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import linalg_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import random_ops
-from tensorflow.python.ops import variable_scope
 
 
 def monotone_linear_layer(input_tensor,
@@ -86,30 +84,29 @@ def monotone_linear_layer(input_tensor,
   Raises:
     ValueError: If is_monotone is not None, but its length != input_dim.
   """
-  with variable_scope.variable_scope('monotone_linear'):
+  with tf.compat.v1.variable_scope('monotone_linear'):
     # We use [output_dim, input_dim] convention to use broadcasting in
     # projeciton.
-    init_weights = random_ops.random_normal(
-        [output_dim, input_dim],
-        mean=init_weight_mean,
-        stddev=init_weight_stddev)
+    init_weights = tf.random.normal([output_dim, input_dim],
+                                    mean=init_weight_mean,
+                                    stddev=init_weight_stddev)
     if init_bias is None:
       init_biases = [-init_weight_mean * 0.5 * input_dim] * output_dim
     else:
       init_biases = [init_bias] * output_dim
 
-    w = variable_scope.get_variable(
+    w = tf.compat.v1.get_variable(
         name='weight', initializer=init_weights, dtype=input_tensor.dtype)
-    output_tensor = math_ops.matmul(input_tensor, w, transpose_b=True)
+    output_tensor = tf.matmul(input_tensor, w, transpose_b=True)
     if add_bias:
-      b = variable_scope.get_variable(
+      b = tf.compat.v1.get_variable(
           name='bias', initializer=init_biases, dtype=input_tensor.dtype)
       output_tensor = output_tensor + b
 
     # Constructing a projection op.
     projection = None
     if is_monotone or normalization_order:
-      with ops.name_scope('monotonic_projection'):
+      with tf.name_scope('monotonic_projection'):
         diff = None
         if is_monotone:
           if isinstance(is_monotone, list):
@@ -120,23 +117,23 @@ def monotone_linear_layer(input_tensor,
                                (input_dim, len(is_monotone)))
             # Construct a multiplicative mask for monotonic dimension
             # selection.
-            monotone_mask = array_ops.constant(
+            monotone_mask = tf.constant(
                 [1.0 if monotone else 0.0 for monotone in is_monotone],
                 dtype=w.dtype)
             # Since input_dim is the last dimension of the weight, we can use
             # broadcasting.
-            masked_w = math_ops.multiply(w, monotone_mask)
+            masked_w = tf.multiply(w, monotone_mask)
           else:
             # is_monotone is set to True.
             masked_w = w
 
-          projected_w = math_ops.maximum(masked_w, 0.0)
+          projected_w = tf.maximum(masked_w, 0.0)
           diff = projected_w - masked_w
 
         if normalization_order:
           unnormalized_w = w if diff is None else w + diff
-          normalized_w = unnormalized_w / math_ops.maximum(
-              linalg_ops.norm(
+          normalized_w = unnormalized_w / tf.maximum(
+              tf.norm(
                   unnormalized_w,
                   ord=normalization_order,
                   axis=1,
@@ -148,7 +145,7 @@ def monotone_linear_layer(input_tensor,
     # Constructing a regularization op.
     regularizer = None
     if l1_reg is not None or l2_reg is not None:
-      with ops.name_scope('linear_regularization'):
+      with tf.name_scope('linear_regularization'):
         regularizer = regularizers.linear_regularization(w, l1_reg, l2_reg)
 
     return (output_tensor, w, projection, regularizer)
@@ -226,7 +223,7 @@ def split_monotone_linear_layer(input_tensor,
   projections = []
   regularization = None
   if monotonic_output_dim > 0:
-    with variable_scope.variable_scope('split_monotone'):
+    with tf.compat.v1.variable_scope('split_monotone'):
       packed_results = monotone_linear_layer(
           input_tensor,
           input_dim=input_dim,
@@ -242,7 +239,7 @@ def split_monotone_linear_layer(input_tensor,
       regularization = tools.add_if_not_none(regularization, regularizer)
 
   if non_monotonic_output_dim > 0:
-    with variable_scope.variable_scope('split_non_monotone'):
+    with tf.compat.v1.variable_scope('split_non_monotone'):
       # Construct non_monotone_input_tensor.
       if is_monotone is None:
         non_monotone_input_tensor = input_tensor
@@ -253,7 +250,7 @@ def split_monotone_linear_layer(input_tensor,
           raise ValueError('input_dim (%d) != is_monotone length (%d)' %
                            (input_dim, len(is_monotone)))
 
-        input_columns = array_ops.unstack(input_tensor, axis=1)
+        input_columns = tf.unstack(input_tensor, axis=1)
         non_monotone_columns = []
         for (monotone, input_column) in zip(is_monotone, input_columns):
           if not monotone:
@@ -262,8 +259,7 @@ def split_monotone_linear_layer(input_tensor,
           raise ValueError(
               'non_monotonic_output_dim is not None nor zero, but all inputs '
               'are required to be non-monotonic.')
-        non_monotone_input_tensor = array_ops.stack(
-            non_monotone_columns, axis=1)
+        non_monotone_input_tensor = tf.stack(non_monotone_columns, axis=1)
       # Create a linear embedding.
       packed_results = monotone_linear_layer(
           non_monotone_input_tensor,

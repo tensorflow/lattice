@@ -63,7 +63,7 @@ Run the following python script to test TensorFlow Lattice.
 import tensorflow as tf
 import tensorflow_lattice as tfl
 
-x = tf.placeholder(tf.float32, shape=(None, 2))
+x = tf.compat.v1.placeholder(tf.float32, shape=(None, 2))
 (y, _, _, _) = tfl.lattice_layer(x, lattice_sizes=(2, 2))
 
 with tf.Session() as sess:
@@ -193,7 +193,7 @@ test.py is a simple python script.
 import tensorflow as tf
 import tensorflow_lattice as tfl
 
-x = tf.placeholder(tf.float32, shape=(None, 2))
+x = tf.compat.v1.placeholder(tf.float32, shape=(None, 2))
 (y, _, _, _) = tfl.lattice_layer(x, lattice_sizes=(2, 2))
 
 with tf.Session() as sess:

@@ -13,23 +13,23 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedEtl tests."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import numpy as np
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated_etl
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import test_data
 
-from tensorflow.python.estimator.inputs import numpy_io
-from tensorflow.python.feature_column import feature_column_lib
-from tensorflow.python.platform import test
-
 _NUM_KEYPOINTS = 50
 
 
-class CalibratedEtlHParamsTest(test.TestCase):
+class CalibratedEtlHParamsTest(tf.test.TestCase):
 
   def testEmptyMonotonicLatticeRankExpectsError(self):
     hparams = tfl_hparams.CalibratedEtlHParams(feature_names=['x'])
@@ -78,7 +78,7 @@ class CalibratedEtlHParamsTest(test.TestCase):
       calibrated_etl.calibrated_etl_classifier(hparams=hparams)
 
 
-class CalibratedEtlTest(test.TestCase):
+class CalibratedEtlTest(tf.test.TestCase):
 
   def setUp(self):
     super(CalibratedEtlTest, self).setUp()
@@ -140,20 +140,22 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlRegressorTraining1D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
-    estimator = self._CalibratedEtlRegressor(
-        ['x'], feature_columns, interpolation_type='simplex')
+    estimator = self._CalibratedEtlRegressor(['x'],
+                                             feature_columns,
+                                             interpolation_type='simplex')
     estimator.train(input_fn=self._test_data.oned_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
     _ = estimator.evaluate(input_fn=self._test_data.oned_input_fn())
 
   def testCalibratedEtlRegressorWeightedTraining1D(self):
-    feature_columns = [feature_column_lib.numeric_column('x')]
-    weight_column = feature_column_lib.numeric_column('zero')
-    estimator = self._CalibratedEtlRegressor(
-        ['x'], feature_columns, weight_column=weight_column)
+    feature_columns = [tf.feature_column.numeric_column('x')]
+    weight_column = tf.feature_column.numeric_column('zero')
+    estimator = self._CalibratedEtlRegressor(['x'],
+                                             feature_columns,
+                                             weight_column=weight_column)
     estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.oned_zero_weight_input_fn())
@@ -162,11 +164,12 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlRegressorTraining2D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
-    estimator = self._CalibratedEtlRegressor(
-        ['x0', 'x1'], feature_columns, interpolation_type='hypercube')
+    estimator = self._CalibratedEtlRegressor(['x0', 'x1'],
+                                             feature_columns,
+                                             interpolation_type='hypercube')
     estimator.train(input_fn=self._test_data.twod_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
@@ -174,17 +177,16 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlRegressorTraining2DWithCalbrationRegularization(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
-    estimator = self._CalibratedEtlRegressor(
-        ['x0', 'x1'],
-        feature_columns,
-        interpolation_type='simplex',
-        calibration_l1_reg=1e-2,
-        calibration_l2_reg=1e-2,
-        calibration_l1_laplacian_reg=0.05,
-        calibration_l2_laplacian_reg=0.01)
+    estimator = self._CalibratedEtlRegressor(['x0', 'x1'],
+                                             feature_columns,
+                                             interpolation_type='simplex',
+                                             calibration_l1_reg=1e-2,
+                                             calibration_l2_reg=1e-2,
+                                             calibration_l1_laplacian_reg=0.05,
+                                             calibration_l2_laplacian_reg=0.01)
     estimator.train(input_fn=self._test_data.twod_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
@@ -192,19 +194,18 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlRegressorTraining2DWithLatticeRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
-    estimator = self._CalibratedEtlRegressor(
-        ['x0', 'x1'],
-        feature_columns,
-        interpolation_type='simplex',
-        lattice_l1_reg=1.0,
-        lattice_l2_reg=1.0,
-        lattice_l1_torsion_reg=1.0,
-        lattice_l2_torsion_reg=1.0,
-        lattice_l1_laplacian_reg=1.0,
-        lattice_l2_laplacian_reg=1.0)
+    estimator = self._CalibratedEtlRegressor(['x0', 'x1'],
+                                             feature_columns,
+                                             interpolation_type='simplex',
+                                             lattice_l1_reg=1.0,
+                                             lattice_l2_reg=1.0,
+                                             lattice_l1_torsion_reg=1.0,
+                                             lattice_l2_torsion_reg=1.0,
+                                             lattice_l1_laplacian_reg=1.0,
+                                             lattice_l2_laplacian_reg=1.0)
     estimator.train(input_fn=self._test_data.twod_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
@@ -212,7 +213,7 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlRegressorTrainingMultiDimensionalFeature(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x', shape=(2,)),
+        tf.feature_column.numeric_column('x', shape=(2,)),
     ]
     estimator = self._CalibratedEtlRegressor(['x'], feature_columns)
     estimator.train(input_fn=self._test_data.multid_feature_input_fn())
@@ -222,8 +223,9 @@ class CalibratedEtlTest(test.TestCase):
 
     # Turn-off calibration for feature 'x', it should turn off for both
     # dimensions, and the results should get much worse.
-    estimator = self._CalibratedEtlRegressor(
-        ['x'], feature_columns, feature__x__num_keypoints=0)
+    estimator = self._CalibratedEtlRegressor(['x'],
+                                             feature_columns,
+                                             feature__x__num_keypoints=0)
     estimator.train(input_fn=self._test_data.multid_feature_input_fn())
     # Here we only check the successful evaluation.
     # Checking the actual number, accuracy, etc, makes the test too flaky.
@@ -231,8 +233,8 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlClassifierTraining(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedEtlClassifier(feature_columns)
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
@@ -242,8 +244,8 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlClassifierTrainingWithCalibrationRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedEtlClassifier(
         feature_columns,
@@ -260,8 +262,8 @@ class CalibratedEtlTest(test.TestCase):
 
   def testCalibratedEtlClassifierTrainingWithLatticeRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedEtlClassifier(
         feature_columns,
@@ -296,14 +298,15 @@ class CalibratedEtlTest(test.TestCase):
     x_samples = {'x0': x0, 'x1': x1}
     training_y = np.array([[False], [True], [True], [False]])
 
-    train_input_fn = numpy_io.numpy_input_fn(
+    train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=training_y, batch_size=4, num_epochs=1000, shuffle=False)
-    test_input_fn = numpy_io.numpy_input_fn(x=x_samples, y=None, shuffle=False)
+    test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
+        x=x_samples, y=None, shuffle=False)
 
     # Define monotonic lattice classifier.
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
 
     def init_fn():
@@ -346,31 +349,30 @@ class CalibratedEtlTest(test.TestCase):
     training_y = np.array([1., 3., 7., 11., 23., 27., 2., 9.])
     x_samples = {'x0': x0, 'x1': x1}
 
-    train_input_fn = numpy_io.numpy_input_fn(
+    train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples,
         y=training_y,
         batch_size=x0.shape[0],
         num_epochs=2000,
         shuffle=False)
-    test_input_fn = numpy_io.numpy_input_fn(
+    test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=training_y, shuffle=False)
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
 
     def init_fn():
       return keypoints_initialization.uniform_keypoints_for_signal(
           2, 0., 1., 0., 1.)
 
-    hparams = tfl_hparams.CalibratedEtlHParams(
-        ['x0', 'x1'],
-        num_keypoints=2,
-        non_monotonic_num_lattices=5,
-        non_monotonic_lattice_rank=2,
-        non_monotonic_lattice_size=2,
-        learning_rate=0.1,
-        missing_input_value=-1.)
+    hparams = tfl_hparams.CalibratedEtlHParams(['x0', 'x1'],
+                                               num_keypoints=2,
+                                               non_monotonic_num_lattices=5,
+                                               non_monotonic_lattice_rank=2,
+                                               non_monotonic_lattice_size=2,
+                                               learning_rate=0.1,
+                                               missing_input_value=-1.)
 
     estimator = calibrated_etl.calibrated_etl_regressor(
         feature_columns=feature_columns,
@@ -384,4 +386,4 @@ class CalibratedEtlTest(test.TestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

@@ -13,12 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 """Collection of test datasets."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import math
 
-# Dependency imports
 import numpy as np
-
-from tensorflow.python.estimator.inputs import numpy_io
+import tensorflow as tf
 
 _NUM_EXAMPLES = 10000
 _BATCH_SIZE = 100
@@ -64,7 +67,7 @@ class TestData(object):
     """
     x = np.random.uniform(-1.0, 1.0, size=self.num_examples)
     y = self._f(x)
-    return numpy_io.numpy_input_fn(
+    return tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x},
         y=y,
         batch_size=self.batch_size,
@@ -84,7 +87,7 @@ class TestData(object):
     x = np.random.uniform(-1.0, 1.0, size=self.num_examples)
     zeros = np.zeros(shape=(self.num_examples))
     y = self._f(x)
-    return numpy_io.numpy_input_fn(
+    return tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={
             'x': x,
             'zero': zeros
@@ -107,7 +110,7 @@ class TestData(object):
     x1 = np.random.uniform(-1.0, 1.0, size=self.num_examples)
     y = self._g(x0, x1)
 
-    return numpy_io.numpy_input_fn(
+    return tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x0': x0,
            'x1': x1},
         y=y,
@@ -128,7 +131,7 @@ class TestData(object):
     x1 = np.random.uniform(-1.0, 1.0, size=self.num_examples)
     y = np.vectorize(self._h)(x0, x1)
 
-    return numpy_io.numpy_input_fn(
+    return tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x0': x0,
            'x1': x1},
         y=y,
@@ -161,7 +164,7 @@ class TestData(object):
     x2_str = np.choose(x2.astype(int) + 1, ['?', 'N', 'Y'])
     if num_epochs is None:
       num_epochs = self.num_epochs
-    return numpy_io.numpy_input_fn(
+    return tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x0': x0,
            'x1': x1,
            'x2': x2_str},
@@ -183,7 +186,7 @@ class TestData(object):
     x_split = np.split(x, 2, axis=1)
     y = self._g(x_split[0], x_split[1])
 
-    return numpy_io.numpy_input_fn(
+    return tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x},
         y=y,
         batch_size=self.batch_size,

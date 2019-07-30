@@ -13,14 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedLinear canned estimators."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
-
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variable_scope
 
 # Scope for variable names.
 _SCOPE_BIAS_WEIGHT = 'bias_weight'
@@ -116,10 +117,10 @@ class _CalibratedLinear(calibrated_lib.Calibrated):
     # many features.
 
     self.check_hparams(hparams)
-    prediction = math_ops.reduce_sum(calibrated, 1, keepdims=True)
-    bias = variable_scope.get_variable(
+    prediction = tf.reduce_sum(calibrated, 1, keepdims=True)
+    bias = tf.compat.v1.get_variable(
         _SCOPE_BIAS_WEIGHT,
-        initializer=array_ops.zeros(shape=[], dtype=self._dtype))
+        initializer=tf.zeros(shape=[], dtype=self._dtype))
     prediction += bias
     # Returns prediction Tensor, projection ops, and regularization ops.
     return prediction, None, None

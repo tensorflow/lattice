@@ -21,24 +21,16 @@ function tensorflow_lattice_test {
 
   if [[ "${IS_MAC}" == true ]]; then
     N_JOBS=$(sysctl -n hw.ncpu)
-    TFLITE_BUILD_FLAGS="--config=monolithic --linkopt=-undefined --linkopt=dynamic_lookup"
   else
     N_JOBS=$(grep -c ^processor /proc/cpuinfo)
-    TFLITE_BUILD_FLAGS=""
   fi
 
   echo ""
   echo "Bazel will use ${N_JOBS} concurrent job(s)."
   echo ""
 
-  # Run bazel test command. Double test timeouts to avoid flakes.
-  bazel test --config=opt --test_tag_filters=-gpu -k \
-      --jobs=${N_JOBS} --test_timeout 300,450,1200,3600 --build_tests_only \
-      --test_output=errors ${TFLITE_BUILD_FLAGS} -- \
-      //tensorflow_lattice/cc/tflite_ops/...
-
   bazel test --config=opt --test_tag_filters=-gpu -k \
       --jobs=${N_JOBS} --test_timeout 300,450,1200,3600 --build_tests_only \
       --test_output=errors -- \
-      //tensorflow_lattice/... -//tensorflow_lattice/cc/tflite_ops/...
+      //tensorflow_lattice/...
 }

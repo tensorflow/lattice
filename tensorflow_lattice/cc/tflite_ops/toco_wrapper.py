@@ -24,7 +24,7 @@ import sys
 # tensorflow_lattice must be imported in order for tensorflow to recognize its
 # custom ops, which is necessary for toco to find them
 import tensorflow_lattice  # pylint: disable=unused-import
-from tensorflow.contrib.lite.python import tflite_convert
+from tensorflow.lite.python import tflite_convert
 
 
 def main():

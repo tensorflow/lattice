@@ -25,6 +25,13 @@ This file exports the basic graph operations used for calibrators. See
 pwl_calibration_layers.py for more details and higher level calibration
 functions, for building models.
 """
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
+
 # pylint: disable=unused-import
 from tensorflow_lattice.python.ops.gen_monotonic_projection import monotonic_projection
 from tensorflow_lattice.python.ops.gen_pwl_indexing_calibrator import pwl_indexing_calibrator
@@ -33,16 +40,12 @@ from tensorflow_lattice.python.ops.gen_pwl_indexing_calibrator import pwl_indexi
 from tensorflow_lattice.python.ops.gen_pwl_indexing_calibrator import pwl_indexing_calibrator_sparse_gradient
 # pylint: enable=unused-import
 
-from tensorflow.python.framework import load_library
-from tensorflow.python.framework import ops
-from tensorflow.python.platform import resource_loader
-
-_pwl_calibration_ops = load_library.load_op_library(
-    resource_loader.get_path_to_datafile(
+_pwl_calibration_ops = tf.load_op_library(
+    tf.compat.v1.resource_loader.get_path_to_datafile(
         '../../cc/ops/_pwl_calibration_ops.so'))
 
 
-@ops.RegisterGradient('PwlIndexingCalibrator')
+@tf.RegisterGradient('PwlIndexingCalibrator')
 def _pwl_indexing_calibrator_grad(op, grad_wrt_weights):
   """Register gradient for PwlIndexingCalibrator."""
   grad_wrt_input, grad_wrt_kp_inputs = pwl_indexing_calibrator_gradient(
@@ -52,7 +55,7 @@ def _pwl_indexing_calibrator_grad(op, grad_wrt_weights):
   return [grad_wrt_input, grad_wrt_kp_inputs]
 
 
-@ops.RegisterGradient('PwlIndexingCalibratorSparse')
+@tf.RegisterGradient('PwlIndexingCalibratorSparse')
 def _pwl_indexing_calibrator_sparse_grad(op, unused_grad_wrt_indices,
                                          grad_wrt_weights):
   """Register gradient for PwlIndexingCalibratorSparse."""

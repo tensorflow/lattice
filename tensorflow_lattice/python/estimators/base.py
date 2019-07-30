@@ -13,29 +13,24 @@
 # limitations under the License.
 # ==============================================================================
 """Base class for generic estimators that handles boilerplate code."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import abc
 # Dependency imports
+import tensorflow as tf
 
 from tensorflow_lattice.python.lib import tools
-
-from tensorflow.contrib.estimator.python.estimator import head as head_lib
-from tensorflow.python.estimator import estimator
-from tensorflow.python.estimator import model_fn as model_fn_lib
-from tensorflow.python.framework import dtypes
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.ops import variable_scope
-from tensorflow.python.ops.losses import losses
-from tensorflow.python.summary import summary
-from tensorflow.python.training import session_run_hook
-from tensorflow.python.training import training
-from tensorflow.python.training import training_util
+from tensorflow.python.lib.io import file_io  # pylint: disable=g-direct-tensorflow-import
 
 # Scope for variable names.
 _SCOPE_TENSORFLOW_LATTICE_PREFIX = "tfl_"
 _TRAIN_OP_NAME = "tfl_train_op"
 
 
-class _ProjectionHook(session_run_hook.SessionRunHook):
+class _ProjectionHook(tf.estimator.SessionRunHook):
   """SessionRunHook to project to feasible space after each step."""
 
   def __init__(self):
@@ -49,8 +44,12 @@ class _ProjectionHook(session_run_hook.SessionRunHook):
     if self._projection_ops is not None:
       run_context.session.run(self._projection_ops)
 
+  def end(self, session):
+    if self._projection_ops is not None:
+      session.run(self._projection_ops)
 
-class Base(estimator.Estimator):
+
+class Base(tf.estimator.Estimator):
   """Base class for generic models.
 
   It provides minimal preprocessing of the input features, sets up the hook that
@@ -70,24 +69,24 @@ class Base(estimator.Estimator):
                hparams=None,
                head=None,
                weight_column=None,
-               dtype=dtypes.float32,
+               dtype=tf.float32,
                name="model"):
     """Construct Classifier/Regressor.
 
     Args:
-      n_classes: Number of classes, set to 0 if used for regression. If head
-        is not provided, only n_classes = 0 or 2 are currently supported.
+      n_classes: Number of classes, set to 0 if used for regression. If head is
+        not provided, only n_classes = 0 or 2 are currently supported.
       feature_columns: Optional, if not set the model will use all features
-        returned by input_fn. An iterable containing all the feature
-        columns used by the model. All items in the set should be instances of
-        classes derived from `FeatureColumn` and are used to transform the input
-        columns into a numeric format that is fed into the rest of the graph.
+        returned by input_fn. An iterable containing all the feature columns
+        used by the model. All items in the set should be instances of classes
+        derived from `FeatureColumn` and are used to transform the input columns
+        into a numeric format that is fed into the rest of the graph.
       model_dir: Directory to save model parameters, graph and etc. This can
         also be used to load checkpoints from the directory into a estimator to
         continue training a previously saved model.
-      optimizer: `Optimizer` object, or callable (with no inputs) that
-        returns an `Optimizer` object, defines the optimizer to use for
-        training. This is typically one of the optimizers defined in tf.train.
+      optimizer: `Optimizer` object, or callable (with no inputs) that returns
+        an `Optimizer` object, defines the optimizer to use for training. This
+        is typically one of the optimizers defined in tf.train.
       config: RunConfig object to configure the runtime settings. Typically set
         to learn_runner.EstimatorConfig().
       hparams: Hyper parameter object to be passed to prediction builder.
@@ -117,10 +116,8 @@ class Base(estimator.Estimator):
     # of feature columns deterministic as well (which would not be the case if
     # it's, for example, the result of calling keys() on a dictionary); thus
     # we sort the feature columns here by their names.
-    self._feature_columns = (
-        None if feature_columns is None
-        else tools.get_sorted_feature_columns(feature_columns)
-    )
+    self._feature_columns = (None if feature_columns is None else
+                             tools.get_sorted_feature_columns(feature_columns))
     self._weight_column = weight_column
     self._optimizer = optimizer
     self._config = config
@@ -134,14 +131,15 @@ class Base(estimator.Estimator):
     else:
       if n_classes == 0:
         self._head = (
-            head_lib.regression_head(
-                label_dimension=1, weight_column=self._weight_column,
-                loss_reduction=losses.Reduction.SUM))
+            tf.contrib.estimator.regression_head(
+                label_dimension=1,
+                weight_column=self._weight_column,
+                loss_reduction=tf.compat.v1.losses.Reduction.SUM))
       elif n_classes == 2:
         self._head = (
-            head_lib.binary_classification_head(
+            tf.contrib.estimator.binary_classification_head(
                 weight_column=self._weight_column,
-                loss_reduction=losses.Reduction.SUM))
+                loss_reduction=tf.compat.v1.losses.Reduction.SUM))
       else:
         raise ValueError("Invalid value for n_classes=%d" % n_classes)
 
@@ -159,16 +157,16 @@ class Base(estimator.Estimator):
     """Method to be specialized that builds the prediction graph.
 
     Args:
-      columns_to_tensors: A map from feature_name to raw features tensors,
-      each with shape `[batch_size]` or `[batch_size, feature_dim]`.
+      columns_to_tensors: A map from feature_name to raw features tensors, each
+        with shape `[batch_size]` or `[batch_size, feature_dim]`.
       mode: Estimator's `ModeKeys`.
       hparams: hyperparameters object passed to prediction builder. This is not
-        used by the Base estimator itself and is passed without checks or
-        any processing and can be of any type.
+        used by the Base estimator itself and is passed without checks or any
+        processing and can be of any type.
       dtype: The dtype to be used for tensors.
 
     Returns:
-      A tuple of (prediction_tensor, oprojection_ops, regularization_loss) of
+      A tuple of (prediction_tensor, projection_ops, regularization_loss) of
       type (tf.Tensor, list[], tf.Tensor):
       prediction_tensor: shaped `[batch_size/?,1]` for regression or binary
         classification, or `[batch_size, n_classes]` for multi-class
@@ -187,45 +185,48 @@ class Base(estimator.Estimator):
     Args:
       features: A dictionary of tensors keyed by the feature name.
       labels: A tensor representing the label.
-      mode: The execution mode, as defined in model_fn_lib.ModeKeys.
-      config: Optional configuration object. Will receive what is passed
-        to Estimator in `config` parameter, or the default `config`.
-        Allows updating things in your model_fn based on configuration
-        such as `num_ps_replicas`.
+      mode: The execution mode, as defined in tf.estimator.ModeKeys.
+      config: Optional configuration object. Will receive what is passed to
+        Estimator in `config` parameter, or the default `config`. Allows
+        updating things in your model_fn based on configuration such as
+        `num_ps_replicas`.
+
     Returns:
       ModelFnOps, with the predictions, loss, and train_op.
 
     Raises:
       ValueError: if incompatible parameters are given.
     """
-    with variable_scope.variable_scope(self._name):
+    with tf.compat.v1.variable_scope(self._name):
       if self._feature_columns is None:
         columns_to_tensors = features.copy()
       else:
-        with variable_scope.variable_scope("feature_column_transformation"):
+        with tf.compat.v1.variable_scope("feature_column_transformation"):
           columns_to_tensors = {
-              feature_column.name: tools.input_from_feature_column(
-                  features.copy(), feature_column, self._dtype)
+              feature_column.name:
+              tools.input_from_feature_column(features.copy(), feature_column,
+                                              self._dtype)
               for feature_column in self._feature_columns
           }
-      (prediction, projection_ops, regularization) = self.prediction_builder(
-          columns_to_tensors, mode, self._hparams, self._dtype)
+      (prediction, projection_ops,
+       regularization) = self.prediction_builder(columns_to_tensors, mode,
+                                                 self._hparams, self._dtype)
 
       def _train_op_fn(loss):
         """Returns train_op tensor if TRAIN mode, or None."""
         train_op = None
-        if mode == model_fn_lib.ModeKeys.TRAIN:
+        if mode == tf.estimator.ModeKeys.TRAIN:
           if regularization is not None:
             loss += regularization
-            summary.scalar("loss_with_regularization", loss)
+            tf.compat.v1.summary.scalar("loss_with_regularization", loss)
           optimizer = self._optimizer
           if optimizer is None:
-            optimizer = training.AdamOptimizer
+            optimizer = tf.compat.v1.train.AdamOptimizer
           if callable(optimizer):
             optimizer = optimizer()
           train_op = optimizer.minimize(
               loss,
-              global_step=training_util.get_global_step(),
+              global_step=tf.compat.v1.train.get_global_step(),
               name=_TRAIN_OP_NAME)
           self._projection_hook.set_projection_ops(projection_ops)
         return train_op
@@ -238,11 +239,15 @@ class Base(estimator.Estimator):
           train_op_fn=_train_op_fn,
           logits=prediction)
 
-      # Update training hooks to include projection_hook in the training mode.
-      if mode == model_fn_lib.ModeKeys.TRAIN:
-        updated_training_hooks = (
-            estimator_spec.training_hooks + (self._projection_hook,))
+      # Update chief worker's training session run hooks to include
+      # projection_hook. This means that in a distributed setting, only the
+      # chief worker will run the projection op after its own update and without
+      # synchronization with other workers. Thus, the parameters may temporary
+      # leave the feasible space.
+      if mode == tf.estimator.ModeKeys.TRAIN:
+        updated_training_chief_hooks = (
+            estimator_spec.training_chief_hooks + (self._projection_hook,))
         estimator_spec = estimator_spec._replace(
-            training_hooks=updated_training_hooks)
+            training_chief_hooks=updated_training_chief_hooks)
 
       return estimator_spec

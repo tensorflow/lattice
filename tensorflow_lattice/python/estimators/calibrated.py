@@ -13,10 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 """Base class for TensorFlow Lattice estimators with input calibration."""
-import abc
 
-# Dependency imports
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import abc
 import six
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import base
 from tensorflow_lattice.python.estimators import hparams as tf_lattice_hparams
@@ -24,17 +28,6 @@ from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import pwl_calibration_layers
 from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
-
-from tensorflow.python.estimator import model_fn as model_fn_lib
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variable_scope
-from tensorflow.python.ops import variables
-from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.training import session_run_hook
-from tensorflow.python.training import training
 
 # Scope for variable names.
 _SCOPE_CALIBRATED_PREFIX = "calibrated_"
@@ -50,7 +43,7 @@ def _get_feature_dict(features):
 def _get_optimizer(optimizer, hparams):
   """Materializes the optimizer into a tf.train optimizer object."""
   if optimizer is None:
-    optimizer = training.AdamOptimizer
+    optimizer = tf.compat.v1.train.AdamOptimizer
   if callable(optimizer):
     learning_rate = hparams.get_param("learning_rate")
     if learning_rate is None:
@@ -79,8 +72,8 @@ def _call_keypoints_inializers_fn(keypoints_initializers_fn):
   """Call the closure and check/return results."""
   if callable(keypoints_initializers_fn):
     kp_init = keypoints_initializers_fn()
-    if (len(kp_init) != 2 or not issubclass(type(kp_init[0]), ops.Tensor) or
-        not issubclass(type(kp_init[1]), ops.Tensor)):
+    if (len(kp_init) != 2 or not issubclass(type(kp_init[0]), tf.Tensor) or
+        not issubclass(type(kp_init[1]), tf.Tensor)):
       raise ValueError(
           "invalid value returned by keypoints_initializers_fn, expected a "
           "pair of tensors, got %s" % kp_init)
@@ -104,9 +97,10 @@ def _update_keypoints(feature_name, asked_keypoints, kp_init_keypoints):
   if kp_init_keypoints < asked_keypoints:
     # If fewer keypoints were returned by init functions, emit debug
     # message and return those available.
-    logging.debug("Using {} keypoints for calibration of {} instead of "
-                  "the requested {}".format(kp_init_keypoints, feature_name,
-                                            asked_keypoints))
+    tf.compat.v1.logging.debug(
+        "Using {} keypoints for calibration of {} instead of "
+        "the requested {}".format(kp_init_keypoints, feature_name,
+                                  asked_keypoints))
     return kp_init_keypoints
   raise ValueError("Calibration initialization returned more keypoints ({}) "
                    "than requested ({}) for feature {}".format(
@@ -118,7 +112,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
                                          quantiles_dir=None,
                                          keypoints_initializers=None,
                                          name=None,
-                                         dtype=dtypes.float32):
+                                         dtype=tf.float32):
   """Creates a calibration layer for the input using hyper-parameters.
 
   Similar to `input_calibration_layer` but reads its parameters from a
@@ -126,29 +120,29 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
 
   Args:
     columns_to_tensors: A mapping from feature name to tensors.
-    hparams: Hyper-parameters, need to inherit from `CalibratedHParams`.
-      See `CalibratedHParams` and `input_calibration_layer` for descriptions of
-      how these hyper-parameters work.
+    hparams: Hyper-parameters, need to inherit from `CalibratedHParams`. See
+      `CalibratedHParams` and `input_calibration_layer` for descriptions of how
+      these hyper-parameters work.
     quantiles_dir: location where quantiles for the data was saved. Typically
-      the same directory as the training data. These quantiles can be
-      generated with `pwl_calibration_layers.calculate_quantiles_for_keypoints`,
-      maybe in a separate invocation of your program. Different models that
-      share the same quantiles information -- so this needs to be generated only
-      once when hyper-parameter tuning. If you don't want to use quantiles, you
-      can set `keypoints_initializers` instead.
-    keypoints_initializers: if you know the distribution of your
-      input features you can provide that directly instead of `quantiles_dir`.
-      See `pwl_calibrators_layers.uniform_keypoints_for_signal`. It must be
-      a pair of tensors with keypoints inputs and outputs to use for
-      initialization (must match `num_keypoints` configured in `hparams`).
-      Alternatively can be given as a dict mapping feature name to pairs,
-      for initialization per feature. If `quantiles_dir` and
-      `keypoints_initializer` are set, the latter takes precendence, and the
-      features for which `keypoints_initializers` are not defined fallback to
-      using the quantiles found in `quantiles_dir`.
+      the same directory as the training data. These quantiles can be generated
+      with `pwl_calibration_layers.calculate_quantiles_for_keypoints`, maybe in
+      a separate invocation of your program. Different models that share the
+      same quantiles information -- so this needs to be generated only once when
+      hyper-parameter tuning. If you don't want to use quantiles, you can set
+      `keypoints_initializers` instead.
+    keypoints_initializers: if you know the distribution of your input features
+      you can provide that directly instead of `quantiles_dir`. See
+      `pwl_calibrators_layers.uniform_keypoints_for_signal`. It must be a pair
+      of tensors with keypoints inputs and outputs to use for initialization
+      (must match `num_keypoints` configured in `hparams`). Alternatively can be
+      given as a dict mapping feature name to pairs, for initialization per
+      feature. If `quantiles_dir` and `keypoints_initializer` are set, the
+      latter takes precendence, and the features for which
+      `keypoints_initializers` are not defined fallback to using the quantiles
+      found in `quantiles_dir`.
     name: Name scope for layer.
-    dtype: If any of the scalars are not given as tensors, they are converted
-      to tensors with this dtype.
+    dtype: If any of the scalars are not given as tensors, they are converted to
+      tensors with this dtype.
 
   Returns:
     A tuple of:
@@ -166,7 +160,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
 
 
   """
-  with ops.name_scope(name or "input_calibration_layer_from_hparams"):
+  with tf.name_scope(name or "input_calibration_layer_from_hparams"):
 
     # Sort out list of feature names.
     unique_feature_names = tools.get_sorted_feature_names(
@@ -252,7 +246,7 @@ def input_calibration_layer_from_hparams(columns_to_tensors,
         **regularizer_amounts)
 
 
-class _ProjectionHook(session_run_hook.SessionRunHook):
+class _ProjectionHook(tf.estimator.SessionRunHook):
   """SessionRunHook to project to feasible space after each step."""
 
   def __init__(self):
@@ -295,9 +289,9 @@ class Calibrated(base.Base):
     Args:
       n_classes: Number of classes, set to 0 if used for regression.
       feature_columns: Optional, if not set the model will use all features
-        returned by input_fn. An iterable containing all the feature
-        columns used by the model. All items in the set should be instances of
-        classes derived from `FeatureColumn`.
+        returned by input_fn. An iterable containing all the feature columns
+        used by the model. All items in the set should be instances of classes
+        derived from `FeatureColumn`.
       model_dir: Directory to save model parameters, graph and etc. This can
         also be used to load checkpoints from the directory into a estimator to
         continue training a previously saved model.
@@ -307,21 +301,20 @@ class Calibrated(base.Base):
         `pwl_calibration_layers.calculate_quantiles_for_keypoints` in a separate
         invocation of your program. If you don't want to use quantiles, you can
         set `keypoints_initializer` instead.
-      keypoints_initializers_fn: if you know the distribution of your
-        input features you can provide that directly instead of `quantiles_dir`.
-        See `pwl_calibrators_layers.uniform_keypoints_for_signal`. It must be
-        a closure that returns a pair of tensors with keypoints inputs and
-        outputs to use for initialization (must match `num_keypoints` configured
-        in `hparams`). Alternatively the closure can return a dict mapping
-        feature name to pairs for initialization per feature. If `quantiles_dir`
-        and `keypoints_initializers_fn` are set, the later takes precendence,
-        and the features for which `keypoints_initializers` are not defined
-        fallback to using the quantiles found in `quantiles_dir`. It uses a
-        closure instead of the tensors themselves because the graph has to be
-        created at the time the model is being build, which happens at a later
-        time.
-      optimizer: `Optimizer` object, or callable that defines the
-        optimizer to use for training -- if a callable, it will be called with
+      keypoints_initializers_fn: if you know the distribution of your input
+        features you can provide that directly instead of `quantiles_dir`. See
+        `pwl_calibrators_layers.uniform_keypoints_for_signal`. It must be a
+        closure that returns a pair of tensors with keypoints inputs and outputs
+        to use for initialization (must match `num_keypoints` configured in
+        `hparams`). Alternatively the closure can return a dict mapping feature
+        name to pairs for initialization per feature. If `quantiles_dir` and
+        `keypoints_initializers_fn` are set, the later takes precendence, and
+        the features for which `keypoints_initializers` are not defined fallback
+        to using the quantiles found in `quantiles_dir`. It uses a closure
+        instead of the tensors themselves because the graph has to be created at
+        the time the model is being build, which happens at a later time.
+      optimizer: `Optimizer` object, or callable that defines the optimizer to
+        use for training -- if a callable, it will be called with
         learning_rate=hparams.learning_rate if provided.
       config: RunConfig object to configure the runtime settings. Typically set
         to learn_runner.EstimatorConfig().
@@ -350,7 +343,7 @@ class Calibrated(base.Base):
         hparams=hparams,
         head=head,
         weight_column=weight_column,
-        dtype=dtypes.float32,
+        dtype=tf.float32,
         name=_SCOPE_CALIBRATED_PREFIX + name)
 
     self._quantiles_dir = quantiles_dir
@@ -387,8 +380,9 @@ class Calibrated(base.Base):
 
 
   @abc.abstractmethod
-  def prediction_builder_from_calibrated(
-      self, mode, per_dimension_feature_names, hparams, calibrated):
+  def prediction_builder_from_calibrated(self, mode,
+                                         per_dimension_feature_names, hparams,
+                                         calibrated):
     """Method to be specialized that builds the prediction graph.
 
     Args:
@@ -417,12 +411,12 @@ class Calibrated(base.Base):
     """Method that builds the prediction graph.
 
     Args:
-      columns_to_tensors: A map from feature_name to raw features tensors,
-      each with shape `[batch_size]` or `[batch_size, feature_dim]`.
+      columns_to_tensors: A map from feature_name to raw features tensors, each
+        with shape `[batch_size]` or `[batch_size, feature_dim]`.
       mode: Estimator's `ModeKeys`.
       hparams: hyperparameters object passed to prediction builder. This is not
-        used by the Base estimator itself and is passed without checks or
-        any processing and can be of any type.
+        used by the Base estimator itself and is passed without checks or any
+        processing and can be of any type.
       dtype: The dtype to be used for tensors.
 
     Returns:
@@ -437,7 +431,7 @@ class Calibrated(base.Base):
     Raises:
       ValueError: invalid parameters.
     """
-    if (mode == model_fn_lib.ModeKeys.TRAIN and self._quantiles_dir is None and
+    if (mode == tf.estimator.ModeKeys.TRAIN and self._quantiles_dir is None and
         self._keypoints_initializers_fn is None):
       raise ValueError(
           "At least one of quantiles_dir or keypoints_initializers_fn "
@@ -485,7 +479,7 @@ class Calibrated(base.Base):
       predictions = []
       for (index, sub_columns_to_tensors) in enumerate(calibration_structure):
         # Calibrate.
-        with variable_scope.variable_scope("submodel_{}".format(index)):
+        with tf.compat.v1.variable_scope("submodel_{}".format(index)):
           (calibrated, per_dimension_feature_names, calibration_projections,
            calibration_regularization) = (
                input_calibration_layer_from_hparams(
@@ -511,11 +505,11 @@ class Calibrated(base.Base):
         predictions.append(prediction)
 
       # Final prediction is a mean of predictions, plus a bias term.
-      stacked_predictions = array_ops.stack(
+      stacked_predictions = tf.stack(
           predictions, axis=0, name="stacked_predictions")
-      ensemble_output = math_ops.reduce_mean(stacked_predictions, axis=0)
+      ensemble_output = tf.reduce_mean(stacked_predictions, axis=0)
       ensemble_bias_init = self._hparams.get_param("ensemble_bias")
-      bias = variables.Variable([ensemble_bias_init], name="ensemble_bias")
+      bias = tf.Variable([ensemble_bias_init], name="ensemble_bias")
       total_prediction = ensemble_output + bias
 
     return total_prediction, total_projection_ops, total_regularization

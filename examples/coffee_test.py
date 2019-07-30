@@ -68,7 +68,7 @@ lattice_estimator = tfl.calibrated_lattice_regressor(
     keypoints_initializers_fn=keypoints_init_fns)
 
 # Train!
-train_input_fn = tf.estimator.inputs.numpy_input_fn(
+train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
     x=train_features,
     y=train_labels,
     batch_size=1,
@@ -78,11 +78,7 @@ train_input_fn = tf.estimator.inputs.numpy_input_fn(
 lattice_estimator.train(input_fn=train_input_fn)
 
 # Test.
-test_input_fn = tf.estimator.inputs.numpy_input_fn(
-    x=test_features,
-    y=None,
-    batch_size=1,
-    num_epochs=1,
-    shuffle=False)
+test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
+    x=test_features, y=None, batch_size=1, num_epochs=1, shuffle=False)
 
 print(list(lattice_estimator.predict(input_fn=test_input_fn)))

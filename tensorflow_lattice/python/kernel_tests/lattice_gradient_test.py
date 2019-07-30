@@ -13,44 +13,36 @@
 # limitations under the License.
 # ==============================================================================
 """Tests for hypercube interpolation gradient."""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# Dependency imports
+import numpy as np
+import tensorflow as tf
 
 from tensorflow_lattice.python.ops import lattice_ops
 
-import numpy as np
 
-from tensorflow.python.framework import constant_op
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import gradient_checker
-from tensorflow.python.platform import test
-from tensorflow.python.platform import tf_logging
-
-
-class LatticeGradientOpTest(test.TestCase):
+class LatticeGradientOpTest(tf.test.TestCase):
 
   def _testGradient(self, x_value_list, x_shape, lattice_sizes, y_shape,
                     is_hypercube):
     """Compute the numerical gradients, and check the error."""
     for x_value in x_value_list:
-      with self.test_session(use_gpu=False):
-        x = array_ops.placeholder(dtype=dtypes.float32, shape=x_shape, name="x")
+      with self.session(use_gpu=False):
+        x = tf.compat.v1.placeholder(dtype=tf.float32, shape=x_shape, name="x")
         x_init_value = np.asarray(x_value, dtype=np.float32)
         if is_hypercube:
           y = lattice_ops.hypercube_interpolation(
               x, lattice_sizes=lattice_sizes)
         else:
           y = lattice_ops.simplex_interpolation(x, lattice_sizes=lattice_sizes)
-        error = gradient_checker.compute_gradient_error(
+        error = tf.compat.v1.test.compute_gradient_error(
             x, x_shape, y, y_shape, x_init_value=x_init_value)
-      tf_logging.info("x_init_value = %s" % x_init_value)
-      tf_logging.info("x error = %f", error)
-      self.assertTrue(error < 1e-4)
+      tf.compat.v1.logging.info("x_init_value = %s" % x_init_value)
+      tf.compat.v1.logging.info("x error = %f", error)
+      self.assertLess(error, 1e-4)
 
   def _testGradientWith1DInput(self, is_hypercube):
     x_value_list = [[[-1.0]], [[0.1]], [[0.5]], [[1.001]], [[1.5]], [[2.001]],
@@ -120,7 +112,7 @@ class LatticeGradientOpTest(test.TestCase):
         x_value_list, x_shape, lattice_sizes, y_shape, is_hypercube=False)
 
 
-class LatticeGradientBoundaryTest(test.TestCase):
+class LatticeGradientBoundaryTest(tf.test.TestCase):
 
   def _testGradient(self, inputs, weights, expected_jacobians_wrt_input,
                     lattice_sizes, is_hypercube):
@@ -129,19 +121,17 @@ class LatticeGradientBoundaryTest(test.TestCase):
     Args:
       inputs: a 2D array (or numpy array) contains the test inputs. Its shape
         should be num_examples x input_size.
-      weights: a 2D array (or numpy array) contains the test weights. Its
-        shape should be num_examples x weight_size.
+      weights: a 2D array (or numpy array) contains the test weights. Its shape
+        should be num_examples x weight_size.
       expected_jacobians_wrt_input: 3D array (or numpy) contains  a transpoed
         jacobian matrix that contains dweight/dinput with shape (num_examples,
-        weight_size, input_size).
-        In other words, expected_jacobians_wrt_input[num][ii][jj] ==
-          dweight[num][jj]/dinput[num][ii], where num means the current example.
+        weight_size, input_size). In other words,
+        expected_jacobians_wrt_input[num][ii][jj] ==
+        dweight[num][jj]/dinput[num][ii], where num means the current example.
       lattice_sizes: A list of lattice_sizes.
       is_hypercube: If true, hypercube gradient is tested, otherwise simplex
         gradient is tested.
-
     Returns: None
-
     Raises: Fails if computed jacobian_wrt_inputs != expected_jacobian_wrt_inpu.
     """
 
@@ -150,11 +140,11 @@ class LatticeGradientBoundaryTest(test.TestCase):
     weight_size = len(weights[0])
 
     # Define the grad_wrt_input_tensor.
-    with ops.Graph().as_default():
-      input_tensor = constant_op.constant(inputs, dtype=dtypes.float32)
-      weight_tensor = constant_op.constant(weights, dtype=dtypes.float32)
-      grad_wrt_weight_tensor = array_ops.placeholder(
-          dtype=dtypes.float32, shape=(num_examples, weight_size))
+    with tf.Graph().as_default():
+      input_tensor = tf.constant(inputs, dtype=tf.float32)
+      weight_tensor = tf.constant(weights, dtype=tf.float32)
+      grad_wrt_weight_tensor = tf.compat.v1.placeholder(
+          dtype=tf.float32, shape=(num_examples, weight_size))
 
       if is_hypercube:
         grad_wrt_input_tensor = lattice_ops.hypercube_gradient(
@@ -164,9 +154,9 @@ class LatticeGradientBoundaryTest(test.TestCase):
             input_tensor, weight_tensor, grad_wrt_weight_tensor, lattice_sizes)
 
       # Compute the Jacobian.
-      with self.test_session(use_gpu=False):
-        tf_logging.info("input = %s " % inputs)
-        tf_logging.info("weight = %s " % weights)
+      with self.session(use_gpu=False):
+        tf.compat.v1.logging.info("input = %s " % inputs)
+        tf.compat.v1.logging.info("weight = %s " % weights)
         # num_examples x weight_size x input_size tensor.
         jacobians_wrt_input = []
         # Compute dweight[cnt] / dinput.
@@ -174,15 +164,17 @@ class LatticeGradientBoundaryTest(test.TestCase):
           grad_wrt_weight = [0.] * weight_size
           grad_wrt_weight[cnt] = 1.0
           grad_wrt_weights = [grad_wrt_weight for _ in range(num_examples)]
-          tf_logging.info("grad_wrt_weights = %s " % grad_wrt_weights)
+          tf.compat.v1.logging.info("grad_wrt_weights = %s " % grad_wrt_weights)
           # num_examples x input_size matrix.
           grad_weight_wrt_inputs = grad_wrt_input_tensor.eval(
               feed_dict={grad_wrt_weight_tensor: grad_wrt_weights})
-          tf_logging.info("grad_wrt_inputs = %s " % grad_weight_wrt_inputs)
+          tf.compat.v1.logging.info("grad_wrt_inputs = %s " %
+                                    grad_weight_wrt_inputs)
           jacobians_wrt_input.append(grad_weight_wrt_inputs)
-      tf_logging.info("jacobian_wrt_inputs = %s " % jacobians_wrt_input)
-      tf_logging.info("expected_jacobian_wrt_inputs = %s" %
-                      expected_jacobians_wrt_input)
+      tf.compat.v1.logging.info("jacobian_wrt_inputs = %s " %
+                                jacobians_wrt_input)
+      tf.compat.v1.logging.info("expected_jacobian_wrt_inputs = %s" %
+                                expected_jacobians_wrt_input)
       self.assertAllClose(jacobians_wrt_input, expected_jacobians_wrt_input)
 
   def _test1DLatticeInputAtBoundary(self, is_hypercube):
@@ -227,4 +219,4 @@ class LatticeGradientBoundaryTest(test.TestCase):
 
 
 if __name__ == "__main__":
-  test.main()
+  tf.test.main()

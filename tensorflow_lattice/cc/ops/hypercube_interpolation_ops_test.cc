@@ -25,8 +25,8 @@ namespace lattice {
 namespace {
 
 INSTANTIATE_TEST_CASE_P(HypercubeInterpolationOpsTestCPU,
-                        HypercubeInterpolationOpsTest,
-                        ::testing::Values([](OpsTestBase*) {}));
+                         HypercubeInterpolationOpsTest,
+                         ::testing::Values([](OpsTestBase*) {}));
 
 TEST(HypercubeInterpolationOpsShapeTest, HypercubeInterpolation_ShapeFn) {
   ShapeInferenceTestOp op("HypercubeInterpolation");

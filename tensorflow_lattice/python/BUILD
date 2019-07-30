@@ -14,14 +14,15 @@
 # ==============================================================================
 licenses(["notice"])  # Apache 2.0 License
 
-exports_files(["LICENSE"])
-
 package(
     default_visibility = [
         "//tensorflow_lattice:__subpackages__",
     ],
 )
 
+exports_files(["LICENSE"])
+
+# All python tests can run under python 2 and 3.
 load(
     "//tensorflow_lattice:tensorflow_lattice.bzl",
     "rpath_linkopts",
@@ -123,6 +124,7 @@ py_library(
     deps = [
         ":tools",
         "@org_tensorflow//third_party/py/numpy",
+        "@six_archive//:six",
         "@org_tensorflow//tensorflow:tensorflow_py",
     ],
 )
@@ -134,6 +136,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":keypoints_initialization",
+        "@absl_py//absl/testing:parameterized",
         "@org_tensorflow//tensorflow:tensorflow_py",
     ],
 )

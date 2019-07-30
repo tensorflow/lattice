@@ -13,9 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedLattice canned estimators."""
-import copy
 
-# Dependency imports
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import copy
 
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams

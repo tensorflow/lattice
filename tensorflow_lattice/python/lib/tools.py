@@ -14,18 +14,21 @@
 # ==============================================================================
 """Library of internal functions used by TensorFlow Lattice modules."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import datetime
 import os
 import socket
 import time
 import traceback
 
-from tensorflow.python.feature_column import feature_column as feature_column_lib
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
+# Dependency imports
+import tensorflow as tf
+
+from tensorflow.python.feature_column import feature_column as feature_column_lib  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.lib.io import file_io  # pylint: disable=g-direct-tensorflow-import
 
 # Name used as a default for all per-feature configurations, see
 # cast_to_dict.
@@ -34,9 +37,9 @@ DEFAULT_NAME = 'tensorflow_lattice_internal_default'
 
 def cast_to_scalar_tensor_of_dtype(t, dtype):
   """If not yet a tensor, casts it to a constant scalar tensor."""
-  if issubclass(type(t), ops.Tensor):
+  if issubclass(type(t), tf.Tensor):
     return t
-  return array_ops.constant(t, shape=[], dtype=dtype)
+  return tf.constant(t, shape=[], dtype=dtype)
 
 
 def cast_to_list(v, n, param_name):
@@ -52,9 +55,9 @@ def cast_to_dict(v, feature_names, param_name):
   """If value not yet a dict, cast it to a dict of all feature names to values.
 
   Args:
-    v: can be a dict or a value. If a dict, missing feature names are
-      set to the value of v[DEFAULT_NAME] -- an exception is raised if
-      some feature name is not found v[DEFAULT_NAME] is not set.
+    v: can be a dict or a value. If a dict, missing feature names are set to the
+      value of v[DEFAULT_NAME] -- an exception is raised if some feature name is
+      not found v[DEFAULT_NAME] is not set.
     feature_names: list of feature names that must be present in the returned
       dict.
     param_name: name shown in case of error, if value is not set for some
@@ -112,7 +115,7 @@ def cast_to_dict_of_tensor_scalars(v, feature_names, dtype, param_name):
 
 def input_from_feature_column(columns_to_tensors,
                               feature_column,
-                              dtype=dtypes.float32):
+                              dtype=tf.float32):
   """Convert one feature_column to `Tensor`, making necessary transformations.
 
   DenseColumns are taken as is, see  `tf.feature_column.input_layer`.
@@ -121,9 +124,9 @@ def input_from_feature_column(columns_to_tensors,
 
   Args:
     columns_to_tensors: Returned by input_fn. Consider processing first by
-       `layers.transform_features(columns_to_tensors, feature_columns))`, since
-       it may share tf ops for different FeatureColumns. This function
-       transforms one at a time.
+      `layers.transform_features(columns_to_tensors, feature_columns))`, since
+      it may share tf ops for different FeatureColumns. This function transforms
+      one at a time.
     feature_column: feature_column to transform to `Tensor`.
     dtype: `_CategoricalColumn`s are converted to this type.
 
@@ -139,14 +142,15 @@ def input_from_feature_column(columns_to_tensors,
     return feature_column_lib.input_layer(
         features=columns_to_tensors, feature_columns=set([feature_column]))
   elif isinstance(feature_column, feature_column_lib._CategoricalColumn):
-    categorical_ids = math_ops.cast(
+    categorical_ids = tf.cast(
         feature_column._transform_feature(columns_to_tensors).values, dtype)
-    return array_ops.stack([categorical_ids], axis=1)
+    return tf.stack([categorical_ids], axis=1)
   # pylint: enable=protected-access
   raise ValueError('Cannot handle FeatureColumn {}: only _DenseColumn and '
                    '_CategoricalColumn are implemented, consider converting '
                    'your column to float32 until this FeatureColumn is '
                    'supported'.format(feature_column))
+
 
 def get_sorted_feature_columns(feature_columns):
   """Sorts an iterable of feature columns by their names in ascending order.
@@ -154,10 +158,12 @@ def get_sorted_feature_columns(feature_columns):
   Args:
     feature_columns: An iterable that yields instances of a tensorflow
       FeatureColumn.
+
   Returns:
     A copy of the input sorted by name in ascending order.
   """
-  return sorted(feature_columns, key=lambda fc : fc.name)
+  return sorted(feature_columns, key=lambda fc: fc.name)
+
 
 def get_sorted_feature_names(columns_to_tensors, feature_columns=None):
   """List feature names: from feature_columns or columns_to_tensors.
@@ -169,11 +175,10 @@ def get_sorted_feature_names(columns_to_tensors, feature_columns=None):
   Args:
     columns_to_tensors: str-->tf.Tensor dict. A mapping from feature name to
       tensors.
-    feature_columns: Optional set containing all the feature columns. If not
-      set it is assumed all features come from columns_to_tensors. Otherwise
-      this defines the list of features to use.
-      All items in the set should be instances of classes derived by
-      FeatureColumn.
+    feature_columns: Optional set containing all the feature columns. If not set
+      it is assumed all features come from columns_to_tensors. Otherwise this
+      defines the list of features to use. All items in the set should be
+      instances of classes derived by FeatureColumn.
 
   Returns:
     List of feature names.
@@ -181,6 +186,7 @@ def get_sorted_feature_names(columns_to_tensors, feature_columns=None):
   if feature_columns is not None:
     return [f_col.name for f_col in get_sorted_feature_columns(feature_columns)]
   return [k for k in sorted(columns_to_tensors.keys())]
+
 
 def assert_shape(tensor, expected_shape, tensor_name):
   """Assert shapes that must be known in graph construction time."""
@@ -269,6 +275,7 @@ def lattice_indices_generator(lattice_structure):
 
   Args:
     lattice_structure: (LatticeStructure) lattice structure to be used.
+
   Yields:
     (flat_index, per_dim_indices)
   """
@@ -339,13 +346,15 @@ def lattice_1d_slice(lattice_param_tensor, lattice_sizes, lattice_axis, begin,
   # Lattice param in each output dimension is in the column-major order, but
   # tf.reshape works in the row-major order. So we put post_axis_param_dim
   # first, and then pre_axis_param_dim.
-  target_shape = [output_dim, post_axis_param_dim, lattice_sizes[lattice_axis],
-                  pre_axis_param_dim]
+  target_shape = [
+      output_dim, post_axis_param_dim, lattice_sizes[lattice_axis],
+      pre_axis_param_dim
+  ]
   # reshape param to [output_dim, :, target_axis, :].
-  reshaped_param = array_ops.reshape(lattice_param_tensor, shape=target_shape)
-  sliced_param = array_ops.slice(
+  reshaped_param = tf.reshape(lattice_param_tensor, shape=target_shape)
+  sliced_param = tf.slice(
       reshaped_param, begin=[0, 0, begin, 0], size=[-1, -1, size, -1])
-  final_slice = array_ops.reshape(sliced_param, shape=[output_dim, -1])
+  final_slice = tf.reshape(sliced_param, shape=[output_dim, -1])
 
   return final_slice
 
@@ -354,11 +363,10 @@ class SaveOnceOrWaitTimeOutError(Exception):
   pass
 
 
-def save_once_or_wait_for_chief(
-    write_fn,
-    metadata_dir,
-    is_chief,
-    timeout_secs=600):
+def save_once_or_wait_for_chief(write_fn,
+                                metadata_dir,
+                                is_chief,
+                                timeout_secs=600):
   """Synchronizes saving data to disk across multiple tensorflow processes.
 
   This function can be used for synchronizing creation of data on disk that
@@ -369,14 +377,14 @@ def save_once_or_wait_for_chief(
 
   Args:
     write_fn: A function taking no arguments that executes the write to disk.
-    metadata_dir: A path on the filesystem used for storing internal data
-      used in this function (currently, a "done" sentinal file). If this
-      directory doesn't exist it would be created; otherwise it should be
-      writeable.
+    metadata_dir: A path on the filesystem used for storing internal data used
+      in this function (currently, a "done" sentinal file). If this directory
+      doesn't exist it would be created; otherwise it should be writeable.
     is_chief: Whether the current process is the designated chief. Only one
       process should pass this as "True".
     timeout_secs: The (approximate) time in seconds a non-chief process should
       wait for the data to be created.
+
   Raises:
     SaveOnceOrWaitTimeOutError if this is a non-chief process and the data has
       not been created by the chief after timeout_secs seconds.
@@ -393,16 +401,12 @@ def save_once_or_wait_for_chief(
 
   # Create an empty done file.
   file_io.recursive_create_dir(metadata_dir)
-  file_io.write_string_to_file(done_file,
-                               'Time created [UTC]: %s'
-                               '\nHostname: %s'
-                               '\nProcess id: %s'
-                               '\nTraceback:\n%s' % (
-                                   datetime.datetime.utcnow(),
-                                   socket.gethostname(),
-                                   os.getpid(),
-                                   '\n'.join(traceback.format_stack())
-                               ))
+  file_io.write_string_to_file(
+      done_file, 'Time created [UTC]: %s'
+      '\nHostname: %s'
+      '\nProcess id: %s'
+      '\nTraceback:\n%s' % (datetime.datetime.utcnow(), socket.gethostname(),
+                            os.getpid(), '\n'.join(traceback.format_stack())))
 
 
 POLL_INTERVAL_SECS = 30

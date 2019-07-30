@@ -17,9 +17,9 @@ limitations under the License.
 #include <numeric>
 #include "flatbuffers/flexbuffers.h"
 #include "tensorflow_lattice/cc/tflite_ops/helpers.h"
-#include "tensorflow/contrib/lite/context.h"
-#include "tensorflow/contrib/lite/kernels/internal/tensor.h"
-#include "tensorflow/contrib/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/context.h"
+#include "tensorflow/lite/kernels/internal/tensor.h"
+#include "tensorflow/lite/kernels/kernel_util.h"
 
 namespace tflite {
 namespace ops {

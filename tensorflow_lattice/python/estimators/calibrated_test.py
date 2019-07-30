@@ -13,15 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 """Calibrated is an abstract base class. This mostly tests dependencies."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 import tempfile
-
-# Dependency imports
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as lf_hparams
-
-from tensorflow.python.platform import test
 
 
 class CalibratedFake(calibrated_lib.Calibrated):
@@ -48,11 +50,8 @@ class CalibratedFake(calibrated_lib.Calibrated):
     return None
 
 
-class CalibratedTest(test.TestCase):
+class CalibratedTest(tf.test.TestCase):
   """Constructor tests only, actual test of the code in CalibratedLinearTest."""
-
-  def setUp(self):
-    super(CalibratedTest, self).setUp()
 
   def _testConstructor(self, n_classes):
     hparams = lf_hparams.CalibratedHParams(
@@ -111,4 +110,4 @@ class CalibratedTest(test.TestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

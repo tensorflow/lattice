@@ -13,6 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 """Lattice interpolation and gradient ops."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
+
 # pylint: disable=unused-import
 from tensorflow_lattice.python.ops.gen_lattice_interpolation import hypercube_gradient
 from tensorflow_lattice.python.ops.gen_lattice_interpolation import hypercube_interpolation
@@ -20,16 +27,12 @@ from tensorflow_lattice.python.ops.gen_lattice_interpolation import simplex_grad
 from tensorflow_lattice.python.ops.gen_lattice_interpolation import simplex_interpolation
 # pylint: enable=unused-import
 
-from tensorflow.python.framework import load_library
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.platform import resource_loader
-
-_lattice_ops = load_library.load_op_library(
-    resource_loader.get_path_to_datafile('../../cc/ops/_lattice_ops.so'))
+_lattice_ops = tf.load_op_library(
+    tf.compat.v1.resource_loader.get_path_to_datafile(
+        '../../cc/ops/_lattice_ops.so'))
 
 
-@ops.RegisterGradient('HypercubeInterpolation')
+@tf.RegisterGradient('HypercubeInterpolation')
 def _hypercube_gradient(op, grad_wrt_weight):
   """Register gradient for HypercubeInterpolationOp."""
   grad_wrt_input = hypercube_gradient(
@@ -40,7 +43,7 @@ def _hypercube_gradient(op, grad_wrt_weight):
   return [grad_wrt_input]
 
 
-@ops.RegisterGradient('SimplexInterpolation')
+@tf.RegisterGradient('SimplexInterpolation')
 def _simplex_gradient(op, grad_wrt_weight):
   """Register gradient for SimplexInterpolationOp."""
   grad_wrt_input = simplex_gradient(
@@ -85,7 +88,7 @@ def lattice(input_tensor,
 
   # Now the dimension is [batch_size, num_outputs].
 
-  output_tensor = math_ops.matmul(
+  output_tensor = tf.matmul(
       interpolation_weights, parameter_tensor, transpose_b=True)
 
   return output_tensor

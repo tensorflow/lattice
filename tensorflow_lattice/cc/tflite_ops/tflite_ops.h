@@ -14,8 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #ifndef TENSORFLOW_LATTICE_CC_TFLITE_OPS_TFLITE_OPS_H_
 #define TENSORFLOW_LATTICE_CC_TFLITE_OPS_TFLITE_OPS_H_
-#include "tensorflow/contrib/lite/context.h"
-#include "tensorflow/contrib/lite/op_resolver.h"
+#include "tensorflow/lite/context.h"
+#include "tensorflow/lite/op_resolver.h"
 
 // This file provides declarations and utilities useful for consumers of TF-Lite
 // ops in TF-Lattice project.  In particular, there are headers for registration

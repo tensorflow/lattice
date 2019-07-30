@@ -39,22 +39,29 @@ of the output, so the calibration starts as a fully linear model.
 Notice that the keypoints initialization values are saved, so they are no longer
 needed in production (inference) time.
 """
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import ast
 import os
 
 # Dependency imports
 import numpy as np
-from tensorflow_lattice.python.lib import tools
+import six
+import tensorflow as tf
 
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import errors
-from tensorflow.python.framework import ops
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.training import training
+from tensorflow_lattice.python.lib import tools
+from tensorflow import gfile
+from tensorflow.python.lib.io import file_io  # pylint: disable=g-direct-tensorflow-import
 
 _QUANTILES_SUBDIRECTORY = "quantiles"
+
+# The "feature" name for the label. The labels quantiles will be saved
+# to a file whose name is based on this name. We assume that there's no
+# regular feature with this name.
+_LABEL_FEATURE_NAME = "__label__"
 
 
 def _get_size(o):
@@ -91,15 +98,15 @@ def _materialize_locally(tensors, num_steps=1, feed_dict=None, safety_size=1e9):
 
   Raises:
     ValueError: for negative num_steps.
-    errors.OutOfRangeError: if can't read num_steps times.
+    tf.errors.OutOfRangeError: if can't read num_steps times.
   """
   if num_steps and num_steps < 0:
     raise ValueError("can not run with num_steps=%s" % num_steps)
 
-  # training.SingularMonitoredSession silently catches errors.OutOfRangeError,
-  # and we want to expose it.
+  # tf.compat.v1.train.SingularMonitoredSession silently catches
+  # tf.errors.OutOfRangeError, and we want to expose it.
   error = None
-  with training.SingularMonitoredSession() as sess:
+  with tf.compat.v1.train.SingularMonitoredSession() as sess:
     try:
       splits = []
       if not num_steps:
@@ -114,7 +121,7 @@ def _materialize_locally(tensors, num_steps=1, feed_dict=None, safety_size=1e9):
                   "Unbound (num_steps=None) materialization of "
                   "input reached safety size of {}".format(safety_size))
             splits.append(r)
-        except errors.OutOfRangeError:
+        except tf.errors.OutOfRangeError:
           pass
       else:
         # Run num_steps times.
@@ -126,10 +133,10 @@ def _materialize_locally(tensors, num_steps=1, feed_dict=None, safety_size=1e9):
         for k in splits[0].keys():
           materialized[k] = np.concatenate([
               splits[i][k] for i in range(len(splits))
-              if len(splits[i][k]) > 0])
+              if splits[i][k].size > 0])
       else:
         materialized = np.concatenate(splits)
-    except (errors.OutOfRangeError, StopIteration) as ex:
+    except (tf.errors.OutOfRangeError, StopIteration) as ex:
       error = ex
   if error:
     raise error  # pylint: disable=raising-bad-type
@@ -139,14 +146,13 @@ def _materialize_locally(tensors, num_steps=1, feed_dict=None, safety_size=1e9):
 def _path_for_quantile(subdir, feature_name):
   # Change slashes to dashes to make quantile filenames valid.
   # Note that there is a slight chance of name collision here.
-  feature_name = feature_name.replace("/", "-")
+  feature_name = str(feature_name).replace("/", "-")
   return os.path.join(subdir, "%s.txt" % feature_name)
 
 
 def _save_quantiles(subdir, feature_name, quantiles):
-  """Returns False if failed to load."""
   file_io.write_string_to_file(
-      _path_for_quantile(subdir, feature_name), str(quantiles))
+      _path_for_quantile(subdir, str(feature_name)), str(quantiles))
 
 
 def _load_quantiles(subdir, feature_name):
@@ -161,24 +167,23 @@ def uniform_keypoints_for_signal(num_keypoints,
                                  input_max,
                                  output_min,
                                  output_max,
-                                 dtype=dtypes.float32):
+                                 dtype=tf.float32):
   """Returns a pair of initialization tensors for calibration keypoints.
 
   This is used when the input range to be calibrated is known.
 
   Args:
     num_keypoints: number of keypoints to use for calibrating this signal.
-    input_min: Scalar with the minimum value that the uncalibrated input
-      can take.
-    input_max: Scalar with the maximum value that the uncalibrated input
-      can take.
+    input_min: Scalar with the minimum value that the uncalibrated input can
+      take.
+    input_max: Scalar with the maximum value that the uncalibrated input can
+      take.
     output_min: Scalar with calibrated value associated with input_min.
       Typically the minimum expected calibrated value, but not necessarily.
       Specially if the calibration is decreasing.
-    output_max: Scalar with calibrated scalar value associated with
-      input_max.
-    dtype: If any of the scalars are not given as tensors, they are converted
-      to tensors with this dtype.
+    output_max: Scalar with calibrated scalar value associated with input_max.
+    dtype: If any of the scalars are not given as tensors, they are converted to
+      tensors with this dtype.
 
   Returns:
     Two tensors to be used as the keypoints_inputs and keypoints_outputs
@@ -196,8 +201,8 @@ def uniform_keypoints_for_signal(num_keypoints,
       [input_min.dtype, input_max.dtype, output_min.dtype, output_max.dtype])
   if len(types_set) != 1:
     raise ValueError("different dtypes for parameters: got %s" % types_set)
-  return (math_ops.linspace(input_min, input_max, num_keypoints),
-          math_ops.linspace(output_min, output_max, num_keypoints))
+  return (tf.linspace(input_min, input_max, num_keypoints),
+          tf.linspace(output_min, output_max, num_keypoints))
 
 
 def save_quantiles_for_keypoints(input_fn,
@@ -206,8 +211,9 @@ def save_quantiles_for_keypoints(input_fn,
                                  num_steps=1,
                                  override=True,
                                  num_quantiles=1000,
-                                 dtype=dtypes.float32):
-  """Calculates and saves quantiles for given features.
+                                 dtype=tf.float32):
+
+  """Calculates and saves quantiles for given features and optionally the label.
 
   These values can later be retrieved and used by keypoints_from_quantiles()
   below.
@@ -228,9 +234,13 @@ def save_quantiles_for_keypoints(input_fn,
       doesn't need to go over the full data to get good quantiles. Typically
       some 100 random examples per quantile is good enough for the purpose of
       calibration. If you don't have too much data, just use everything.
-      If input_fn returns a target (used in training) it is ignored.
+      If input_fn returns a label, the label quantiles will be saved into a
+      file named _LABEL_FEATURE_NAME in '<save_dir>/quantiles' directory and
+      they can be used to initialize the keypoint outputs by passing True to
+      the 'use_label_quantiles_for_outputs' in
+      load_keypoints_from_quantiles().
     save_dir: Where to save these quantiles. Since when optimizing
-      hyper-parameters we train various models, we can share the quantiles
+      hyperparameters we train various models, we can share the quantiles
       information generated here. So this should be a directory that can be
       accessed by all training sessions. A subdirectory called "quantiles" will
       be created, and inside one file per feature is created: named after the
@@ -257,7 +267,7 @@ def save_quantiles_for_keypoints(input_fn,
   Returns: Nothing, results are saved to disk.
 
   Raises:
-    errors.OpError: For I/O errors.
+    tf.errors.OpError: For I/O errors.
 
   FutureWork:
     * Use Munro-Paterson algorithm to calculate quantiles in a streaming
@@ -267,67 +277,63 @@ def save_quantiles_for_keypoints(input_fn,
   """
   subdir = os.path.join(save_dir, _QUANTILES_SUBDIRECTORY)
   file_io.recursive_create_dir(subdir)
-  with ops.Graph().as_default():
-    tensors = None
-
-    if feature_columns is not None:
-      # Features from feature_columns.
-      if not override:
-        # Remove feature_columns for which we already have the quantiles.
-        missing_feature_columns = []
-        for f_col in feature_columns:
-          try:
-            _ = _load_quantiles(subdir, f_col.name)
-          except errors.NotFoundError:
-            missing_feature_columns += [f_col]
-        feature_columns = missing_feature_columns
-        if not feature_columns:
-          return
-
-      transformed_columns_to_tensors, unused_label = input_fn()
-
-      tensors = {
-          f_col.name: tools.input_from_feature_column(
-              transformed_columns_to_tensors, f_col, dtype)
-          for f_col in feature_columns
-      }
-
+  with tf.Graph().as_default():
+    tensor_to_feature = _compute_tensor_to_feature_dict(
+        input_fn, feature_columns, dtype)
+    if override:
+      tensor_to_saved_feature = tensor_to_feature
     else:
-      # Features directly from columns_to_tensors.
-      columns_to_tensors, unused_label = input_fn()
-      tensors = {}
-
-      if override:
-        tensors = columns_to_tensors
-      else:
-        for name, tensor in columns_to_tensors.items():
-          try:
-            _ = _load_quantiles(subdir, name)
-          except errors.NotFoundError:
-            tensors[name] = tensor
-        if not tensors:
-          # All features already calculated.
-          return
-
-    # Here a dict of feature_name to tensor is in tensors.
-    arrays = _materialize_locally(tensors, num_steps)
+      tensor_to_saved_feature = {
+          name: tensor
+          for (name, tensor) in six.iteritems(tensor_to_feature)
+          if not gfile.Exists(_path_for_quantile(subdir, name))}
+    materialized_tensors = _materialize_locally(
+        tensor_to_saved_feature, num_steps)
 
   percentiles = np.linspace(0., 100., num_quantiles)
-  for key, values in arrays.items():
+  for key, values in six.iteritems(materialized_tensors):
     values = np.unique(values)
     quantiles = np.percentile(values, percentiles, interpolation="nearest")
     quantiles = list(quantiles)
     _save_quantiles(subdir, key, quantiles)
 
 
-def save_quantiles_for_keypoints_once(input_fn,
-                                      save_dir,
-                                      is_chief,
-                                      feature_columns=None,
-                                      num_steps=1,
-                                      num_quantiles=1000,
-                                      dtype=dtypes.float32,
-                                      timeout_secs=600):
+def _compute_tensor_to_feature_dict(input_fn, feature_columns, dtype):
+  """Computes a feature_name-to-tensor dict for the given features.
+
+  Args:
+    input_fn: See the same argument in 'save_quantiles_for_keypoints'.
+    feature_columns: See the same argument in 'save_quantiles_for_keypoints'.
+    dtype: See the same argument in 'save_quantiles_for_keypoints'.
+
+  Returns:
+    A str->tensor dict mapping each feature name to the tensor containing its
+    feature values for the current batch. The dict contains all the features
+    returned by input_fn if feature_columns are none, or only those features
+    included in 'feature_columns', otherwise. If a non-None label is returned by
+    'input_fn', it will also be included in the dict.
+  """
+  if feature_columns is not None:
+    transformed_columns_to_tensors, label = input_fn()
+    features_to_tensors = {
+        f_col.name: tools.input_from_feature_column(
+            transformed_columns_to_tensors, f_col, dtype)
+        for f_col in feature_columns
+    }
+  else:
+    features_to_tensors, label = input_fn()
+  if label is None:
+    return features_to_tensors
+  if _LABEL_FEATURE_NAME in features_to_tensors:
+    raise ValueError(
+        ("Can't save a label as there's already a feature named: '%s'."
+         " Try renaming that feature. ") % _LABEL_FEATURE_NAME)
+  features_to_tensors[_LABEL_FEATURE_NAME] = label
+  return features_to_tensors
+
+
+def save_quantiles_for_keypoints_once(
+    input_fn, save_dir, is_chief, timeout_secs=600, **kwargs):
   """Concurrency-safe version of save_quantiles_for_keypoints.
 
   If is_chief is True and the quantiles do not already exist in 'save_dir',
@@ -346,16 +352,19 @@ def save_quantiles_for_keypoints_once(input_fn,
   Note that for a given 'save_dir', the quantiles will only be created on the
   first execution of the program. Successive executions will not overwrite the
   quantiles. To recreate the quantiles, the save_dir directory must be deleted.
+
+  Args:
+    input_fn: Passed to save_quantiles_for_keypoints.
+    save_dir: Passed to save_quantiles_for_keypoints.
+    is_chief: bool. Whether the caller is the chief.
+    timeout_secs: int. The amount of time in seconds to wait for the chief.
+    **kwargs: Other keyword arguments to be passed to
+      save_quantiles_for_keypoints.
   """
+  def write_fn():
+    save_quantiles_for_keypoints(input_fn, save_dir, **kwargs)
   tools.save_once_or_wait_for_chief(
-      write_fn=lambda: save_quantiles_for_keypoints(
-          input_fn,
-          save_dir,
-          feature_columns,
-          num_steps,
-          override=False,
-          num_quantiles=num_quantiles,
-          dtype=dtype),
+      write_fn=write_fn,
       metadata_dir=save_dir,
       is_chief=is_chief,
       timeout_secs=timeout_secs)
@@ -364,11 +373,12 @@ def save_quantiles_for_keypoints_once(input_fn,
 def load_keypoints_from_quantiles(feature_names,
                                   save_dir,
                                   num_keypoints,
-                                  output_min,
-                                  output_max,
+                                  output_min=None,
+                                  output_max=None,
+                                  use_label_quantiles_for_outputs=False,
                                   reversed_dict=None,
                                   missing_input_values_dict=None,
-                                  dtype=dtypes.float32):
+                                  dtype=tf.float32):
   """Retrieves keypoints initialization values for selected features.
 
   It expects that the quantiles have already been calculated and saved in the
@@ -380,23 +390,33 @@ def load_keypoints_from_quantiles(feature_names,
       initialization values.
     save_dir: Directory where the quantiles have been saved to. Same value used
       when save_quantiles_for_keypoints was called.
-    num_keypoints: Desired number of keypoints to use for calibration. This
-      can either be a scalar to be used for all features, or a dict mapping
-      feature name to num_keypoints. Fewer keypoints than requested can end
-      up being used when for the given feature there are not enough different
-      values. If num_keypoints for a feature is missing, None or 0, no
-      initialization is generated.
-    output_min: Initial calibrated value associated with the first calibration
-      keypoint. The keypoints outputs in between will be linearly interpolated.
-      It can be given as a scalar, in which case value is used for all features,
-      or a dict mapping feature name to output_min.
-    output_max: Like output_min, but the calibrated value associated to the
-      last keypoint. Scalar or dict.
+    num_keypoints: Desired number of keypoints to use for calibration. This can
+      either be a scalar to be used for all features, or a dict mapping feature
+      name to num_keypoints. Fewer keypoints than requested can end up being
+      used when for the given feature there are not enough different values. If
+      num_keypoints for a feature is missing, None or 0, no initialization is
+      generated.
+    output_min: If not None, specifies the initial calibrated value associated
+      with the first calibration keypoint. The keypoints outputs in between will
+      be linearly interpolated.  It can be given as a scalar, in which case the
+      value is used for all features, or a dict mapping feature name to
+      output_min.
+    output_max: Like output_min, but the calibrated value associated to the last
+      keypoint. Scalar or dict.
+    use_label_quantiles_for_outputs: Sets the keypoint outputs (calibrated
+      values) to the label quantiles. If this parameter is true then output_min
+      and output_max must both be None and the label quantiles must have been
+      saved in the call to save_quantiles_for_keypoints that generated the
+      quantile files (i.e. the input_fn parameter for the latter function must
+      have returned a label). If this parameter is False, then neither
+      output_min nor output_max may be None.
     reversed_dict: An optional dict. If reversed_dict[feature_name] is True,
       then the initial output keypoints will be in reversed order for that
-      feature, i.e., input_min will be mapped to output_max, and input_max will
-      be mapped to output_min. Reversing output keypoints is useful for
-      decreasing monotonic calibrators.
+      feature, i.e., input_min will be mapped to output_max or the last label
+      quantile if use_label_quantiles_for_outputs is true, and input_max will be
+      mapped to output_min or the first label quantile if
+      use_label_quantiles_for_outputs is true. Reversing output keypoints is
+      useful for decreasing monotonic calibrators.
     missing_input_values_dict: An optional dict. If provided, it should include
       all features passed via feature_names. If the value of
       missing_input_values[feature_name] is Not none, it is excluded from the
@@ -414,14 +434,31 @@ def load_keypoints_from_quantiles(feature_names,
     values in the signal. This would probably be better handled as categorical,
     but still this should handle the case correctly.
   """
+  if (output_min is None) != (output_max is None):
+    raise ValueError(
+        "Either both output_min and output_max should be given or neither.")
+
+  output_labels_given = (output_min is not None)
+  if (use_label_quantiles_for_outputs and output_labels_given):
+    raise ValueError(
+        "If use_label_quantiles_for_outputs is true, then"
+        " output_min and output_max cannot be given.")
+  if (not use_label_quantiles_for_outputs and not output_labels_given):
+    raise ValueError(
+        "Either use_label_quantiles_for_outputs should be true or "
+        " output_min and output_max must be given.")
+
   subdir = os.path.join(save_dir, _QUANTILES_SUBDIRECTORY)
   num_keypoints = tools.cast_to_dict(num_keypoints, feature_names,
                                      num_keypoints)
-  output_min = tools.cast_to_dict_of_tensor_scalars(output_min, feature_names,
-                                                    dtype, "output_min")
-  output_max = tools.cast_to_dict_of_tensor_scalars(output_max, feature_names,
-                                                    dtype, "output_max")
-
+  if use_label_quantiles_for_outputs:
+    label_quantiles = _load_quantiles(subdir, _LABEL_FEATURE_NAME)
+  else:
+    label_quantiles = None
+    output_min = tools.cast_to_dict_of_tensor_scalars(output_min, feature_names,
+                                                      dtype, "output_min")
+    output_max = tools.cast_to_dict_of_tensor_scalars(output_max, feature_names,
+                                                      dtype, "output_max")
   keypoints = {}
   for feature_name in feature_names:
     if feature_name not in num_keypoints or not num_keypoints[feature_name]:
@@ -432,15 +469,36 @@ def load_keypoints_from_quantiles(feature_names,
       exclude_val = missing_input_values_dict[feature_name]
       if exclude_val is not None:
         all_quantiles = [q for q in all_quantiles if q != exclude_val]
-    percentiles = np.linspace(0., 100., num_keypoints[feature_name])
-    quantiles = np.percentile(
-        all_quantiles, percentiles, interpolation="nearest")
-    quantiles = sorted(set(quantiles))  # Remove repeated quantiles.
-    input_kpts = array_ops.constant(
-        quantiles, shape=[len(quantiles)], dtype=dtype)
-    output_kpts = math_ops.linspace(output_min[feature_name],
-                                    output_max[feature_name], len(quantiles))
+    quantiles = _resample_quantiles(all_quantiles, num_keypoints[feature_name])
+    unique_quantiles = sorted(set(quantiles))
+    input_keypoints = tf.constant(
+        unique_quantiles, shape=[len(unique_quantiles)], dtype=dtype)
+    if use_label_quantiles_for_outputs:
+      output_keypoints = tf.constant(
+          _resample_quantiles(label_quantiles, len(unique_quantiles)),
+          shape=[len(unique_quantiles)],
+          dtype=dtype)
+    else:
+      output_keypoints = tf.linspace(output_min[feature_name],
+                                     output_max[feature_name],
+                                     len(unique_quantiles))
     if reversed_dict is not None and reversed_dict[feature_name]:
-      output_kpts = array_ops.reverse(output_kpts, axis=[0])
-    keypoints[feature_name] = (input_kpts, output_kpts)
+      output_keypoints = tf.reverse(output_keypoints, axis=[0])
+    keypoints[feature_name] = (input_keypoints, output_keypoints)
   return keypoints
+
+
+def _resample_quantiles(quantiles, new_size):
+  """Computes new-size-quantiles on the given array of quantiles.
+
+  This is roughly equivalent to computing new-size-quantiles on the
+  original data from which 'quantiles' was created.
+
+  Args:
+    quantiles: list. The original quantiles.
+    new_size: int. The number of quantiles to generate.
+  Returns:
+    A list of the new quantiles.
+  """
+  percentiles = np.linspace(0., 100., new_size)
+  return np.percentile(quantiles, percentiles, interpolation="nearest")

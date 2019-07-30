@@ -25,13 +25,13 @@ function git_init {
   git init
 
   if [  -d "tensorflow"  ]; then
-    echo "TensorFlow submodule exist. Checkout r1.11"
+    echo "TensorFlow submodule exist. Checkout r1.14"
     cd tensorflow
-    git checkout r1.11
+    git checkout r1.14
     cd -
   else
-    echo "Add TensorFlow r1.11 submodule."
-    git submodule add -b r1.11 https://github.com/tensorflow/tensorflow.git
+    echo "Add TensorFlow r1.14 submodule."
+    git submodule add -b r1.14 https://github.com/tensorflow/tensorflow.git
   fi
 
   # Fetch all submodules.
@@ -43,6 +43,8 @@ function git_init {
   yes "" | ./configure
 
   cd -
+  echo "Applying visibility change."
+  sed -i.bak -e 's/:internal/\/\/visibility:public/g' -- "tensorflow/tensorflow/BUILD"
 }
 
 # Create virtualenv.
@@ -59,15 +61,8 @@ function create_virtualenv {
   source ${TFL_ENV_PATH}/bin/activate
   python -V
   pip install --upgrade pip
-  pip install six numpy wheel enum34 protobuf keras_applications keras_preprocessing
+  pip install --upgrade six numpy wheel enum34 protobuf keras_applications keras_preprocessing tensorflow_estimator
   deactivate
-}
-
-# Pointfix aws workspace build rule.
-# Without this fix, bazel replaces @%ws% -> empty which makes all imports fail
-# in aws.BUILD.
-function aws_ws_fix {
-  sed -i='' 's,@%ws%,@org_tensorflow,' tensorflow/third_party/aws.BUILD
 }
 
 # Prepare all necessary environment for bazel build & testing.
@@ -100,9 +95,6 @@ function prepare_build {
   echo "Initialize git repo."
   git_init
   echo "Initialization is done."
-
-  echo "Pointfix aws.BUILD"
-  aws_ws_fix
 
   deactivate
 }

@@ -12,50 +12,51 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 =============================================================================-->
+
 # tensorflow_lattice on TF-Lite
 
 ## Concepts
 
- __TF-Lite__ Framework in tensorflow/contrib for evaluating TF graphs on 
- low-power platforms <go/tf-lite>
+__TF-Lite__ Framework in tensorflow/contrib for evaluating TF graphs on
+low-power platforms <go/tf-lite>
 
- __TOCO__  Tool for converting saved tensorflow graphs to tf-lite format
- [TOCO docs](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/lite/toco/g3doc/cmdline_examples.md)
+__TOCO__ Tool for converting saved tensorflow graphs to tf-lite format
+[TOCO docs](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/toco/g3doc/cmdline_examples.md)
 
 ## Introduction
 
-This document describes how to use a lattice model on
-a low-power platform by converting it to a Tensorflow-lite model which can then
-be run on the device.  This allows for inferences to be done without wifi or
-server costs.
+This document describes how to use a lattice model on a low-power platform by
+converting it to a Tensorflow-lite model which can then be run on the device.
+This allows for inferences to be done without wifi or server costs.
 
 ## Use Notes
 
 These tf-lite ops are necessary when running a tf-lite model that includes any
-custom tf-lattice ops.  Typically, a TF model saved in frozen_graph format will
-be converted with TOCO.  The output of TOCO can then be run (on device)
-with TF-Lite.  There are two integration tasks corresponding to these two steps:
+custom tf-lattice ops. Typically, a TF model saved in frozen_graph format will
+be converted with TOCO. The output of TOCO can then be run (on device) with
+TF-Lite. There are two integration tasks corresponding to these two steps:
 
 ### Use TOCO to convert a saved Tensorflow graph
 
 TOCO, as explained above, operates on the output of the `tflite_convert`
-utility.  In order for this utility to work properly, Tensorflow itself must
-have already loaded any custom ops that are needed.  This is done 'lazily',
-so that Tensorflow, and consequently TOCO, will fail to find a custom op that
-has not yet been loaded.  This is the purpose of the `toco_wrapper` target in
-this directory.  It triggers the loading of tensorflow_lattice ops by importing
-the `tensorflow_lattice` python package.  The wrapper script simply makes this
-import and then calls `tflite_convert`.  Use `toco_wrapper` with the same
-arguments that you wish passed on to `tflite_convert`.
-
+utility. In order for this utility to work properly, Tensorflow itself must have
+already loaded any custom ops that are needed. This is done 'lazily', so that
+Tensorflow, and consequently TOCO, will fail to find a custom op that has not
+yet been loaded. This is the purpose of the `toco_wrapper` target in this
+directory. It triggers the loading of tensorflow_lattice ops by importing the
+`tensorflow_lattice` python package. The wrapper script simply makes this import
+and then calls `tflite_convert`. Use `toco_wrapper` with the same arguments that
+you wish passed on to `tflite_convert`.
 
 ### Make the tf-lite op visible to the tf-lite interpreter
+
 The low level code that instantiates and calls the tf-lite interpreter must be
-modified to register the custom op.  __The registration is done _in situ_ by the
-team who wish to use the ops.__  Remember to add the `'tflite_ops` dependency to
+modified to register the custom op. __The registration is done _in situ_ by the
+team who wish to use the ops.__ Remember to add the `'tflite_ops` dependency to
 build target.
 
 ## Example Commands
+
 Example code for registering op:
 
 ```c++
@@ -82,16 +83,18 @@ $ toco_wrapper \
 
 # This command will fail unless an edit like that described above is made to
 # .../lite/tools/benchmark/benchmark_tflite_model.cc
-$ bazel run tensorflow/contrib/lite/tools/benchmark:benchmark_model \
+$ bazel run tensorflow/lite/tools/benchmark:benchmark_model \
   -- --graph=/tmp/xo.tflite
 
 ```
+
 If successful, the last command will print a summary of run timings.
 
 ## Full Example
 
 ### Build model
-Consider the following simple tf_lattice model.  Note where the model directory
+
+Consider the following simple tf_lattice model. Note where the model directory
 is being set, this information will be important later.
 
 ```python
@@ -135,7 +138,7 @@ x1 = np.random.uniform(-1.0, 1.0, size=num_examples)
 y = x0 ** 2 + x1 ** 2
 
 # Example input function.
-twod_input_fn = tf.estimator.inputs.numpy_input_fn(
+twod_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
     x={'x0': x0,
        'x1': x1},
     y=y,
@@ -150,9 +153,10 @@ print(rtl_estimator.evaluate(input_fn=twod_input_fn))
 ```
 
 ### Determine input and output nodes
+
 In order to use the conversion utilities below, it is necessary to know which
-nodes in the tensorflow model graph are to be used as input and output.  This
-can be tricky, especially when using the estimator API.
+nodes in the tensorflow model graph are to be used as input and output. This can
+be tricky, especially when using the estimator API.
 
 To visually inspect the graph, run the following:
 
@@ -160,6 +164,7 @@ To visually inspect the graph, run the following:
 $ MODEL_DIR=/tmp/tfl_estimator_0  # from above
 $ tensorboard --logdir $MODEL_DIR  # use the model directory specified above
 ```
+
 For this example, the following nodes will be used for input and output:
 
 ```bash
@@ -169,9 +174,9 @@ $ OUTPUT_NODE=tfl_calibrated_rtl/add
 
 ### Convert trained model to frozen graph format using frozen_graph_wrapper
 
-This conversion uses the tensorflow `frozen_graph` utility.  As with
+This conversion uses the tensorflow `frozen_graph` utility. As with
 `tflite_convert` (TOCO), this utility requires that tensorflow has loaded the
-tensorflow_lattice custom ops.  In order to facilitate this, a simple wrapper is
+tensorflow_lattice custom ops. In order to facilitate this, a simple wrapper is
 provided.
 
 ```bash
@@ -182,10 +187,9 @@ $ freeze_graph_wrapper \
   --output_node_names=tfl_calibrated_rtl/add
 ```
 
-
 ### Convert frozen graph to tf-lite format using toco_wrapper
 
-This step will produce a tf-lite artifact suitable for use.  Note that use will
+This step will produce a tf-lite artifact suitable for use. Note that use will
 require edits to the low level C++ code as described above
 
 ```bash
@@ -196,4 +200,3 @@ $ toco_wrapper \
   --output_arrays=$OUTPUT_NODE \
   --allow_custom_ops
 ```
-

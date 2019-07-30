@@ -14,13 +14,13 @@
 # ==============================================================================
 licenses(["notice"])  # Apache 2.0 License
 
-exports_files(["LICENSE"])
-
 package(
     default_visibility = [
         "//tensorflow_lattice:__subpackages__",
     ],
 )
+
+exports_files(["LICENSE"])
 
 load(
     "//tensorflow_lattice:tensorflow_lattice.bzl",
@@ -156,7 +156,6 @@ cc_library(
         "@org_tensorflow//tensorflow/core:testlib",
         "@org_tensorflow//tensorflow/core/kernels:ops_testutil",
         "@org_tensorflow//tensorflow/core/kernels:ops_util_hdrs",
-        # fixdeps: Don't add //third_party/gtest
     ],
 )
 

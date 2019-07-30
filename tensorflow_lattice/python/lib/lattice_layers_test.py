@@ -14,19 +14,16 @@
 # ==============================================================================
 """Tests for TensorFlow Lattice's lattice_layers module."""
 
-# Dependency imports
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
 
 from tensorflow_lattice.python.lib import lattice_layers
 
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import state_ops
-from tensorflow.python.ops import variables
-from tensorflow.python.platform import test
 
-
-class LatticeParamTestCase(test.TestCase):
+class LatticeParamTestCase(tf.test.TestCase):
 
   def testTwoByTwoOneOutput(self):
     lattice_param = lattice_layers.lattice_param_as_linear(
@@ -85,15 +82,15 @@ class LatticeParamTestCase(test.TestCase):
         lattice_param)
 
 
-class LatticeLayersTestCase(test.TestCase):
+class LatticeLayersTestCase(tf.test.TestCase):
 
   def _testLatticeLayerEvaluation(self, interpolation_type, lattice_sizes,
                                   output_dim, inputs, parameters,
                                   expected_outputs):
     """Test evaluation of lattice layers."""
-    with ops.Graph().as_default():
-      input_tensor = array_ops.constant(inputs, dtype=dtypes.float32)
-      init_param = array_ops.constant(parameters, dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.constant(inputs, dtype=tf.float32)
+      init_param = tf.constant(parameters, dtype=tf.float32)
       (output_tensor, _, _, _) = lattice_layers.lattice_layer(
           input_tensor,
           lattice_sizes=lattice_sizes,
@@ -101,8 +98,8 @@ class LatticeLayersTestCase(test.TestCase):
           interpolation_type=interpolation_type,
           lattice_initializer=init_param)
 
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         output_tensor_values = sess.run(output_tensor)
       self.assertAllClose(output_tensor_values, expected_outputs)
 
@@ -186,9 +183,8 @@ class LatticeLayersTestCase(test.TestCase):
 
   def testHypercubeNoRegularizationExpectsNone(self):
     lattice_sizes = [2, 3]
-    with ops.Graph().as_default():
-      input_tensor = array_ops.placeholder(
-          shape=[None, 2], dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.compat.v1.placeholder(shape=[None, 2], dtype=tf.float32)
       (_, _, _, regularization) = lattice_layers.lattice_layer(
           input_tensor,
           lattice_sizes=lattice_sizes,
@@ -198,9 +194,8 @@ class LatticeLayersTestCase(test.TestCase):
 
   def testSimplexNoRegularizationExpectsNone(self):
     lattice_sizes = [2, 3]
-    with ops.Graph().as_default():
-      input_tensor = array_ops.placeholder(
-          shape=[None, 2], dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.compat.v1.placeholder(shape=[None, 2], dtype=tf.float32)
       (_, _, _, regularization) = lattice_layers.lattice_layer(
           input_tensor,
           lattice_sizes=lattice_sizes,
@@ -213,10 +208,9 @@ class LatticeLayersTestCase(test.TestCase):
     parameters = [[0.0, 0.1, 1.1, 2.3, 3.1, 4.2],
                   [5.1, 2.11, 1.11, 3.21, -1.02, -2.2]]
     output_dim = 2
-    with ops.Graph().as_default():
-      input_tensor = array_ops.placeholder(
-          shape=[None, 2], dtype=dtypes.float32)
-      init_param = array_ops.constant(parameters, dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.compat.v1.placeholder(shape=[None, 2], dtype=tf.float32)
+      init_param = tf.constant(parameters, dtype=tf.float32)
       (_, _, _, regularization) = lattice_layers.lattice_layer(
           input_tensor,
           lattice_sizes=lattice_sizes,
@@ -230,8 +224,8 @@ class LatticeLayersTestCase(test.TestCase):
           l2_laplacian_reg=[0.1, 0.1],
           lattice_initializer=init_param)
 
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         self.assertAlmostEqual(26.514278, sess.run(regularization), delta=1e-5)
 
   def testSimplexRegularization(self):
@@ -239,10 +233,9 @@ class LatticeLayersTestCase(test.TestCase):
     parameters = [[0.0, 0.1, 1.1, 2.3, 3.1, 4.2],
                   [5.1, 2.11, 1.11, 3.21, -1.02, -2.2]]
     output_dim = 2
-    with ops.Graph().as_default():
-      input_tensor = array_ops.placeholder(
-          shape=[None, 2], dtype=dtypes.float32)
-      init_param = array_ops.constant(parameters, dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.compat.v1.placeholder(shape=[None, 2], dtype=tf.float32)
+      init_param = tf.constant(parameters, dtype=tf.float32)
       (_, _, _, regularization) = lattice_layers.lattice_layer(
           input_tensor,
           lattice_sizes=lattice_sizes,
@@ -256,17 +249,17 @@ class LatticeLayersTestCase(test.TestCase):
           l2_laplacian_reg=[0.1, 0.1],
           lattice_initializer=init_param)
 
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         self.assertAlmostEqual(26.514278, sess.run(regularization), delta=1e-5)
 
-  def _testLatticeLayerProjection(
-      self, interpolation_type, lattice_sizes, output_dim, output_min,
-      output_max, is_monotone, parameters, expected_projected_parameters):
+  def _testLatticeLayerProjection(self, interpolation_type, lattice_sizes,
+                                  output_dim, output_min, output_max,
+                                  is_monotone, parameters,
+                                  expected_projected_parameters):
     """Test monotonicity projection of lattice layers."""
-    with ops.Graph().as_default():
-      input_tensor = array_ops.zeros([1, len(lattice_sizes)],
-                                     dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.zeros([1, len(lattice_sizes)], dtype=tf.float32)
       (_, param_tensor, projection_op, _) = lattice_layers.lattice_layer(
           input_tensor,
           lattice_sizes=lattice_sizes,
@@ -275,12 +268,10 @@ class LatticeLayersTestCase(test.TestCase):
           output_min=output_min,
           output_max=output_max,
           interpolation_type=interpolation_type)
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         sess.run(
-            state_ops.assign(
-                param_tensor,
-                array_ops.constant(parameters, dtype=dtypes.float32)))
+            tf.compat.v1.assign(param_tensor, tf.constant(parameters, dtype=tf.float32)))
         sess.run(projection_op)
         param_tensor_values = param_tensor.eval()
 
@@ -361,17 +352,17 @@ class LatticeLayersTestCase(test.TestCase):
         expected_projected_parameters=expected_projected_parameters)
 
 
-class EnsembleLatticesLayersTestCase(test.TestCase):
+class EnsembleLatticesLayersTestCase(tf.test.TestCase):
 
-  def _testEnsembleLatticesLayerEvaluation(
-      self, interpolation_type, lattice_sizes, structure, output_dim, inputs,
-      parameters, expected_outputs_list):
+  def _testEnsembleLatticesLayerEvaluation(self, interpolation_type,
+                                           lattice_sizes, structure, output_dim,
+                                           inputs, parameters,
+                                           expected_outputs_list):
     """Test evaluation of ensemble lattices layers."""
-    with ops.Graph().as_default():
-      input_tensor = array_ops.constant(inputs, dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.constant(inputs, dtype=tf.float32)
       init_params = [
-          array_ops.constant(param, dtype=dtypes.float32)
-          for param in parameters
+          tf.constant(param, dtype=tf.float32) for param in parameters
       ]
       (output_tensor_lists, _, _, _) = lattice_layers.ensemble_lattices_layer(
           input_tensor,
@@ -381,8 +372,8 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
           interpolation_type=interpolation_type,
           lattice_initializers=init_params)
       self.assertEqual(len(output_tensor_lists), len(structure))
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         output_values_list = sess.run(output_tensor_lists)
       self.assertAllClose(output_values_list, expected_outputs_list)
 
@@ -474,12 +465,10 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
     parameters.append([[0.0, 0.1, 1.1, 2.3, 3.1, 4.2],
                        [5.1, 2.11, 1.11, 3.21, -1.02, -2.2]])
     output_dim = 2
-    with ops.Graph().as_default():
-      input_tensor = array_ops.placeholder(
-          shape=[None, 2], dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.compat.v1.placeholder(shape=[None, 2], dtype=tf.float32)
       init_params = [
-          array_ops.constant(param, dtype=dtypes.float32)
-          for param in parameters
+          tf.constant(param, dtype=tf.float32) for param in parameters
       ]
       (_, _, _, regularization) = lattice_layers.ensemble_lattices_layer(
           input_tensor,
@@ -495,8 +484,8 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
           l2_laplacian_reg=[0.1, 0.1],
           lattice_initializers=init_params)
 
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         self.assertAlmostEqual(28.114279, sess.run(regularization), delta=1e-5)
 
   def testSimplexRegularization(self):
@@ -509,12 +498,10 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
     parameters.append([[0.0, 0.1, 1.1, 2.3, 3.1, 4.2],
                        [5.1, 2.11, 1.11, 3.21, -1.02, -2.2]])
     output_dim = 2
-    with ops.Graph().as_default():
-      input_tensor = array_ops.placeholder(
-          shape=[None, 2], dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.compat.v1.placeholder(shape=[None, 2], dtype=tf.float32)
       init_params = [
-          array_ops.constant(param, dtype=dtypes.float32)
-          for param in parameters
+          tf.constant(param, dtype=tf.float32) for param in parameters
       ]
       (_, _, _, regularization) = lattice_layers.ensemble_lattices_layer(
           input_tensor,
@@ -530,17 +517,17 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
           l2_laplacian_reg=[0.1, 0.1],
           lattice_initializers=init_params)
 
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         self.assertAlmostEqual(28.114279, sess.run(regularization), delta=1e-5)
 
-  def _testEnsembleLatticesLayerProjection(
-      self, interpolation_type, lattice_sizes, structure, output_dim,
-      is_monotone, parameters, expected_projected_parameters):
+  def _testEnsembleLatticesLayerProjection(self, interpolation_type,
+                                           lattice_sizes, structure, output_dim,
+                                           is_monotone, parameters,
+                                           expected_projected_parameters):
     """Test monotonicity projection of lattice layers."""
-    with ops.Graph().as_default():
-      input_tensor = array_ops.zeros([1, len(lattice_sizes)],
-                                     dtype=dtypes.float32)
+    with tf.Graph().as_default():
+      input_tensor = tf.zeros([1, len(lattice_sizes)], dtype=tf.float32)
       (_, param_tensors, proj, _) = lattice_layers.ensemble_lattices_layer(
           input_tensor,
           structure_indices=structure,
@@ -549,8 +536,8 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
           output_dim=output_dim,
           lattice_initializers=parameters,
           interpolation_type=interpolation_type)
-      with self.test_session() as sess:
-        sess.run(variables.global_variables_initializer())
+      with self.session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         # Check initialization.
         param_tensor_values = sess.run(param_tensors)
         self.assertEqual(len(param_tensor_values), len(parameters))
@@ -638,4 +625,4 @@ class EnsembleLatticesLayersTestCase(test.TestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()
