@@ -162,6 +162,7 @@ py_test(
     name = "calibrated_rtl_test",
     size = "large",
     srcs = ["calibrated_rtl_test.py"],
+    shard_count = 4,
     srcs_version = "PY2AND3",
     deps = [
         ":calibrated_rtl",
@@ -189,6 +190,7 @@ py_test(
     name = "calibrated_etl_test",
     size = "large",
     srcs = ["calibrated_etl_test.py"],
+    shard_count = 4,
     srcs_version = "PY2AND3",
     deps = [
         ":calibrated_etl",
@@ -215,6 +217,7 @@ py_test(
     name = "separately_calibrated_rtl_test",
     size = "large",
     srcs = ["separately_calibrated_rtl_test.py"],
+    shard_count = 9,
     srcs_version = "PY2AND3",
     deps = [
         ":separately_calibrated_rtl",

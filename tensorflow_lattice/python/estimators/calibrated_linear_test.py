@@ -13,23 +13,22 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedLinear provides canned estimators."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated_linear
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import test_data
 
-from tensorflow.python.estimator.canned import linear as linear_estimator
-from tensorflow.python.feature_column import feature_column as feature_column_lib
-from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
-from tensorflow.python.platform import test
-
 _NUM_KEYPOINTS = 50
 
 
-class CalibratedLinearTest(test_util.TensorFlowTestCase):
+class CalibratedLinearTest(tf.test.TestCase):
 
   def setUp(self):
     super(CalibratedLinearTest, self).setUp()
@@ -37,7 +36,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def _LinearRegressor(self, feature_columns):
     # Can be used for baseline.
-    return linear_estimator.LinearRegressor(feature_columns=feature_columns)
+    return tf.estimator.LinearRegressor(feature_columns=feature_columns)
 
   def _CalibratedLinearRegressor(self,
                                  feature_names,
@@ -88,7 +87,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def _LinearClassifier(self, feature_columns):
     # Can be used for baseline.
-    return linear_estimator.LinearClassifier(
+    return tf.estimator.LinearClassifier(
         n_classes=2, feature_columns=feature_columns)
 
   def _CalibratedLinearClassifier(self, feature_names, feature_columns,
@@ -107,7 +106,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def testCalibratedLinearRegressorTraining1D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
     estimator = self._CalibratedLinearRegressor(['x'], feature_columns)
     estimator.train(input_fn=self._test_data.oned_input_fn())
@@ -118,10 +117,11 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
     self.assertLess(results['average_loss'], 1e-4)
 
   def testCalibratedLinearRegressorWeightedTraining1D(self):
-    feature_columns = [feature_column_lib.numeric_column('x')]
-    weight_column = feature_column_lib.numeric_column('zero')
-    estimator = self._CalibratedLinearRegressor(
-        ['x'], feature_columns, weight_column=weight_column)
+    feature_columns = [tf.feature_column.numeric_column('x')]
+    weight_column = tf.feature_column.numeric_column('zero')
+    estimator = self._CalibratedLinearRegressor(['x'],
+                                                feature_columns,
+                                                weight_column=weight_column)
     estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.oned_zero_weight_input_fn())
@@ -130,7 +130,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def testCalibratedLinearMonotonicRegressorTraining1D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
     estimator = self._CalibratedLinearRegressor(
         ['x'],
@@ -142,7 +142,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def testCalibratedLinearRegressorTraining1DWithCalibrationRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
     estimator = self._CalibratedLinearRegressor(
         ['x'],
@@ -157,8 +157,8 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def testCalibratedLinearRegressorTraining2D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLinearRegressor(['x0', 'x1'], feature_columns)
     estimator.train(input_fn=self._test_data.twod_input_fn())
@@ -172,12 +172,12 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
     # Tests also categorical features that has a limited number
     # of valid values.
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
-        feature_column_lib.categorical_column_with_vocabulary_list(
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
+        tf.feature_column.categorical_column_with_vocabulary_list(
             'x2', ['Y', 'N'])
     ]
-    with ops.Graph().as_default():
+    with tf.Graph().as_default():
       estimator = self._CalibratedLinearRegressorWithQuantiles(
           ['x0', 'x1', 'x2'], feature_columns)
     estimator.train(input_fn=self._test_data.threed_input_fn(False, 4))
@@ -190,7 +190,7 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def testCalibratedLinearRegressorTrainingMultiDimensionalFeature(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x', shape=(2,)),
+        tf.feature_column.numeric_column('x', shape=(2,)),
     ]
 
     # With calibration.
@@ -205,8 +205,9 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
     # Turn-off calibration for feature 'x', it should turn if off for both
     # dimensions.
-    estimator = self._CalibratedLinearRegressor(
-        ['x'], feature_columns, feature__x__num_keypoints=0)
+    estimator = self._CalibratedLinearRegressor(['x'],
+                                                feature_columns,
+                                                feature__x__num_keypoints=0)
     estimator.train(input_fn=self._test_data.multid_feature_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.multid_feature_input_fn())
@@ -214,8 +215,8 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def testCalibratedLinearClassifierTraining(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLinearClassifier(['x0', 'x1'], feature_columns)
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
@@ -228,8 +229,8 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
   def testCalibratedLinearClassifierTrainingWithCalibrationRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLinearClassifier(
         ['x0', 'x1'],
@@ -245,4 +246,4 @@ class CalibratedLinearTest(test_util.TensorFlowTestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

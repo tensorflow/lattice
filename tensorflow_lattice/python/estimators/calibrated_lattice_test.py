@@ -13,28 +13,28 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedLattice provide canned estimators."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import numpy as np
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated_lattice
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import test_data
 
-from tensorflow.python.estimator.inputs import numpy_io
-from tensorflow.python.feature_column import feature_column as feature_column_lib
-from tensorflow.python.platform import test
-
 _NUM_KEYPOINTS = 50
 
 
-class CalibratedLatticeHParamsTest(test.TestCase):
+class CalibratedLatticeHParamsTest(tf.test.TestCase):
 
   def setUp(self):
+    super(CalibratedLatticeHParamsTest, self).setUp()
     self.empty_estimator = calibrated_lattice.calibrated_lattice_classifier()
-    self.hparams = tfl_hparams.CalibratedLatticeHParams(
-        feature_names=['x'])
+    self.hparams = tfl_hparams.CalibratedLatticeHParams(feature_names=['x'])
     self.hparams.set_param('lattice_size', 2)
     self.hparams.set_param('calibrator_output_min', 0)
     self.hparams.set_param('calibrator_output_max', 1)
@@ -83,7 +83,7 @@ class CalibratedLatticeHParamsTest(test.TestCase):
         'estimator.', self.empty_estimator.check_hparams, self.hparams)
 
 
-class CalibratedLatticeTest(test.TestCase):
+class CalibratedLatticeTest(tf.test.TestCase):
 
   def setUp(self):
     super(CalibratedLatticeTest, self).setUp()
@@ -129,7 +129,7 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTraining1D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
     estimator = self._CalibratedLatticeRegressor(['x'], feature_columns)
     estimator.train(input_fn=self._test_data.oned_input_fn())
@@ -138,11 +138,12 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeRegressorWeightedTraining1D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
-    weight_column = feature_column_lib.numeric_column('zero')
-    estimator = self._CalibratedLatticeRegressor(
-        ['x'], feature_columns, weight_column=weight_column)
+    weight_column = tf.feature_column.numeric_column('zero')
+    estimator = self._CalibratedLatticeRegressor(['x'],
+                                                 feature_columns,
+                                                 weight_column=weight_column)
     estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.oned_zero_weight_input_fn())
@@ -150,8 +151,8 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTraining2D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLatticeRegressor(['x0', 'x1'], feature_columns)
     estimator.train(input_fn=self._test_data.twod_input_fn())
@@ -160,8 +161,8 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTraining2DWithCalibrationRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLatticeRegressor(
         ['x0', 'x1'],
@@ -179,19 +180,18 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTraining2DWithLatticeRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
-    estimator = self._CalibratedLatticeRegressor(
-        ['x0', 'x1'],
-        feature_columns,
-        interpolation_type='simplex',
-        lattice_l1_reg=1.0,
-        lattice_l2_reg=1.0,
-        lattice_l1_torsion_reg=1.0,
-        lattice_l2_torsion_reg=1.0,
-        lattice_l1_laplacian_reg=1.0,
-        lattice_l2_laplacian_reg=1.0)
+    estimator = self._CalibratedLatticeRegressor(['x0', 'x1'],
+                                                 feature_columns,
+                                                 interpolation_type='simplex',
+                                                 lattice_l1_reg=1.0,
+                                                 lattice_l2_reg=1.0,
+                                                 lattice_l1_torsion_reg=1.0,
+                                                 lattice_l2_torsion_reg=1.0,
+                                                 lattice_l1_laplacian_reg=1.0,
+                                                 lattice_l2_laplacian_reg=1.0)
     estimator.train(input_fn=self._test_data.twod_input_fn())
     results = estimator.evaluate(input_fn=self._test_data.twod_input_fn())
     # We expect the loss is larger than the loss without regularization.
@@ -200,8 +200,8 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTraining2DWithPerFeatureRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLatticeRegressor(
         ['x0', 'x1'],
@@ -216,10 +216,11 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTrainingMultiDimensionalFeature(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x', shape=(2,)),
+        tf.feature_column.numeric_column('x', shape=(2,)),
     ]
-    estimator = self._CalibratedLatticeRegressor(
-        ['x'], feature_columns, interpolation_type='hypercube')
+    estimator = self._CalibratedLatticeRegressor(['x'],
+                                                 feature_columns,
+                                                 interpolation_type='hypercube')
     estimator.train(input_fn=self._test_data.multid_feature_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.multid_feature_input_fn())
@@ -227,8 +228,9 @@ class CalibratedLatticeTest(test.TestCase):
 
     # Turn-off calibration for feature 'x', it should turn if off for both
     # dimensions, and the results should get much worse.
-    estimator = self._CalibratedLatticeRegressor(
-        ['x'], feature_columns, feature__x__num_keypoints=0)
+    estimator = self._CalibratedLatticeRegressor(['x'],
+                                                 feature_columns,
+                                                 feature__x__num_keypoints=0)
     estimator.train(input_fn=self._test_data.multid_feature_input_fn())
     results = estimator.evaluate(
         input_fn=self._test_data.multid_feature_input_fn())
@@ -236,8 +238,8 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeClassifierTraining(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLatticeClassifier(feature_columns)
     estimator.train(input_fn=self._test_data.twod_classificer_input_fn())
@@ -247,8 +249,8 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeClassifierTrainingWithCalibrationRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLatticeClassifier(
         feature_columns,
@@ -265,8 +267,8 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeClassifierTrainingWithLatticeRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLatticeClassifier(
         feature_columns,
@@ -286,8 +288,8 @@ class CalibratedLatticeTest(test.TestCase):
 
   def testCalibratedLatticeClassifierTrainingWithPerFeatureRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedLatticeClassifier(
         feature_columns,
@@ -326,15 +328,15 @@ class CalibratedLatticeTest(test.TestCase):
     training_y = np.array([[False], [True], [True], [False]])
     test_y = np.array([[False], [True], [True], [True]])
 
-    train_input_fn = numpy_io.numpy_input_fn(
+    train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=training_y, batch_size=4, num_epochs=1000, shuffle=False)
-    test_input_fn = numpy_io.numpy_input_fn(
+    test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=test_y, shuffle=False)
 
     # Define monotonic lattice classifier.
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
 
     def init_fn():
@@ -367,28 +369,27 @@ class CalibratedLatticeTest(test.TestCase):
     training_y = np.array([1., 3., 7., 11., 23., 27., 2., 9.])
     x_samples = {'x0': x0, 'x1': x1}
 
-    train_input_fn = numpy_io.numpy_input_fn(
+    train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples,
         y=training_y,
         batch_size=x0.shape[0],
         num_epochs=2000,
         shuffle=False)
-    test_input_fn = numpy_io.numpy_input_fn(
+    test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=training_y, shuffle=False)
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
 
     def init_fn():
       return keypoints_initialization.uniform_keypoints_for_signal(
           2, 0., 1., 0., 1.)
 
-    hparams = tfl_hparams.CalibratedLatticeHParams(
-        ['x0', 'x1'],
-        num_keypoints=2,
-        learning_rate=0.1,
-        missing_input_value=-1.)
+    hparams = tfl_hparams.CalibratedLatticeHParams(['x0', 'x1'],
+                                                   num_keypoints=2,
+                                                   learning_rate=0.1,
+                                                   missing_input_value=-1.)
     hparams.set_feature_param('x0', 'missing_vertex', True)
 
     estimator = calibrated_lattice.calibrated_lattice_regressor(
@@ -402,4 +403,4 @@ class CalibratedLatticeTest(test.TestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

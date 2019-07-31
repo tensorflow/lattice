@@ -161,7 +161,7 @@ def get_input_fn(file_path, batch_size, num_epochs, shuffle):
     _df_data[file_path] = _df_data[file_path].dropna(how="any", axis=0)
     _df_data_labels[file_path] = _df_data[file_path]["income_bracket"].apply(
         lambda x: ">50K" in x).astype(int)
-  return tf.estimator.inputs.pandas_input_fn(
+  return tf.compat.v1.estimator.inputs.pandas_input_fn(
       x=_df_data[file_path],
       y=_df_data_labels[file_path],
       batch_size=batch_size,

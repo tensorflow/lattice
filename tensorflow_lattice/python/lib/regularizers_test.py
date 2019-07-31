@@ -13,15 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 """Tests for TensorFlow Lattice's keypoints_initialization module."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
+
 from tensorflow_lattice.python.lib import regularizers
 
-from tensorflow.python.framework import dtypes
-from tensorflow.python.ops import array_ops
-from tensorflow.python.platform import test
 
-
-class CalibratorLaplacianTestCase(test.TestCase):
+class CalibratorLaplacianTestCase(tf.test.TestCase):
 
   def setUp(self):
     self._num_examples = 4
@@ -43,13 +45,13 @@ class CalibratorLaplacianTestCase(test.TestCase):
                          expected_value,
                          l1_reg=None,
                          l2_reg=None):
-    output_keypoints_tensor = array_ops.constant(
-        output_keypoints, dtype=dtypes.float32)
+    output_keypoints_tensor = tf.constant(
+        output_keypoints, dtype=tf.float32)
     reg = regularizers.calibrator_regularization(
         output_keypoints_tensor,
         l1_laplacian_reg=l1_reg,
         l2_laplacian_reg=l2_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -83,34 +85,34 @@ class CalibratorLaplacianTestCase(test.TestCase):
 
   def testRank2TensorExpectsError(self):
     """Pass rank-2 tensor output keypoints and check the error."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[10, 10])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[10, 10])
     with self.assertRaises(ValueError):
       regularizers.calibrator_regularization(output_keypoints_tensor)
 
   def testUnknownShapeTensorExpectsError(self):
     """Pass rank-1 tensor with unknown shape and check the error."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[None])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[None])
     with self.assertRaises(ValueError):
       regularizers.calibrator_regularization(output_keypoints_tensor)
 
   def testOneKeypointsExpectsNone(self):
     """Pass a tensor with one keypoints and check None regularizer."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[1])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[1])
     self.assertEqual(
         regularizers.calibrator_regularization(output_keypoints_tensor), None)
 
   def testNoRegularizerExpectsNone(self):
     """Set no l1_reg and l2_reg and check None regularizer."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[2])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[2])
     self.assertEqual(
         regularizers.calibrator_regularization(output_keypoints_tensor), None)
 
 
-class CalibratorHessianTestCase(test.TestCase):
+class CalibratorHessianTestCase(tf.test.TestCase):
 
   def setUp(self):
     self._num_examples = 4
@@ -132,11 +134,11 @@ class CalibratorHessianTestCase(test.TestCase):
                          expected_value,
                          l1_reg=None,
                          l2_reg=None):
-    output_keypoints_tensor = array_ops.constant(
-        output_keypoints, dtype=dtypes.float32)
+    output_keypoints_tensor = tf.constant(
+        output_keypoints, dtype=tf.float32)
     reg = regularizers.calibrator_regularization(
         output_keypoints_tensor, l1_hessian_reg=l1_reg, l2_hessian_reg=l2_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -170,34 +172,34 @@ class CalibratorHessianTestCase(test.TestCase):
 
   def testRank2TensorExpectsError(self):
     """Pass rank-2 tensor output keypoints and check the error."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[10, 10])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[10, 10])
     with self.assertRaises(ValueError):
       regularizers.calibrator_regularization(output_keypoints_tensor)
 
   def testUnknownShapeTensorExpectsError(self):
     """Pass rank-1 tensor with unknown shape and check the error."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[None])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[None])
     with self.assertRaises(ValueError):
       regularizers.calibrator_regularization(output_keypoints_tensor)
 
   def testTwoKeypointsExpectsNone(self):
     """Pass a tensor with one keypoints and check None regularizer."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[2])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[2])
     self.assertEqual(
         regularizers.calibrator_regularization(output_keypoints_tensor), None)
 
   def testNoRegularizerExpectsNone(self):
     """Set no l1_reg and l2_reg and check None regularizer."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[2])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[2])
     self.assertEqual(
         regularizers.calibrator_regularization(output_keypoints_tensor), None)
 
 
-class CalibratorWrinkleTestCase(test.TestCase):
+class CalibratorWrinkleTestCase(tf.test.TestCase):
 
   def setUp(self):
     self._num_examples = 4
@@ -219,11 +221,11 @@ class CalibratorWrinkleTestCase(test.TestCase):
                          expected_value,
                          l1_reg=None,
                          l2_reg=None):
-    output_keypoints_tensor = array_ops.constant(
-        output_keypoints, dtype=dtypes.float32)
+    output_keypoints_tensor = tf.constant(
+        output_keypoints, dtype=tf.float32)
     reg = regularizers.calibrator_regularization(
         output_keypoints_tensor, l1_wrinkle_reg=l1_reg, l2_wrinkle_reg=l2_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -257,34 +259,34 @@ class CalibratorWrinkleTestCase(test.TestCase):
 
   def testRank2TensorExpectsError(self):
     """Pass rank-2 tensor output keypoints and check the error."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[10, 10])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[10, 10])
     with self.assertRaises(ValueError):
       regularizers.calibrator_regularization(output_keypoints_tensor)
 
   def testUnknownShapeTensorExpectsError(self):
     """Pass rank-1 tensor with unknown shape and check the error."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[None])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[None])
     with self.assertRaises(ValueError):
       regularizers.calibrator_regularization(output_keypoints_tensor)
 
   def testTwoKeypointsExpectsNone(self):
     """Pass a tensor with one keypoints and check None regularizer."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[2])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[2])
     self.assertEqual(
         regularizers.calibrator_regularization(output_keypoints_tensor), None)
 
   def testNoRegularizerExpectsNone(self):
     """Set no l1_reg and l2_reg and check None regularizer."""
-    output_keypoints_tensor = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[2])
+    output_keypoints_tensor = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[2])
     self.assertEqual(
         regularizers.calibrator_regularization(output_keypoints_tensor), None)
 
 
-class CalibratorRegularizersTestCase(test.TestCase):
+class CalibratorRegularizersTestCase(tf.test.TestCase):
 
   def setUp(self):
     self._num_examples = 4
@@ -314,15 +316,15 @@ class CalibratorRegularizersTestCase(test.TestCase):
                          l2_reg=None,
                          l1_laplacian_reg=None,
                          l2_laplacian_reg=None):
-    output_keypoints_tensor = array_ops.constant(
-        output_keypoints, dtype=dtypes.float32)
+    output_keypoints_tensor = tf.constant(
+        output_keypoints, dtype=tf.float32)
     reg = regularizers.calibrator_regularization(
         output_keypoints_tensor,
         l1_reg=l1_reg,
         l2_reg=l2_reg,
         l1_laplacian_reg=l1_laplacian_reg,
         l2_laplacian_reg=l2_laplacian_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -374,7 +376,7 @@ class CalibratorRegularizersTestCase(test.TestCase):
           l2_laplacian_reg=l2_laplacian_reg)
 
 
-class LatticeLaplacianTestCase(test.TestCase):
+class LatticeLaplacianTestCase(tf.test.TestCase):
 
   def _runAndCheckValues(self,
                          lattice_param,
@@ -382,14 +384,14 @@ class LatticeLaplacianTestCase(test.TestCase):
                          expected_value,
                          l1_reg=None,
                          l2_reg=None):
-    lattice_param_tensor = array_ops.constant(
-        lattice_param, dtype=dtypes.float32)
+    lattice_param_tensor = tf.constant(
+        lattice_param, dtype=tf.float32)
     reg = regularizers.lattice_regularization(
         lattice_param_tensor,
         lattice_sizes,
         l1_laplacian_reg=l1_reg,
         l2_laplacian_reg=l2_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -634,14 +636,14 @@ class LatticeLaplacianTestCase(test.TestCase):
 
   def testNoRegularizerExpectsNone(self):
     """Set no l1_reg and l2_reg and check None regularizer."""
-    lattice_param = array_ops.placeholder(dtype=dtypes.float32, shape=[2, 4])
+    lattice_param = tf.compat.v1.placeholder(dtype=tf.float32, shape=[2, 4])
     lattice_sizes = [2, 2]
     self.assertEqual(
         None, regularizers.lattice_regularization(lattice_param, lattice_sizes))
 
   def testRank1TensorExpectsError(self):
     """Pass rank-1 lattice_param tensor and check the error."""
-    lattice_param = array_ops.placeholder(dtype=dtypes.float32, shape=[10])
+    lattice_param = tf.compat.v1.placeholder(dtype=tf.float32, shape=[10])
     lattice_sizes = [2, 5]
     with self.assertRaises(ValueError):
       regularizers.lattice_regularization(
@@ -649,8 +651,8 @@ class LatticeLaplacianTestCase(test.TestCase):
 
   def testUnknownShapeTensorExpectsError(self):
     """Pass rank-2 tensor with unknown shape and check the error."""
-    lattice_param = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[None, None])
+    lattice_param = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[None, None])
     lattice_sizes = [2, 2]
     with self.assertRaises(ValueError):
       regularizers.lattice_regularization(
@@ -658,7 +660,7 @@ class LatticeLaplacianTestCase(test.TestCase):
 
   def testWrongL1regularizationsExpectsError(self):
     # 2 x 2 lattice
-    lattice_param = array_ops.placeholder(dtype=dtypes.float32, shape=[2, 4])
+    lattice_param = tf.compat.v1.placeholder(dtype=tf.float32, shape=[2, 4])
     lattice_sizes = [2, 2]
     # Set 3 l1_regularizations for 2d lattice.
     l1_reg = [0.0, 1.0, 0.0]
@@ -668,7 +670,7 @@ class LatticeLaplacianTestCase(test.TestCase):
 
   def testWrongL2regularizationsExpectsError(self):
     # 2 x 2 lattice
-    lattice_param = array_ops.placeholder(dtype=dtypes.float32, shape=[4, 2])
+    lattice_param = tf.compat.v1.placeholder(dtype=tf.float32, shape=[4, 2])
     lattice_sizes = [2, 2]
     # Set 3 l2_regularizations for 2d lattice.
     l2_reg = [0.0, 1.0, 0.0]
@@ -677,7 +679,7 @@ class LatticeLaplacianTestCase(test.TestCase):
           lattice_param, lattice_sizes, l2_laplacian_reg=l2_reg)
 
 
-class LatticeTorsionTestCase(test.TestCase):
+class LatticeTorsionTestCase(tf.test.TestCase):
 
   def _runAndCheckValues(self,
                          lattice_param,
@@ -685,14 +687,14 @@ class LatticeTorsionTestCase(test.TestCase):
                          expected_value,
                          l1_reg=None,
                          l2_reg=None):
-    lattice_param_tensor = array_ops.constant(
-        lattice_param, dtype=dtypes.float32)
+    lattice_param_tensor = tf.constant(
+        lattice_param, dtype=tf.float32)
     reg = regularizers.lattice_regularization(
         lattice_param_tensor,
         lattice_sizes,
         l1_torsion_reg=l1_reg,
         l2_torsion_reg=l2_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -873,7 +875,7 @@ class LatticeTorsionTestCase(test.TestCase):
 
   def testRank1TensorExpectsError(self):
     """Pass rank-1 tensor and check the error."""
-    lattice_param = array_ops.placeholder(dtype=dtypes.float32, shape=[10])
+    lattice_param = tf.compat.v1.placeholder(dtype=tf.float32, shape=[10])
     lattice_sizes = [2, 5]
     with self.assertRaises(ValueError):
       regularizers.lattice_regularization(
@@ -881,15 +883,15 @@ class LatticeTorsionTestCase(test.TestCase):
 
   def testUnknownShapeTensorExpectsError(self):
     """Pass rank-2 tensor with unknown shape and check the error."""
-    lattice_param = array_ops.placeholder(
-        dtype=dtypes.float32, shape=[None, None])
+    lattice_param = tf.compat.v1.placeholder(
+        dtype=tf.float32, shape=[None, None])
     lattice_sizes = [2, 2]
     with self.assertRaises(ValueError):
       regularizers.lattice_regularization(
           lattice_param, lattice_sizes, l1_torsion_reg=1.0)
 
 
-class LatticeRegularizersTestCase(test.TestCase):
+class LatticeRegularizersTestCase(tf.test.TestCase):
 
   def setUp(self):
     super(LatticeRegularizersTestCase, self).setUp()
@@ -913,8 +915,8 @@ class LatticeRegularizersTestCase(test.TestCase):
                          l2_laplacian_reg=None,
                          l1_torsion_reg=None,
                          l2_torsion_reg=None):
-    lattice_param_tensor = array_ops.constant(
-        lattice_param, dtype=dtypes.float32)
+    lattice_param_tensor = tf.constant(
+        lattice_param, dtype=tf.float32)
     reg = regularizers.lattice_regularization(
         lattice_param_tensor,
         lattice_sizes,
@@ -924,7 +926,7 @@ class LatticeRegularizersTestCase(test.TestCase):
         l2_laplacian_reg=l2_laplacian_reg,
         l1_torsion_reg=l1_torsion_reg,
         l2_torsion_reg=l2_torsion_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -974,7 +976,7 @@ class LatticeRegularizersTestCase(test.TestCase):
         l2_torsion_reg=0.5)
 
 
-class LinearRegularizersTestCase(test.TestCase):
+class LinearRegularizersTestCase(tf.test.TestCase):
 
   def setUp(self):
     super(LinearRegularizersTestCase, self).setUp()
@@ -988,10 +990,10 @@ class LinearRegularizersTestCase(test.TestCase):
                          expected_value,
                          l1_reg=None,
                          l2_reg=None):
-    linear_param_tensor = array_ops.constant(linear_param, dtype=dtypes.float32)
+    linear_param_tensor = tf.constant(linear_param, dtype=tf.float32)
     reg = regularizers.linear_regularization(
         linear_param_tensor, l1_reg=l1_reg, l2_reg=l2_reg)
-    with self.test_session() as sess:
+    with self.session() as sess:
       reg_value = sess.run(reg)
     self.assertAlmostEqual(reg_value, expected_value, delta=1e-1)
 
@@ -1016,4 +1018,4 @@ class LinearRegularizersTestCase(test.TestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

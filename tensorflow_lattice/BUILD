@@ -14,13 +14,13 @@
 # ==============================================================================
 licenses(["notice"])  # Apache 2.0 License
 
-exports_files(["LICENSE"])
-
 package(
     default_visibility = [
         "//visibility:public",
     ],
 )
+
+exports_files(["LICENSE"])
 
 py_library(
     name = "tensorflow_lattice",

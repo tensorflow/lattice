@@ -12,10 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/contrib/lite/context.h"
-#include "tensorflow/contrib/lite/op_resolver.h"
 #include "tensorflow_lattice/cc/tflite_ops/tflite_ops.h"
-
+#include "tensorflow/lite/context.h"
+#include "tensorflow/lite/op_resolver.h"
 
 namespace tflite {
 

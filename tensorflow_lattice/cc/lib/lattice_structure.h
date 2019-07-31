@@ -103,7 +103,7 @@ class LatticeStructure {
   //   0 ----- 1 ----- 2 ----- 3 ----- 4----x1
   //
   // where the number at each vertex is the global index of each vertex. Each
-  // cell is a square with the wdith 1. So the coordinate representation of
+  // cell is a square with the width 1. So the coordinate representation of
   // 0-indexed vertex is (0, 0), 1-indexed vertex is (1, 0), and 14-indexed
   // vertex is (4, 2).
   // Let x be the input vector, located at (2.5, 1.8). In this case, the

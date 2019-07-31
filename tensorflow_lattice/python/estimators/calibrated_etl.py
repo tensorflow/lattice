@@ -13,9 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedEtl canned estimators."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import copy
 
-# Dependency imports
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
@@ -25,9 +30,6 @@ from tensorflow_lattice.python.lib import monotone_linear_layers
 from tensorflow_lattice.python.lib import pwl_calibration_layers
 from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
-
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variable_scope
 
 _EPSILON = 1e-7
 
@@ -175,7 +177,7 @@ def _embedded_lattices(calibrated_input_tensor,
 
   if is_monotone is not None:
     is_monotone = tools.cast_to_list(is_monotone, input_dim, 'is_monotone')
-  with variable_scope.variable_scope('linear_embedding'):
+  with tf.compat.v1.variable_scope('linear_embedding'):
     packed_results = monotone_linear_layers.split_monotone_linear_layer(
         calibrated_input_tensor,
         input_dim,
@@ -190,7 +192,7 @@ def _embedded_lattices(calibrated_input_tensor,
   if monotonic_num_lattices == 0:
     m_lattice_outputs = None
   else:
-    with variable_scope.variable_scope('monotonic_lattices'):
+    with tf.compat.v1.variable_scope('monotonic_lattices'):
       m_lattice_outputs, projs, reg = _ensemble_lattices_layer(
           monotonic_output,
           monotonic_embedding_dim,
@@ -216,7 +218,7 @@ def _embedded_lattices(calibrated_input_tensor,
   if non_monotonic_num_lattices == 0:
     n_lattice_outputs = None
   else:
-    with variable_scope.variable_scope('non_monotonic_lattices'):
+    with tf.compat.v1.variable_scope('non_monotonic_lattices'):
       n_lattice_outputs, projs, reg = _ensemble_lattices_layer(
           non_monotonic_output,
           non_monotonic_embedding_dim,
@@ -235,17 +237,17 @@ def _embedded_lattices(calibrated_input_tensor,
       regularization = tools.add_if_not_none(regularization, reg)
 
   # Step 4. Take average to make a final prediction.
-  with variable_scope.variable_scope('ensemble_average'):
-    output = variable_scope.get_variable(
+  with tf.compat.v1.variable_scope('ensemble_average'):
+    output = tf.compat.v1.get_variable(
         name='ensemble_bias',
         initializer=[0.0] * output_dim,
         dtype=calibrated_input_tensor.dtype)
     if m_lattice_outputs:
-      output += math_ops.divide(
-          math_ops.add_n(m_lattice_outputs), monotonic_num_lattices)
+      output = output + tf.divide(
+          tf.add_n(m_lattice_outputs), monotonic_num_lattices)
     if n_lattice_outputs is not None:
-      output += math_ops.divide(
-          math_ops.add_n(n_lattice_outputs), non_monotonic_num_lattices)
+      output = output + tf.divide(
+          tf.add_n(n_lattice_outputs), non_monotonic_num_lattices)
 
   return (output, projections, regularization)
 

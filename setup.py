@@ -27,12 +27,13 @@ from setuptools.command.install import install as InstallCommandBase
 from setuptools.dist import Distribution
 
 
-__version__ = '0.9.8'
+__version__ = '0.9.9'
 
 
 REQUIRED_PACKAGES = [
     'six >= 1.11.0',
-    'protobuf >= 3.6.0',
+    'protobuf >= 3.6.1',
+    'numpy >= 1.14.5',
 ]
 
 
@@ -45,10 +46,10 @@ else:
 
 if use_gpu:
   project_name = 'tensorflow-lattice-gpu'
-  REQUIRED_PACKAGES.append('tensorflow-gpu==1.11.0')
+  REQUIRED_PACKAGES.append('tensorflow-gpu==1.14.0')
 else:
   project_name = 'tensorflow-lattice'
-  REQUIRED_PACKAGES.append('tensorflow==1.11.0')
+  REQUIRED_PACKAGES.append('tensorflow==1.14.0')
 
 CONSOLE_SCRIPTS = [
     'freeze_graph_wrapper = '

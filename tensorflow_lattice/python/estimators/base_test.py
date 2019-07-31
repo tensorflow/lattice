@@ -13,18 +13,16 @@
 # limitations under the License.
 # ==============================================================================
 """Base estimator is tested with a simple linear model implementation."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import six
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import base
 from tensorflow_lattice.python.lib import test_data
-
-from tensorflow.python.feature_column import feature_column as feature_column_lib
-from tensorflow.python.framework import test_util
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variable_scope
-from tensorflow.python.platform import test
 
 
 class _BaseLinear(base.Base):
@@ -49,23 +47,21 @@ class _BaseLinear(base.Base):
       if tensor.shape.ndims == 1:
         unstacked_inputs.append(tensor)
       elif tensor.shape.ndims == 2:
-        unstacked_inputs.extend(array_ops.unstack(tensor, axis=1))
-    input_tensor = array_ops.stack(unstacked_inputs, axis=1, name='stack')
-    weights = variable_scope.get_variable(
+        unstacked_inputs.extend(tf.unstack(tensor, axis=1))
+    input_tensor = tf.stack(unstacked_inputs, axis=1, name='stack')
+    weights = tf.compat.v1.get_variable(
         'weights',
-        initializer=array_ops.zeros(
-            shape=[len(unstacked_inputs), 1], dtype=dtype))
-    prediction = array_ops.reshape(
-        math_ops.tensordot(input_tensor, weights, axes=1, name='tensordot'),
-        [-1, 1])
+        initializer=tf.zeros(shape=[len(unstacked_inputs), 1], dtype=dtype))
+    prediction = tf.reshape(
+        tf.tensordot(input_tensor, weights, axes=1, name='tensordot'), [-1, 1])
     # Add ridge regularizer.
-    regularization = math_ops.reduce_sum(math_ops.square(weights))
+    regularization = tf.reduce_sum(tf.square(weights))
     # Add a projection that forces the weight vector to be 0.
     projeciton_ops = [weights.assign_sub(weights)]
     return prediction, projeciton_ops, regularization
 
 
-class BaseTest(test_util.TensorFlowTestCase):
+class BaseTest(tf.test.TestCase):
 
   def setUp(self):
     super(BaseTest, self).setUp()
@@ -85,16 +81,16 @@ class BaseTest(test_util.TensorFlowTestCase):
 
   def testBaseLinearRegressorTraining1D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
     self._TestRegressor(feature_columns, self._test_data.oned_input_fn())
 
   def testBaseLinearRegressorTraining3D(self):
     # Tests also a categorical feature with vocabulary list.
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
-        feature_column_lib.categorical_column_with_vocabulary_list(
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
+        tf.feature_column.categorical_column_with_vocabulary_list(
             'x2', ['Y', 'N'])
     ]
     self._TestRegressor(feature_columns,
@@ -102,19 +98,19 @@ class BaseTest(test_util.TensorFlowTestCase):
 
   def testBaseLinearRegressorTrainingMultiDimensionalFeature(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x', shape=(2,)),
+        tf.feature_column.numeric_column('x', shape=(2,)),
     ]
     self._TestRegressor(feature_columns,
                         self._test_data.multid_feature_input_fn())
 
   def testBaseLinearClassifierTraining(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     self._TestCalssifier(feature_columns,
                          self._test_data.twod_classificer_input_fn())
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

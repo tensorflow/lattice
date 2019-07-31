@@ -14,84 +14,82 @@
 # ==============================================================================
 """Tests for TensorFlow Lattice's keypoints_initialization module."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import math
 import os
 
-# Dependency imports
+from absl.testing import parameterized
 import numpy as np
+import tensorflow as tf
+
 from tensorflow_lattice.python.lib import keypoints_initialization
 
-from tensorflow.python.estimator.inputs import numpy_io
-from tensorflow.python.feature_column import feature_column as feature_column_lib
-from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import errors
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.platform import test
 
-
-class KeypointsInitializationTestCase(test.TestCase):
-
-  def setUp(self):
-    super(KeypointsInitializationTestCase, self).setUp()
+class KeypointsInitializationTestCase(tf.test.TestCase, parameterized.TestCase):
 
   def testMaterializeLocally(self):
     num_examples = 100
     x = np.random.uniform(0.0, 1.0, size=num_examples)
 
     # Read to the end of a number of epochs.
-    input_fn = numpy_io.numpy_input_fn(
+    input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x}, batch_size=13, num_epochs=1, shuffle=False)
     results = keypoints_initialization._materialize_locally(
         tensors=input_fn(), num_steps=None)
-    self.assertEqual(len(results['x']), num_examples)
-    input_fn = numpy_io.numpy_input_fn(
+    self.assertLen(results['x'], num_examples)
+    input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x}, batch_size=13, num_epochs=2, shuffle=False)
     results = keypoints_initialization._materialize_locally(
         tensors=input_fn(), num_steps=None)
-    self.assertEqual(len(results['x']), 2 * num_examples)
+    self.assertLen(results['x'], 2 * num_examples)
 
     # Read a certain number of steps: just enough to read all data (last
     # batch will only be partially fulfilled).
-    input_fn = numpy_io.numpy_input_fn(
+    input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x}, batch_size=13, num_epochs=1, shuffle=False)
     results = keypoints_initialization._materialize_locally(
         tensors=input_fn(), num_steps=1)
-    self.assertEqual(len(results['x']), 13)
+    self.assertLen(results['x'], 13)
 
-    input_fn = numpy_io.numpy_input_fn(
+    input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x}, batch_size=13, num_epochs=1, shuffle=False)
     results = keypoints_initialization._materialize_locally(
         tensors=input_fn(), num_steps=8)
-    self.assertEqual(len(results['x']), num_examples)
+    self.assertLen(results['x'], num_examples)
 
     # Try to read beyond end of input, with num_steps set.
-    input_fn = numpy_io.numpy_input_fn(
+    input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x}, batch_size=13, num_epochs=1, shuffle=False)
-    with self.assertRaises(errors.OutOfRangeError):
+    with self.assertRaises(tf.errors.OutOfRangeError):
       results = keypoints_initialization._materialize_locally(
           tensors=input_fn(), num_steps=100)
 
     # Try to read beyond safety limit.
-    input_fn = numpy_io.numpy_input_fn(
+    input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x={'x': x}, batch_size=13, num_epochs=None, shuffle=False)
     with self.assertRaises(ValueError):
       results = keypoints_initialization._materialize_locally(
           tensors=input_fn(), num_steps=None, safety_size=1000)
 
-  def _BuildInputs(self, x0, x1, x2):
+  def _BuildInputs(self, x0, x1, x2, label=None):
     """Returns input_fn, feature_names and feature_columns."""
 
     def _input_fn():
-      return ({
-          'x0': array_ops.constant(x0, dtype=dtypes.float32),
-          'x1': array_ops.constant(x1, dtype=dtypes.float32),
-          'x2': array_ops.constant(x2, dtype=dtypes.float32),
-      }, None)
+      features = {
+          'x0': tf.constant(x0, dtype=tf.float32),
+          'x1': tf.constant(x1, dtype=tf.float32),
+          'x2': tf.constant(x2, dtype=tf.float32),
+      }
+      if label is None:
+        return features, None
+      return features, tf.constant(label, dtype=tf.float32)
 
     feature_names = ['x0', 'x1', 'x2']
     feature_columns = set(
-        [feature_column_lib.numeric_column(key=fn) for fn in feature_names])
+        [tf.feature_column.numeric_column(key=fn) for fn in feature_names])
     return _input_fn, feature_names, feature_columns
 
   def _CheckSaveQuantilesForKeypoints(self, name, num_examples, num_steps, x0,
@@ -124,9 +122,9 @@ class KeypointsInitializationTestCase(test.TestCase):
     self.assertAllClose(quantiles_x2[-2:], [1., 1.], atol=1e-3)
 
     # New graph is needed because default graph is changed by save
-    # keypoints, and self.test_session() will by default try to reuse a cached
+    # keypoints, and self.session() will by default try to reuse a cached
     # session, with a different graph.
-    with ops.Graph().as_default() as g:
+    with tf.Graph().as_default() as g:
       # Check by using load_keypoints_from_quantiles.
       keypoints_init = keypoints_initialization.load_keypoints_from_quantiles(
           feature_names,
@@ -142,7 +140,7 @@ class KeypointsInitializationTestCase(test.TestCase):
               'x1': 10.,
               'x2': 13.
           })
-      with self.test_session(graph=g) as sess:
+      with self.session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
     self.assertAllClose(keypoints_init['x0'][0], [0, 5.**2, 100.], atol=0.2)
     self.assertAllClose(keypoints_init['x0'][1], [0., 0.5, 1.])
@@ -156,7 +154,7 @@ class KeypointsInitializationTestCase(test.TestCase):
 
     # Check that load_keypoints_from_quantiles don't generate anything
     # if num_keypoints is 0 or unset.
-    with ops.Graph().as_default() as g:
+    with tf.Graph().as_default() as g:
       # Check by using load_keypoints_from_quantiles.
       keypoints_init = keypoints_initialization.load_keypoints_from_quantiles(
           feature_names,
@@ -175,11 +173,11 @@ class KeypointsInitializationTestCase(test.TestCase):
               'x1': 10.,
               'x2': 13.
           })
-      with self.test_session(graph=g) as sess:
+      with self.session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
-    self.assertTrue('x0' in keypoints_init)
-    self.assertTrue('x2' in keypoints_init)
-    self.assertTrue('x1' not in keypoints_init)
+    self.assertIn('x0', keypoints_init)
+    self.assertIn('x2', keypoints_init)
+    self.assertNotIn('x1', keypoints_init)
 
   def testSaveQuantilesForKeypoints(self):
     """Tests quantiles are being calculated correctly."""
@@ -244,6 +242,108 @@ class KeypointsInitializationTestCase(test.TestCase):
         use_feature_columns=False,
         override=True)
 
+  def testSaveQuantilesForKeypointsSavingLabelQuantiles(self):
+    input_fn, unused_feature_names, unused_feature_columns = self._BuildInputs(
+        x0=[0], x1=[0], x2=[0], label=np.random.uniform(0.0, 100.0, 100000))
+    save_dir = os.path.join(self.get_temp_dir(),
+                            'save_quantiles_for_keypoints_saving_labels')
+    keypoints_initialization.save_quantiles_for_keypoints(
+        input_fn, save_dir, override=True, num_quantiles=5)
+    subdir = os.path.join(save_dir,
+                          keypoints_initialization._QUANTILES_SUBDIRECTORY)
+    quantiles = keypoints_initialization._load_quantiles(
+        subdir, keypoints_initialization._LABEL_FEATURE_NAME)
+    self.assertAllClose(
+        np.linspace(0, 100.0, 5),
+        quantiles,
+        atol=0.2,
+        msg=('quantiles saved by save_quantiles_for_keypoints() do not much'
+             ' expected quantiles'))
+
+  def testLoadKeypointsFromQuantilesLoadingLabelQuantiles(self):
+    input_fn, unused_feature_names, unused_feature_columns = self._BuildInputs(
+        x0=np.random.uniform(0.0, 2.0, 100000),
+        x1=[0],
+        x2=[0],
+        label=np.random.uniform(0.0, 100.0, 100000))
+    save_dir = os.path.join(
+        self.get_temp_dir(),
+        'load_keypoints_from_quantiles_loading_label_quantiles')
+    keypoints_initialization.save_quantiles_for_keypoints(
+        input_fn, save_dir, override=True)
+    with tf.Graph().as_default() as g, self.session(graph=g) as session:
+      result = keypoints_initialization.load_keypoints_from_quantiles(
+          feature_names=['x0'],
+          save_dir=save_dir,
+          num_keypoints=5,
+          use_label_quantiles_for_outputs=True)
+      result = session.run(result)
+    self.assertAllClose(
+        {
+            'x0': [
+                np.array([0.0, 0.5, 1.0, 1.5, 2.0]),
+                np.array([0.0, 25.0, 50.0, 75.0, 100.0])
+            ]
+        },
+        result,
+        atol=0.2,
+        msg='load_keypoints_from_quantiles didn\'t produce expected labels')
+
+  @parameterized.named_parameters(
+      {
+          'testcase_name': 'both_output_and_label_quantiles',
+          'msg': ('Expected an exception when both output_min, output_max are '
+                  'given and use_label_quantiles_for_outputs is True'),
+          'use_label_quantiles_for_outputs': True,
+          'output_min': 0.0,
+          'output_max': 1.0
+      }, {
+          'testcase_name': 'output_min_and_not_output_max',
+          'msg':
+              ('Expected an exception when output_min is given and output_max'
+               ' isn\'t'),
+          'use_label_quantiles_for_outputs': True,
+          'output_min': 0.0,
+          'output_max': None
+      }, {
+          'testcase_name': 'output_max_and_not_output_min',
+          'msg':
+              ('Expected an exception when output_max is given and output_min'
+               ' isn\'t'),
+          'use_label_quantiles_for_outputs': True,
+          'output_min': None,
+          'output_max': 1.0
+      }, {
+          'testcase_name': 'neither_output_nor_label_quantiles',
+          'msg':
+              ('Expected an exception when output_min, output_max are not given'
+               ' and use_label_quantiles_for_outputs is False'),
+          'use_label_quantiles_for_outputs': False,
+          'output_min': None,
+          'output_max': None
+      })
+  def testLoadKeypointsFromQuantilesRaises(self,
+                                           use_label_quantiles_for_outputs,
+                                           output_min, output_max, msg):
+    input_fn, unused_feature_names, unused_feature_columns = self._BuildInputs(
+        x0=np.random.uniform(0.0, 2.0, 100000),
+        x1=[0],
+        x2=[0],
+        label=np.random.uniform(0.0, 100.0, 100000))
+    save_dir = os.path.join(
+        self.get_temp_dir(),
+        'load_keypoints_from_quantiles_loading_label_quantiles')
+    keypoints_initialization.save_quantiles_for_keypoints(
+        input_fn, save_dir, override=True)
+    with self.assertRaises(ValueError, msg=msg):
+      keypoints_initialization.load_keypoints_from_quantiles(
+          use_label_quantiles_for_outputs=use_label_quantiles_for_outputs,
+          output_min=output_min,
+          output_max=output_max,
+          feature_names=['x0'],
+          save_dir=save_dir,
+          num_keypoints=5)
+
   def testQuantileInitWithReversedDict(self):
     num_examples = 100
     x0 = np.linspace(0.0, 10.0, num_examples)
@@ -260,7 +360,7 @@ class KeypointsInitializationTestCase(test.TestCase):
         override=True)
     reversed_dict = {'x0': False, 'x1': True, 'x2': False}
 
-    with ops.Graph().as_default() as g:
+    with tf.Graph().as_default() as g:
       # Check by using load_keypoints_from_quantiles.
       keypoints_init = keypoints_initialization.load_keypoints_from_quantiles(
           feature_names,
@@ -277,7 +377,7 @@ class KeypointsInitializationTestCase(test.TestCase):
               'x2': 1.
           },
           reversed_dict=reversed_dict)
-      with self.test_session(graph=g) as sess:
+      with self.session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
 
     self.assertAllClose(keypoints_init['x0'][0], [0.0, 5.0, 10.0], atol=0.1)
@@ -302,7 +402,7 @@ class KeypointsInitializationTestCase(test.TestCase):
         num_quantiles=num_examples,
         override=True)
 
-    with ops.Graph().as_default() as g:
+    with tf.Graph().as_default() as g:
       # Check by using load_keypoints_from_quantiles.
       keypoints_init = keypoints_initialization.load_keypoints_from_quantiles(
           feature_names,
@@ -324,7 +424,7 @@ class KeypointsInitializationTestCase(test.TestCase):
               'x2': None
           },
       )
-      with self.test_session(graph=g) as sess:
+      with self.session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
 
     self.assertAllClose(keypoints_init['x0'][0], [-0.778, 0.111, 1.0], atol=0.1)
@@ -336,23 +436,45 @@ class KeypointsInitializationTestCase(test.TestCase):
 
   def testUniformKeypointsForSignal(self):
     # New graph is needed because default graph is changed by save
-    # keypoints, and self.test_session() will by default try to reuse a cached
+    # keypoints, and self.session() will by default try to reuse a cached
     # session, with a different graph.
-    with ops.Graph().as_default() as g:
+    with tf.Graph().as_default() as g:
       keypoints_init = keypoints_initialization.uniform_keypoints_for_signal(
           num_keypoints=5,
-          input_min=array_ops.constant(0.0, dtype=dtypes.float64),
-          input_max=array_ops.constant(1.0, dtype=dtypes.float64),
+          input_min=tf.constant(0.0, dtype=tf.float64),
+          input_max=tf.constant(1.0, dtype=tf.float64),
           output_min=10,
           output_max=100,
-          dtype=dtypes.float64)
-      self.assertEqual(keypoints_init[0].dtype, dtypes.float64)
-      self.assertEqual(keypoints_init[1].dtype, dtypes.float64)
-      with self.test_session(graph=g) as sess:
+          dtype=tf.float64)
+      self.assertEqual(keypoints_init[0].dtype, tf.float64)
+      self.assertEqual(keypoints_init[1].dtype, tf.float64)
+      with self.session(graph=g) as sess:
         keypoints_init = sess.run(keypoints_init)
         self.assertAllClose(keypoints_init[0], [0., 0.25, 0.5, 0.75, 1.])
         self.assertAllClose(keypoints_init[1], [10., 32.5, 55., 77.5, 100.])
 
+  def testSaveQuantilesForKeypointsOnce(self):
+    """Verifies that save_quantiles_for_keypoints_once doesn't raise exceptions.
+
+    We don't test anything else here since save_quantiles_for_keypoints_once
+    is a thin wrapper around save_once_or_wait_for_chief which is already
+    tested.
+    """
+    num_examples = 10
+    x0 = np.linspace(-1.0, 1.0, num_examples)
+    x1 = np.linspace(0.0, 1.0, num_examples)
+    x2 = np.linspace(0.0, 1.0, num_examples)
+
+    input_fn, _, feature_columns = self._BuildInputs(x0, x1, x2)
+    save_dir = os.path.join(self.get_temp_dir(), 'exclude_input_values_dict')
+    keypoints_initialization.save_quantiles_for_keypoints_once(
+        input_fn,
+        save_dir,
+        is_chief=True,
+        feature_columns=feature_columns,
+        num_quantiles=num_examples,
+        override=True)
+
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()

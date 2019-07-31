@@ -34,7 +34,7 @@ def rpath_linkopts(name):
     """
     levels_to_root = native.package_name().count("/") + name.count("/")
     return select({
-        "@org_tensorflow//tensorflow:darwin": [
+        "@org_tensorflow//tensorflow:macos": [
             "-Wl,%s" % (_add_tf_search_path("@loader_path", levels_to_root),),
         ],
         "//conditions:default": [

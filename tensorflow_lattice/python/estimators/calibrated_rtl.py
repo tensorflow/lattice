@@ -13,23 +13,24 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedRtl canned estimators."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import copy
 import os
 import random
 
 # Dependency imports
-
 import six
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import lattice_layers
 from tensorflow_lattice.python.lib import regularizers
-
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variables
+from tensorflow.python.lib.io import file_io  # pylint: disable=g-direct-tensorflow-import
 
 _EPSILON = 1e-7
 
@@ -308,11 +309,11 @@ class _CalibratedRtl(calibrated_lib.Calibrated):
         **regularizer_amounts)
     (output_tensors, _, projection_ops, regularization) = packed_results
     # Take an average of output_tensors and add bias.
-    output_tensor = array_ops.stack(
+    output_tensor = tf.stack(
         output_tensors, axis=0, name='stacked_output')
-    ensemble_output = math_ops.reduce_mean(output_tensor, axis=0)
+    ensemble_output = tf.reduce_mean(output_tensor, axis=0)
     ensemble_bias_init = hparams.get_param('ensemble_bias')
-    b = variables.Variable([ensemble_bias_init], name='ensemble_bias')
+    b = tf.Variable([ensemble_bias_init], name='ensemble_bias')
     prediction = ensemble_output + b
 
     # Returns prediction Tensor, projection ops, and regularization.

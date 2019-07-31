@@ -13,20 +13,23 @@
 # limitations under the License.
 # ==============================================================================
 """SeparatelyCalibratedRtl canned estimators."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import copy
 import os
 import random
 
 # Dependency imports
-
 import six
 
 from tensorflow_lattice.python.estimators import calibrated as calibrated_lib
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import lattice_layers
 from tensorflow_lattice.python.lib import regularizers
-
-from tensorflow.python.lib.io import file_io
+from tensorflow.python.lib.io import file_io  # pylint: disable=g-direct-tensorflow-import
 
 _EPSILON = 1e-7
 

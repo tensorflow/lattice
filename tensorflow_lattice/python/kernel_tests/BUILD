@@ -24,6 +24,7 @@ py_test(
     name = "pwl_calibration_test",
     size = "medium",
     srcs = ["pwl_calibration_test.py"],
+    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         "@org_tensorflow//tensorflow:tensorflow_py",
@@ -35,6 +36,7 @@ py_test(
     name = "lattice_gradient_test",
     size = "medium",
     srcs = ["lattice_gradient_test.py"],
+    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         "@org_tensorflow//third_party/py/numpy",

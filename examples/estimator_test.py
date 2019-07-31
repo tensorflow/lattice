@@ -50,13 +50,11 @@ x1 = np.random.uniform(-1.0, 1.0, size=num_examples)
 y = x0 ** 2 + x1 ** 2
 
 # Example input function.
-twod_input_fn = tf.estimator.inputs.numpy_input_fn(
-    x={'x0': x0,
-       'x1': x1},
-    y=y,
-    batch_size=10,
-    num_epochs=1,
-    shuffle=False)
+twod_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
+    x={
+        'x0': x0,
+        'x1': x1
+    }, y=y, batch_size=10, num_epochs=1, shuffle=False)
 
 # Train!
 rtl_estimator.train(input_fn=twod_input_fn)

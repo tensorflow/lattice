@@ -20,17 +20,19 @@ models.
 This modules provides functions used when building models, as opposed to the
 basic operators exported by lattice_ops.py
 """
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import functools
+
+import tensorflow as tf
 
 from tensorflow_lattice.python.lib import regularizers
 from tensorflow_lattice.python.lib import tools
 from tensorflow_lattice.python.ops import lattice_ops
 from tensorflow_lattice.python.ops.gen_monotone_lattice import monotone_lattice
-
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variable_scope
 
 _VALID_INTERPOLATION_TYPES = ['hypercube', 'simplex']
 
@@ -129,8 +131,8 @@ def lattice_param_as_linear(lattice_sizes, output_dim, linear_weights=1.0):
     for (idx, vertex) in tools.lattice_indices_generator(lattice_structure):
       for dim in range(lattice_rank):
         lattice_parameter[idx] += (
-            linear_weight_per_output[dim] * float(vertex[dim]) / float(
-                lattice_rank * (lattice_sizes[dim] - 1)))
+            linear_weight_per_output[dim] * float(vertex[dim]) /
+            float(lattice_rank * (lattice_sizes[dim] - 1)))
     lattice_parameters.append(lattice_parameter)
 
   return lattice_parameters
@@ -252,7 +254,7 @@ def lattice_layer(input_tensor,
     lattice_initializer = lattice_param_as_linear(
         lattice_sizes, output_dim, linear_weights=linear_weights)
 
-  parameter_tensor = variable_scope.get_variable(
+  parameter_tensor = tf.compat.v1.get_variable(
       interpolation_type + '_lattice_parameters',
       initializer=lattice_initializer)
 
@@ -262,7 +264,7 @@ def lattice_layer(input_tensor,
       lattice_sizes,
       interpolation_type=interpolation_type)
 
-  with ops.name_scope('lattice_monotonic_projection'):
+  with tf.name_scope('lattice_monotonic_projection'):
     if is_monotone or output_min is not None or output_max is not None:
       projected_parameter_tensor = parameter_tensor
       if is_monotone:
@@ -274,19 +276,19 @@ def lattice_layer(input_tensor,
             is_monotone=is_monotone)
 
       if output_min is not None:
-        projected_parameter_tensor = math_ops.maximum(
-            projected_parameter_tensor, output_min)
+        projected_parameter_tensor = tf.maximum(projected_parameter_tensor,
+                                                output_min)
 
       if output_max is not None:
-        projected_parameter_tensor = math_ops.minimum(
-            projected_parameter_tensor, output_max)
+        projected_parameter_tensor = tf.minimum(projected_parameter_tensor,
+                                                output_max)
 
       delta = projected_parameter_tensor - parameter_tensor
       projection_ops = [parameter_tensor.assign_add(delta)]
     else:
       projection_ops = None
 
-  with ops.name_scope('lattice_regularization'):
+  with tf.name_scope('lattice_regularization'):
     reg = regularizers.lattice_regularization(parameter_tensor, lattice_sizes,
                                               **regularizer_amounts)
 
@@ -352,7 +354,7 @@ def ensemble_lattices_layer(input_tensor,
           regularizer_name)
 
   # input_slices[k] = input_tensor[:, k].
-  input_slices = array_ops.unstack(input_tensor, axis=1)
+  input_slices = tf.unstack(input_tensor, axis=1)
 
   output_tensors = []
   param_tensors = []
@@ -364,7 +366,7 @@ def ensemble_lattices_layer(input_tensor,
   # Now iterate through structure_indices to construct lattices.
   get_indices = lambda indices, iterable: [iterable[index] for index in indices]
   for (cnt, structure) in enumerate(structure_indices):
-    with variable_scope.variable_scope('lattice_%d' % cnt):
+    with tf.compat.v1.variable_scope('lattice_%d' % cnt):
       sub = functools.partial(get_indices, structure)
       sub_lattice_sizes = sub(lattice_sizes)
       sub_is_monotone = None
@@ -372,7 +374,7 @@ def ensemble_lattices_layer(input_tensor,
         sub_is_monotone = sub(is_monotone)
 
       sub_input_tensor_list = sub(input_slices)
-      sub_input_tensor = array_ops.stack(sub_input_tensor_list, axis=1)
+      sub_input_tensor = tf.stack(sub_input_tensor_list, axis=1)
 
       sub_regularizer_amounts = {}
       for regularizer_name in regularizer_amounts:

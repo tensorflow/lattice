@@ -13,10 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 """A quick test script for TensorFlow Lattice's lattice layer."""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import tensorflow as tf
 import tensorflow_lattice as tfl
 
-x = tf.placeholder(tf.float32, shape=(None, 2))
+x = tf.compat.v1.placeholder(tf.float32, shape=(None, 2))
 (y, _, _, _) = tfl.lattice_layer(x, lattice_sizes=(2, 2))
 
 with tf.Session() as sess:

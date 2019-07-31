@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """TensorFlow Lattice tf.estimators."""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function

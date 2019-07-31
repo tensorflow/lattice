@@ -20,8 +20,8 @@ from __future__ import print_function
 
 import copy
 
-# Dependency imports
 import tensorflow as tf
+
 from tensorflow_lattice.python.lib import tools
 
 

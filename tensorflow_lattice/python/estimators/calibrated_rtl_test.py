@@ -13,25 +13,26 @@
 # limitations under the License.
 # ==============================================================================
 """CalibratedRtl provide canned estimators."""
-# Dependency imports
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import numpy as np
+import tensorflow as tf
 
 from tensorflow_lattice.python.estimators import calibrated_rtl
 from tensorflow_lattice.python.estimators import hparams as tfl_hparams
 from tensorflow_lattice.python.lib import keypoints_initialization
 from tensorflow_lattice.python.lib import test_data
 
-from tensorflow.python.estimator.inputs import numpy_io
-from tensorflow.python.feature_column import feature_column_lib
-from tensorflow.python.platform import test
-
 _NUM_KEYPOINTS = 50
 
 
-class CalibratedRtlHParamsTest(test.TestCase):
+class CalibratedRtlHParamsTest(tf.test.TestCase):
 
   def setUp(self):
+    super(CalibratedRtlHParamsTest, self).setUp()
     self.hparams = tfl_hparams.CalibratedRtlHParams(feature_names=['x'])
     self.hparams.set_param('lattice_size', 2)
     self.hparams.set_param('calibrator_output_min', 0)
@@ -99,7 +100,7 @@ class CalibratedRtlHParamsTest(test.TestCase):
         'estimator.', self.empty_estimator.check_hparams, self.hparams)
 
 
-class CalibratedRtlTest(test.TestCase):
+class CalibratedRtlTest(tf.test.TestCase):
 
   def setUp(self):
     super(CalibratedRtlTest, self).setUp()
@@ -160,7 +161,7 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlRegressorTraining1D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x'),
+        tf.feature_column.numeric_column('x'),
     ]
     estimator = self._CalibratedRtlRegressor(
         ['x'], feature_columns, num_lattices=3, lattice_rank=1)
@@ -169,8 +170,8 @@ class CalibratedRtlTest(test.TestCase):
     self.assertLess(results['average_loss'], 1e-3)
 
   def testCalibratedRtlRegressorWeightedTraining1D(self):
-    feature_columns = [feature_column_lib.numeric_column('x')]
-    weight_column = feature_column_lib.numeric_column('zero')
+    feature_columns = [tf.feature_column.numeric_column('x')]
+    weight_column = tf.feature_column.numeric_column('zero')
     estimator = self._CalibratedRtlRegressor(
         ['x'], feature_columns, weight_column=weight_column)
     estimator.train(input_fn=self._test_data.oned_zero_weight_input_fn())
@@ -181,8 +182,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlRegressorTraining2D(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlRegressor(
         ['x0', 'x1'], feature_columns, num_lattices=3, lattice_rank=2)
@@ -192,8 +193,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlRegressorTraining2DWithCalibrationRegularization(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlRegressor(
         ['x0', 'x1'],
@@ -210,8 +211,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTraining2DWithLatticeRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlRegressor(
         ['x0', 'x1'],
@@ -232,8 +233,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedLatticeRegressorTraining2DWithPerFeatureRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlRegressor(
         ['x0', 'x1'],
@@ -250,7 +251,7 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlRegressorTrainingMultiDimensionalFeature(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x', shape=(2,)),
+        tf.feature_column.numeric_column('x', shape=(2,)),
     ]
     estimator = self._CalibratedRtlRegressor(
         ['x'],
@@ -277,8 +278,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlClassifierTraining(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlClassifier(
         feature_columns, num_lattices=3, lattice_rank=2)
@@ -289,8 +290,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlClassifierTrainingWithCalibrationRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlClassifier(
         feature_columns,
@@ -308,8 +309,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlClassifierTrainingWithLatticeRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlClassifier(
         feature_columns,
@@ -331,8 +332,8 @@ class CalibratedRtlTest(test.TestCase):
 
   def testCalibratedRtlClassifierTrainingWithPerFeatureRegularizer(self):
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
     estimator = self._CalibratedRtlClassifier(
         feature_columns,
@@ -373,15 +374,15 @@ class CalibratedRtlTest(test.TestCase):
     training_y = np.array([[False], [True], [True], [False]])
     test_y = np.array([[False], [True], [True], [True]])
 
-    train_input_fn = numpy_io.numpy_input_fn(
+    train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=training_y, batch_size=4, num_epochs=1000, shuffle=False)
-    test_input_fn = numpy_io.numpy_input_fn(
+    test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=test_y, shuffle=False)
 
     # Define monotonic lattice classifier.
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
 
     def init_fn():
@@ -415,17 +416,17 @@ class CalibratedRtlTest(test.TestCase):
     training_y = np.array([1., 3., 7., 11., 23., 27., 2., 9.])
     x_samples = {'x0': x0, 'x1': x1}
 
-    train_input_fn = numpy_io.numpy_input_fn(
+    train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples,
         y=training_y,
         batch_size=x0.shape[0],
         num_epochs=2000,
         shuffle=False)
-    test_input_fn = numpy_io.numpy_input_fn(
+    test_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
         x=x_samples, y=training_y, shuffle=False)
     feature_columns = [
-        feature_column_lib.numeric_column('x0'),
-        feature_column_lib.numeric_column('x1'),
+        tf.feature_column.numeric_column('x0'),
+        tf.feature_column.numeric_column('x1'),
     ]
 
     def init_fn():
@@ -452,4 +453,4 @@ class CalibratedRtlTest(test.TestCase):
 
 
 if __name__ == '__main__':
-  test.main()
+  tf.test.main()
