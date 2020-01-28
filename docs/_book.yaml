@@ -1,0 +1,35 @@
+upper_tabs:
+# Tabs left of dropdown menu
+- include: /_upper_tabs_left.yaml
+- include: /api_docs/_upper_tabs_api.yaml
+# Dropdown menu
+- name: Resources
+  path: /resources
+  is_default: true
+  menu:
+  - include: /resources/_menu_toc.yaml
+  lower_tabs:
+    # Subsite tabs
+    other:
+    - name: Guide & Tutorials
+      contents:
+      - title: Overview
+        path: /lattice/overview
+      - title: Install
+        path: /lattice/install
+      - heading: TensorFlow Lattice Tutorials
+      - title: Shape Constraints Tutorial
+        path: /lattice/tutorials/shape_constraints
+      - title: Keras Layers Tutorial
+        path: /lattice/tutorials/keras_layers
+      - title: Canned Estmators Tutorial
+        path: /lattice/tutorials/canned_estimators
+      - title: Custom Estimators Tutorial
+        path: /lattice/tutorials/custom_estimators
+
+    - name: API
+      skip_translation: true
+      contents:
+      - include: /lattice/api_docs/python/_toc.yaml
+
+- include: /_upper_tabs_right.yaml

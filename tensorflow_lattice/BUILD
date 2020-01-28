@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-licenses(["notice"])  # Apache 2.0 License
 
 package(
     default_visibility = [
@@ -20,38 +19,31 @@ package(
     ],
 )
 
+licenses(["notice"])
+
 exports_files(["LICENSE"])
 
 py_library(
     name = "tensorflow_lattice",
-    srcs = ["__init__.py"],
+    srcs = [
+        "__init__.py",
+        "layers/__init__.py",
+    ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow_lattice/python:keypoints_initialization",
-        "//tensorflow_lattice/python:lattice_layers",
-        "//tensorflow_lattice/python:lattice_ops_py",
-        "//tensorflow_lattice/python:pwl_calibration_layers",
-        "//tensorflow_lattice/python:pwl_calibration_ops_py",
-        "//tensorflow_lattice/python:regularizers",
-        "//tensorflow_lattice/python:tools",
-        "//tensorflow_lattice/python/estimators:base",
-        "//tensorflow_lattice/python/estimators:calibrated",
-        "//tensorflow_lattice/python/estimators:calibrated_etl",
-        "//tensorflow_lattice/python/estimators:calibrated_lattice",
-        "//tensorflow_lattice/python/estimators:calibrated_linear",
-        "//tensorflow_lattice/python/estimators:calibrated_rtl",
-        "//tensorflow_lattice/python/estimators:hparams",
-        "//tensorflow_lattice/python/estimators:separately_calibrated_rtl",
+        "//tensorflow_lattice/python:categorical_calibration_layer",
+        "//tensorflow_lattice/python:categorical_calibration_lib",
+        "//tensorflow_lattice/python:configs",
+        "//tensorflow_lattice/python:estimators",
+        "//tensorflow_lattice/python:lattice_layer",
+        "//tensorflow_lattice/python:lattice_lib",
+        "//tensorflow_lattice/python:linear_layer",
+        "//tensorflow_lattice/python:linear_lib",
+        "//tensorflow_lattice/python:model_info",
+        "//tensorflow_lattice/python:parallel_combination_layer",
+        "//tensorflow_lattice/python:pwl_calibration_layer",
+        "//tensorflow_lattice/python:pwl_calibration_lib",
+        "//tensorflow_lattice/python:test_utils",
+        "//tensorflow_lattice/python:visualization",
     ],
-)
-
-# Depend on this if you have a C++ library or binary that uses TensorFlow
-# lattice ops.
-cc_library(
-    name = "tensorflow_lattice_cc",
-    deps = [
-        "//tensorflow_lattice/cc:lattice_ops",
-        "//tensorflow_lattice/cc:pwl_calibration_ops",
-    ],
-    alwayslink = 1,
 )

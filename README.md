@@ -1,4 +1,4 @@
-<!-- Copyright 2017 The TensorFlow Lattice Authors.
+<!-- Copyright 2020 The TensorFlow Lattice Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,45 +12,41 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 =============================================================================-->
-<div align="center">
-<img src="g3doc/images/tensorflow_lattice.png" style="width: 100px"/>
-</div>
-
 # TensorFlow Lattice
 
-This is an implementation of [Monotonic Calibrated Interpolated Look-Up Tables](http://jmlr.org/papers/v17/15-243.html) in [TensorFlow](https://www.tensorflow.org).
+TensorFlow Lattice is a library that implements constrained and interpretable
+lattice based models. It is an implementation of
+[Monotonic Calibrated Interpolated Look-Up Tables](http://jmlr.org/papers/v17/15-243.html)
+in [TensorFlow](https://www.tensorflow.org).
 
-These are fast-to-evaluate and interpretable lattice models, also known as
-interpolated look-up tables. This library also provides a rich and intuitive set
-of regularizations and monotonicity constraints configurable per feature.
+The library enables you to inject domain knowledge into
+the learning process through common-sense or policy-driven shape constraints.
+This is done using a collection of Keras layers that can satisfy constraints
+such as monotonicity, convexity and pairwise trust:
 
-It includes
-[__TensorFlow estimators__](https://www.tensorflow.org/extend/estimators) for
-regression and classification with the most common set ups for lattice models:
+* PWLCalibration: piecewise linear calibration of signals.
+* CategoricalCalibration: mapping of categorical inputs into real values.
+* Lattice: interpolated look-up table implementation.
+* Linear: linear function with monotonicity and norm constraints.
+
+The library also provides easy to setup canned estimators for common use cases:
 
 * Calibrated Linear
 * Calibrated Lattice
-* Random Tiny Lattices (_RTL_)
-* Embedded Tiny Lattices (_ETL_) (see [Deep Lattice Networks and Partial Monotonic Functions](https://research.google.com/pubs/pub46327.html))
+* Random Tiny Lattices (RTL)
+* Crystals
 
-Additionally this library provides two types of __model components__
-(or __layers__) that can be combined with other types of models (including
-neural networks):
+With TF Lattice you can use domain knowledge to better extrapolate to the parts
+of the input space not covered by the training dataset. This helps avoid
+unexpected model behaviour when the serving distribution is different from the
+training distribution.
 
-* Calibration: piecewise linear calibration of signals.
-* Lattice: interpolated look-up table implementation.
-
+<div align="center">
+  <img src="docs/images/model_comparison.png">
+</div>
 
 You can install our prebuilt pip package using
 
 ```bash
 pip install tensorflow-lattice
 ```
-
-but please see the [install](INSTALL.md) section for more detailed instructions.
-
-This [tutorial](g3doc/tutorial/index.md) contains more detailed explanation
-about lattice models and usage in TensorFlow, and check out
-[API docs](g3doc/api_docs/python/index.md) for python APIs.
-
-__TensorFlow Lattice is not an official Google product.__
