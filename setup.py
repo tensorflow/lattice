@@ -1,114 +1,105 @@
-# pylint: disable=g-bad-file-header
-# Copyright 2017 The TensorFlow Lattice Authors.
+# Copyright 2018 The TensorFlow Lattice Authors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or  implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# =============================================================================
-"""Setup for pip package."""
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations under
+# the License.
+# ==============================================================================
+"""Package setup script for TensorFlow Lattice library."""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import datetime
 import sys
-import warnings
 
 from setuptools import find_packages
 from setuptools import setup
-from setuptools.command.install import install as InstallCommandBase
-from setuptools.dist import Distribution
 
+# This version number should always be that of the *next* (unreleased) version.
+# Immediately after uploading a package to PyPI, you should increment the
+# version number and push to gitHub.
+__version__ = "2.0"
 
-__version__ = '0.9.9'
+if "--release" in sys.argv:
+  sys.argv.remove("--release")
+  _name = "tensorflow_lattice"
+else:
+  # Build a nightly package by default.
+  _name = "tensorflow_lattice_nightly"
+  __version__ += datetime.datetime.now().strftime(".dev%Y%m%d")
 
-
-REQUIRED_PACKAGES = [
-    'six >= 1.11.0',
-    'protobuf >= 3.6.1',
-    'numpy >= 1.14.5',
+_install_requires = [
+    "absl-py",
+    "numpy",
+    "pandas",
+    "six",
+    "sklearn",
+    "matplotlib",
+    "graphviz",
 ]
 
+# Part of the visualization code uses colabtools and IPython libraries. These
+# are not added as hard requirements as they are mainly used in jupyter/colabs.
 
-if '--gpu' in sys.argv:
-  use_gpu = True
-  sys.argv.remove('--gpu')
-else:
-  use_gpu = False
+_extras_require = {
+    "tensorflow": "tensorflow>=1.15",
+    "tensorflow-gpu": "tensorflow-gpu>=1.15",
+}
 
-
-if use_gpu:
-  project_name = 'tensorflow-lattice-gpu'
-  REQUIRED_PACKAGES.append('tensorflow-gpu==1.14.0')
-else:
-  project_name = 'tensorflow-lattice'
-  REQUIRED_PACKAGES.append('tensorflow==1.14.0')
-
-CONSOLE_SCRIPTS = [
-    'freeze_graph_wrapper = '
-    'tensorflow_lattice.cc.tflite.freeze_graph_wrapper:main',
-    'toco_wrapper = tensorflow_lattice.cc.tflite.toco_wrapper:main',
+_classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 2",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-
-class BinaryDistribution(Distribution):
-  """This class is needed in order to create OS specific wheels."""
-
-  def has_ext_modules(self):
-    return True
-
-
-warnings.warn('tensorflow-lattice is likley to fail when building from a '
-              'source distribution (sdist). Please follow instructions in '
-              '(https://github.com/tensorflow/lattice/INSTALL.md) '
-              'to build this from the source.')
-
+_description = (
+    "A library that implements optionally monotonic lattice based models.")
+_long_description = """\
+TensorFlow Lattice is a library that implements fast-to-evaluate and
+interpretable (optionally monotonic) lattice based models, which are also known
+as *interpolated look-up tables*. The library includes a collection of
+Estimators, which operate like any TensorFlow Estimator. It also includes
+Keras layers for lattices and feature calibration that can be composed
+into custom models.
+"""
 
 setup(
-    name=project_name,
+    name=_name,
     version=__version__,
-    description=('TensorFlow Lattice provides lattice models in TensorFlow'),
-    long_description='',
-    url='https://github.com/tensorflow/lattice',
-    author='Google Inc.',
-    author_email='tensorflow-lattice-releasing@google.com',
-    # Contained modules and scripts.
+    author="Google Inc.",
+    author_email="no-reply@google.com",
+    license="Apache 2.0",
+    classifiers=_classifiers,
+    install_requires=_install_requires,
+    extras_require=_extras_require,
     packages=find_packages(),
-    install_requires=REQUIRED_PACKAGES,
-    # Add in any packaged data.
     include_package_data=True,
-    package_data={'': ['*.so']},
-    exclude_package_data={'': ['BUILD', '*.h', '*.cc']},
-    zip_safe=False,
-    distclass=BinaryDistribution,
-    cmdclass={
-        'pip_pkg': InstallCommandBase,
-    },
-    entry_points={
-        'console_scripts': CONSOLE_SCRIPTS
-    },
-    # PyPI package information.
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'Intended Audience :: Education',
-        'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: Apache Software License',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Topic :: Scientific/Engineering :: Mathematics',
-        'Topic :: Software Development :: Libraries :: Python Modules',
-        'Topic :: Software Development :: Libraries',
-        ],
-    license='Apache 2.0',
-    keywords='lattice tensorflow tensor machine learning',
+    description=_description,
+    long_description=_long_description,
+    long_description_content_type="text/markdown",
+    keywords="tensorflow lattice calibration machine learning",
+    url=(
+        "https://github.com/tensorflow/lattice"
+    ),
 )

@@ -11,9 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TensorFlow Lattice python package."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+"""'layers' namespace for TFL layers."""
 
+from tensorflow_lattice.python.categorical_calibration_layer import CategoricalCalibration
+from tensorflow_lattice.python.lattice_layer import Lattice
+from tensorflow_lattice.python.linear_layer import Linear
+from tensorflow_lattice.python.parallel_combination_layer import ParallelCombination
+from tensorflow_lattice.python.pwl_calibration_layer import PWLCalibration

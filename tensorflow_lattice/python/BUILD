@@ -1,4 +1,4 @@
-# Copyright 2017 The TensorFlow Lattice Authors.
+# Copyright 2019 The TensorFlow Lattice Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-licenses(["notice"])  # Apache 2.0 License
 
 package(
     default_visibility = [
@@ -20,248 +19,297 @@ package(
     ],
 )
 
-exports_files(["LICENSE"])
+licenses(["notice"])
 
-# All python tests can run under python 2 and 3.
-load(
-    "//tensorflow_lattice:tensorflow_lattice.bzl",
-    "rpath_linkopts",
-)
-load(
-    "@org_tensorflow//tensorflow:tensorflow.bzl",
-    "tf_gen_op_wrapper_py",
-)
-load("@org_tensorflow//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
-
-tf_gen_op_wrapper_py(
-    name = "pwl_indexing_calibrator_py_wrapper",
-    out = "ops/gen_pwl_indexing_calibrator.py",
-    cc_linkopts = rpath_linkopts("pwl_indexing_calibrator_py_wrapper"),
-    hidden = [],
-    deps = [
-        "//tensorflow_lattice/cc:pwl_indexing_calibrator_ops_op_lib",
-    ],
-)
-
-tf_gen_op_wrapper_py(
-    name = "monotonic_projection_py_wrapper",
-    out = "ops/gen_monotonic_projection.py",
-    cc_linkopts = rpath_linkopts("monotonic_projection_py_wrapper"),
-    hidden = [],
-    deps = [
-        "//tensorflow_lattice/cc:monotonic_projection_op_op_lib",
-    ],
-)
-
-tf_gen_op_wrapper_py(
-    name = "lattice_interpolation_py_wrapper",
-    out = "ops/gen_lattice_interpolation.py",
-    cc_linkopts = rpath_linkopts("lattice_interpolation_py_wrapper"),
-    hidden = [],
-    require_shape_functions = True,
-    deps = [
-        "//tensorflow_lattice/cc:lattice_interpolation_ops_op_lib",
-    ],
-)
-
-tf_gen_op_wrapper_py(
-    name = "monotone_lattice_py_wrapper",
-    out = "ops/gen_monotone_lattice.py",
-    cc_linkopts = rpath_linkopts("monotone_lattice_py_wrapper"),
-    hidden = [],
-    require_shape_functions = True,
-    deps = [
-        "//tensorflow_lattice/cc:monotone_lattice_ops_op_lib",
-    ],
-)
-
-tf_custom_op_py_library(
-    name = "lattice_ops_py",
-    srcs = [
-        "ops/lattice_ops.py",
-    ],
-    dso = [
-        "//tensorflow_lattice/cc:ops/_lattice_ops.so",
-    ],
-    kernels = [
-        "//tensorflow_lattice/cc:lattice_ops",
-        "//tensorflow_lattice/cc/kernels:lattice_kernels",
-    ],
+py_library(
+    name = "pwl_calibration_layer",
+    srcs = ["pwl_calibration_layer.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":lattice_interpolation_py_wrapper",
-        ":monotone_lattice_py_wrapper",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-        "@org_tensorflow//tensorflow/python:framework_for_generated_wrappers",
-    ],
-)
-
-tf_custom_op_py_library(
-    name = "pwl_calibration_ops_py",
-    srcs = [
-        "ops/pwl_calibration_ops.py",
-    ],
-    dso = [
-        "//tensorflow_lattice/cc:ops/_pwl_calibration_ops.so",
-    ],
-    kernels = [
-        "//tensorflow_lattice/cc:pwl_calibration_ops",
-        "//tensorflow_lattice/cc/kernels:pwl_calibration_kernels",
-    ],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":monotonic_projection_py_wrapper",
-        ":pwl_indexing_calibrator_py_wrapper",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-        "@org_tensorflow//tensorflow/python:framework_for_generated_wrappers",
+        ":pwl_calibration_lib",
+        # absl/logging dep,
+        # tensorflow:tensorflow_no_contrib dep,
     ],
 )
 
 py_library(
-    name = "keypoints_initialization",
-    srcs = ["lib/keypoints_initialization.py"],
+    name = "pwl_calibration_lib",
+    srcs = ["pwl_calibration_lib.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":tools",
-        "@org_tensorflow//third_party/py/numpy",
-        "@six_archive//:six",
-        "@org_tensorflow//tensorflow:tensorflow_py",
+        # enum dep,
+        # tensorflow:tensorflow_no_contrib dep,
     ],
 )
 
 py_test(
-    name = "keypoints_initialization_test",
-    size = "medium",
-    srcs = ["lib/keypoints_initialization_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":keypoints_initialization",
-        "@absl_py//absl/testing:parameterized",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_library(
-    name = "pwl_calibration_layers",
-    srcs = ["lib/pwl_calibration_layers.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":keypoints_initialization",
-        ":pwl_calibration_ops_py",
-        ":regularizers",
-        ":tools",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_test(
-    name = "pwl_calibration_layers_test",
-    size = "medium",
-    srcs = ["lib/pwl_calibration_layers_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":pwl_calibration_layers",
-        ":tools",
-        "@org_tensorflow//third_party/py/numpy",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_library(
-    name = "lattice_layers",
-    srcs = ["lib/lattice_layers.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":lattice_ops_py",
-        ":regularizers",
-        ":tools",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_test(
-    name = "lattice_layers_test",
-    size = "medium",
-    srcs = ["lib/lattice_layers_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":lattice_layers",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_library(
-    name = "monotone_linear_layers",
-    srcs = ["lib/monotone_linear_layers.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":regularizers",
-        ":tools",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_test(
-    name = "monotone_linear_layers_test",
-    size = "medium",
-    srcs = ["lib/monotone_linear_layers_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":monotone_linear_layers",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_library(
-    name = "regularizers",
-    srcs = ["lib/regularizers.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":tools",
-        "@org_tensorflow//tensorflow:tensorflow_py",
-    ],
-)
-
-py_test(
-    name = "regularizers_test",
+    name = "pwl_calibration_test",
     size = "large",
-    srcs = ["lib/regularizers_test.py"],
+    srcs = ["pwl_calibration_test.py"],
+    python_version = "PY3",
+    # shard_count = 12,
     srcs_version = "PY2AND3",
     deps = [
-        ":regularizers",
-        "@org_tensorflow//tensorflow:tensorflow_py",
+        ":parallel_combination_layer",
+        ":pwl_calibration_layer",
+        ":test_utils",
+        # absl/logging dep,
+        # absl/testing:parameterized dep,
+        # numpy dep,
+        # tensorflow dep,
     ],
 )
 
-# TensorFlow Lattice internal libraries.
 py_library(
-    name = "tools",
-    srcs = ["lib/tools.py"],
+    name = "linear_layer",
+    srcs = ["linear_layer.py"],
     srcs_version = "PY2AND3",
     deps = [
-        "@org_tensorflow//third_party/py/numpy",
-        "@org_tensorflow//tensorflow:tensorflow_py",
+        ":linear_lib",
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_library(
+    name = "linear_lib",
+    srcs = ["linear_lib.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":utils",
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_library(
+    name = "categorical_calibration_layer",
+    srcs = ["categorical_calibration_layer.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":categorical_calibration_lib",
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_library(
+    name = "categorical_calibration_lib",
+    srcs = ["categorical_calibration_lib.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":utils",
+        # enum dep,
+        # tensorflow:tensorflow_no_contrib dep,
     ],
 )
 
 py_test(
-    name = "tools_test",
+    name = "categorical_calibration_test",
     size = "medium",
-    srcs = ["lib/tools_test.py"],
+    timeout = "long",
+    srcs = ["categorical_calibration_test.py"],
+    python_version = "PY3",
+    # shard_count = 4,
     srcs_version = "PY2AND3",
     deps = [
-        ":test_data",
-        ":tools",
-        "@org_tensorflow//third_party/py/numpy",
-        "@org_tensorflow//tensorflow:tensorflow_py",
+        ":categorical_calibration_layer",
+        ":parallel_combination_layer",
+        ":test_utils",
+        # absl/logging dep,
+        # absl/testing:parameterized dep,
+        # numpy dep,
+        # tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "linear_test",
+    size = "large",
+    srcs = ["linear_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":linear_layer",
+        ":test_utils",
+        # absl/logging dep,
+        # absl/testing:parameterized dep,
+        # numpy dep,
+        # tensorflow dep,
     ],
 )
 
 py_library(
-    name = "test_data",
-    srcs = ["lib/test_data.py"],
+    name = "lattice_layer",
+    srcs = ["lattice_layer.py"],
     srcs_version = "PY2AND3",
     deps = [
-        "@org_tensorflow//tensorflow:tensorflow_py",
+        ":categorical_calibration_layer",
+        ":lattice_lib",
+        ":pwl_calibration_layer",
+        # tensorflow:tensorflow_no_contrib dep,
     ],
+)
+
+py_library(
+    name = "lattice_lib",
+    srcs = ["lattice_lib.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        # absl/logging dep,
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_test(
+    name = "lattice_test",
+    size = "large",
+    srcs = ["lattice_test.py"],
+    python_version = "PY3",
+    # shard_count = 12,
+    srcs_version = "PY2AND3",
+    deps = [
+        ":lattice_layer",
+        ":test_utils",
+        # absl/logging dep,
+        # absl/testing:parameterized dep,
+        # numpy dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "parallel_combination_layer",
+    srcs = ["parallel_combination_layer.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":categorical_calibration_layer",
+        ":lattice_layer",
+        ":linear_layer",
+        ":pwl_calibration_layer",
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_test(
+    name = "parallel_combination_test",
+    size = "large",
+    srcs = ["parallel_combination_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":lattice_layer",
+        ":parallel_combination_layer",
+        # absl/logging dep,
+        # absl/testing:parameterized dep,
+        # numpy dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "configs",
+    srcs = ["configs.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        # absl/logging dep,
+        # tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "configs_test",
+    size = "small",
+    srcs = ["configs_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":configs",
+        # absl/logging dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "utils",
+    srcs = ["utils.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        # tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "utils_test",
+    srcs = ["utils_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":utils",
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "test_utils",
+    srcs = ["test_utils.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":visualization",
+        # absl/logging dep,
+        # numpy dep,
+    ],
+)
+
+py_library(
+    name = "visualization",
+    srcs = ["visualization.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":model_info",
+        # graphviz dep,
+        # matplotlib dep,
+        # mpl_toolkits/mplot3d dep,
+        # numpy dep,
+    ],
+)
+
+py_library(
+    name = "estimators",
+    srcs = ["estimators.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":categorical_calibration_layer",
+        ":configs",
+        ":lattice_layer",
+        ":lattice_lib",
+        ":linear_layer",
+        ":model_info",
+        ":pwl_calibration_layer",
+        ":pwl_calibration_lib",
+        # absl/logging dep,
+        # tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "estimators_test",
+    size = "large",
+    timeout = "long",
+    srcs = ["estimators_test.py"],
+    python_version = "PY3",
+    # shard_count = 8,
+    srcs_version = "PY2AND3",
+    deps = [
+        ":configs",
+        ":estimators",
+        ":model_info",
+        # absl/logging dep,
+        # sklearn dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "model_info",
+    srcs = ["model_info.py"],
+    srcs_version = "PY2AND3",
+    deps = [],
 )
