@@ -131,8 +131,7 @@ def verify_hyperparameters(num_buckets=None,
                            monotonicities=None):
   """Verifies that all given hyperparameters are consistent.
 
-  See `tfl.lattice_layer.CategoricalCalibration` class level comment for
-  detailes.
+  See `tfl.layers.CategoricalCalibration` class level comment for detailes.
 
   Args:
     num_buckets: `num_buckets` of CategoricalCalibration layer.

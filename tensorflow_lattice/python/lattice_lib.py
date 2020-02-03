@@ -1650,8 +1650,8 @@ def verify_hyperparameters(lattice_sizes,
   This function does not inspect weights themselves. Only their shape. Use
   `assert_constraints()` to assert actual weights against constraints.
 
-  See `tfl.lattice_layer.Lattice` class level comment for detailed description
-  of arguments.
+  See `tfl.layers.Lattice` class level comment for detailed description of
+  arguments.
 
   Args:
     lattice_sizes: Lattice sizes to check againts.

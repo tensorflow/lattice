@@ -50,8 +50,8 @@ class PWLCalibration(keras.layers.Layer):
   the same layer configuration, but each has their separate set of trained
   parameters.
 
-  See `tfl.parallel_combination.ParallelCombination` layer for using
-  PWLCalibration layer within Sequential Keras models.
+  See `tfl.layers.ParallelCombination` layer for using PWLCalibration layer
+  within Sequential Keras models.
 
   Input shape:
   Single input should be a rank-2 tensor with shape: `(batch_size, units)` or
@@ -73,7 +73,7 @@ class PWLCalibration(keras.layers.Layer):
   Example:
 
   ```python
-  calibrator = tfl.pwl_calibration_layer.PWLCalibration(
+  calibrator = tfl.layers.PWLCalibration(
       # Key-points of piecewise-linear function.
       input_keypoints=np.linspace(1., 4., num=4),
       # Output can be bounded, e.g. when this layer feeds into a lattice.

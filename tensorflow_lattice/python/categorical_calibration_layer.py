@@ -57,7 +57,7 @@ class CategoricalCalibration(keras.layers.Layer):
   Example:
 
   ```python
-  calibrator = tfl.categorical_calibration_layer.CategoricalCalibration(
+  calibrator = tfl.layers.CategoricalCalibration(
       # Number of categories.
       num_buckets=3,
       # Output can be bounded.
@@ -73,7 +73,7 @@ class CategoricalCalibration(keras.layers.Layer):
 
   ```python
   input_feature = keras.layers.Input(shape=[1])
-  calibrated_feature = tfl.categorical_calibration_layer.CategoricalCalibration(
+  calibrated_feature = tfl.layers.CategoricalCalibration(
       num_buckets=3,
       output_min=0.0,
       output_max=1.0,

@@ -604,7 +604,7 @@ class TrustConfig(_Config):
   """Configuration for feature trusts in TFL canned estimators.
 
   You can specify how a feature reflects trust in another feature. Supported
-  trust types (see `tfl.lattice_layer.Lattice` for details):
+  trust types (see `tfl.layers.Lattice` for details):
 
   - `'edgeworth'`: Edgeworth trust constrains the function to be more
       responsive to a main feature as a secondary conditional feature increases
@@ -712,8 +712,7 @@ class DominanceConfig(_Config):
   """Configuration for dominance constraints in TFL canned estimators.
 
   You can specify how a feature dominantes another feature. Supported dominance
-  types (see `tfl.lattice_layer.Lattice` and `tfl.linear_layer.Linear` for
-  details):
+  types (see `tfl.layers.Lattice` and `tfl.layers.Linear` for details):
 
   - `'monotonic'`: Monotonic dominance constrains the function to require the
       effect (slope) in the direction of the *dominant* dimension to be greater
