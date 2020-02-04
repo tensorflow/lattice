@@ -17,14 +17,14 @@ upper_tabs:
         path: /lattice/overview
       - title: Install
         path: /lattice/install
-      - heading: TensorFlow Lattice Tutorials
-      - title: Shape Constraints Tutorial
+      - heading: Tutorials
+      - title: Shape constraints
         path: /lattice/tutorials/shape_constraints
-      - title: Keras Layers Tutorial
+      - title: Keras layers
         path: /lattice/tutorials/keras_layers
-      - title: Canned Estmators Tutorial
+      - title: Canned Estimators
         path: /lattice/tutorials/canned_estimators
-      - title: Custom Estimators Tutorial
+      - title: Custom Estimators
         path: /lattice/tutorials/custom_estimators
 
     - name: API

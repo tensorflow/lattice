@@ -59,7 +59,7 @@ class Linear(keras.layers.Layer):
   Example:
 
   ```python
-  layer = tfl.linear_layer.Linear(
+  layer = tfl.layers.Linear(
       num_input_dims=8,
       # Monotonicity constraints can be defined per dimension or for all dims.
       monotonicities='increasing',

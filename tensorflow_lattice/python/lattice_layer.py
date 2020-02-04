@@ -124,7 +124,7 @@ class Lattice(keras.layers.Layer):
   Example:
 
   ```python
-  lattice = tfl.lattice_layer.Lattice(
+  lattice = tfl.layers.Lattice(
       # Number of vertices along each dimension.
       lattice_sizes=[2, 2, 3, 4, 2, 2, 3],
       # You can specify monotonicity constraints.
@@ -499,7 +499,7 @@ class Lattice(keras.layers.Layer):
 
 class LinearInitializer(keras.initializers.Initializer):
   # pyformat: disable
-  """Initializes a `tfl.lattice_layer.Lattice` as linear function.
+  """Initializes a `tfl.layers.Lattice` as linear function.
 
   - The linear function will have positive coefficients for monotonic dimensions
     and 0 otherwise. If all dimensions are unconstrained, all coefficients will
@@ -527,13 +527,13 @@ class LinearInitializer(keras.initializers.Initializer):
     """Initializes an instance of `LinearInitializer`.
 
     Args:
-      lattice_sizes: Lattice sizes of `tfl.lattice_layer.Lattice` to initialize.
+      lattice_sizes: Lattice sizes of `tfl.layers.Lattice` to initialize.
       monotonicities: Monotonic dimensions for initialization. Does not need to
-        match `monotonicities` of `tfl.lattice_layer.Lattice`.
+        match `monotonicities` of `tfl.layers.Lattice`.
       output_min: Minimum layer output after initialization.
       output_max: Maximum layer output after initialization.
       unimodalities: None or unimodal dimensions after initialization. Does not
-        need to match `unimodalities` of `tfl.lattice_layer.Lattice`.
+        need to match `unimodalities` of `tfl.layers.Lattice`.
 
     Raises:
       ValueError: If there is a mismatch between `monotonicities` and
@@ -553,7 +553,7 @@ class LinearInitializer(keras.initializers.Initializer):
     self.unimodalities = unimodalities
 
   def __call__(self, shape, dtype=None, partition_info=None):
-    """Returns weights of `tfl.lattice_layer.Lattice` layer.
+    """Returns weights of `tfl.layers.Lattice` layer.
 
     Args:
       shape: Must be: `(prod(lattice_sizes), units)`.
@@ -587,10 +587,10 @@ class LinearInitializer(keras.initializers.Initializer):
 
 class LatticeConstraints(keras.constraints.Constraint):
   # pyformat: disable
-  """Constraints for `tfl.lattice_layer.Lattice` layer.
+  """Constraints for `tfl.layers.Lattice` layer.
 
   Applies monotonicity, unimodality, trust and bound constraints to the lattice
-  parameters. See `tfl.lattice_layer.Lattice` for details.
+  parameters. See `tfl.layers.Lattice` for details.
 
   Attributes:
     - All `__init__` arguments.
@@ -714,7 +714,7 @@ class LatticeConstraints(keras.constraints.Constraint):
 
 class TorsionRegularizer(keras.regularizers.Regularizer):
   # pyformat: disable
-  """Torsion regularizer for `tfl.lattice_layer.Lattice` layer.
+  """Torsion regularizer for `tfl.layers.Lattice` layer.
 
   Lattice torsion regularizer penalizes how much the lattice function twists
   from side-to-side (see
@@ -745,7 +745,7 @@ class TorsionRegularizer(keras.regularizers.Regularizer):
     """Initializes an instance of `TorsionRegularizer`.
 
     Args:
-      lattice_sizes: Lattice sizes of `tfl.lattice_layer.Lattice` to regularize.
+      lattice_sizes: Lattice sizes of `tfl.layers.Lattice` to regularize.
       l1: l1 regularization amount. Either single float or list or tuple of
         floats to specify different regularization amount per dimension. The
         amount of regularization for the interaction term between two dimensions
@@ -777,7 +777,7 @@ class TorsionRegularizer(keras.regularizers.Regularizer):
 
 class LaplacianRegularizer(keras.regularizers.Regularizer):
   # pyformat: disable
-  """Laplacian regularizer for `tfl.lattice_layer.Lattice` layer.
+  """Laplacian regularizer for `tfl.layers.Lattice` layer.
 
   Laplacian regularizer penalizes the difference between adjacent vertices in
   multi-cell lattice (see
@@ -814,7 +814,7 @@ class LaplacianRegularizer(keras.regularizers.Regularizer):
     """Initializes an instance of `LaplacianRegularizer`.
 
     Args:
-      lattice_sizes: Lattice sizes of `tfl.lattice_layer.Lattice` to regularize.
+      lattice_sizes: Lattice sizes of `tfl.layers.Lattice` to regularize.
       l1: l1 regularization amount. Either single float or list or tuple of
         floats to specify different regularization amount per dimension.
       l2: l2 regularization amount. Either single float or list or tuple of

@@ -682,6 +682,9 @@ def _set_crystals_lattice_ensemble(model_config, feature_names, label_dimension,
     feature_config.lattice_size = 2
     # Unimodality requires lattice_size > 2.
     feature_config.unimodality = 0
+    # Disable 2d constraints to avoid potential constraint violations.
+    feature_config.dominates = None
+    feature_config.reflects_trust_in = None
 
   def prefitting_model_fn(features, labels, mode, config):
     return _calibrated_lattice_ensemble_model_fn(
@@ -1275,7 +1278,10 @@ def _calibrated_lattice_ensemble_model_fn(features, labels, label_dimension,
             is_inside_ensemble=True,
             dtype=dtype))
 
-  averaged_lattice_output = tf.keras.layers.Average()(lattice_outputs)
+  if len(lattice_outputs) > 1:
+    averaged_lattice_output = tf.keras.layers.Average()(lattice_outputs)
+  else:
+    averaged_lattice_output = lattice_outputs[0]
   if model_config.output_calibration:
     model_output = _output_calibration_layer(
         output_calibration_input=averaged_lattice_output,

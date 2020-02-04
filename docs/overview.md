@@ -53,8 +53,10 @@ TensorFlow Lattice models can use *piecewise linear functions* (with
 the range accepted by the lattice: 0.0 to 1.0 in the example lattice above. The
 following show examples such calibrations functions with 10 keypoints:
 
-![distance calibration](images/pwl_calibration_distance.png)
-![price calibration](images/pwl_calibration_price.png)
+<p align="center">
+<img src="images/pwl_calibration_distance.png">
+<img src="images/pwl_calibration_price.png">
+</p>
 
 It is often a good idea to use the quantiles of the features as input keypoints.
 TensorFlow Lattice [canned estimators](tutorials/canned_estimators.ipynb) can
@@ -100,18 +102,23 @@ work nicely in practice and can match or outperform DNN models of similar sizes.
 
 ### Common-Sense Shape Constraints
 
-Real world training data is often a somewhat biased representation of where the
-model will be applied.
+Real world training data may not sufficiently represent the run-time data.
+Flexible ML solutions such as DNNs or forests often act unexpectedly and even
+wildly in parts of the input space not covered by the training data. This
+behaviour is especially problematic when policy or fairness constraints can be
+violated.
 
-<img src="images/data_dist.png" style="display:block; margin:auto;">
+<img src="images/model_comparison.png" style="display:block; margin:auto;">
 
-Unconstrained and flexible ML solutions such as DNNs or decision trees often act
-unexpectedly in parts of the input space not covered by the training data. Even
-though common forms of regularization can reduce nonsensical extrapolation, it
-is hardly enough to guarantee reasonable model behaviour across the entire input
-space.
+Even though common forms of regularization can result in more sensible
+extrapolation, standard regularizers cannot guarantee reasonable model behaviour
+across the entire input space, especially with high-dimensional inputs.
+Switching to simpler models with more controlled and predictable behaviour can
+come at a severe cost to the model accuracy.
 
-TensorFlow Lattice provides several types of *semantic regularization* through
+TF Lattice makes it possible to keep using flexible models, but provides several
+options to inject domain knowledge into the learning process through
+semantically meaningful common-sense or policy-driven
 [shape constraints](tutorials/shape_constraints.ipynb):
 
 *   **Monotonicity**: You can specify that the output should only
@@ -119,16 +126,19 @@ TensorFlow Lattice provides several types of *semantic regularization* through
     specify that increased distance to a coffee shop should only decrease the
     predicted user preference.
 
-![linear fit](images/linear_fit.png) ![flexible fit](images/flexible_fit.png)
-![regularized fit](images/regularized_fit.png)
-![monotonic fit](images/monotonic_fit.png)
+<p align="center">
+<img src="images/linear_fit.png">
+<img src="images/flexible_fit.png">
+<img src="images/regularized_fit.png">
+<img src="images/monotonic_fit.png">
+</p>
 
 *   **Convexity/Concavity**: You can specify that the function shape can be
     convex or concave. Mixed with monotonicity, this can force the function to
     represent diminishing returns with respect to a given feature.
 
 *   **Unimodality**: You can specify that the function should have a unique peak
-    or unique valley. This let you represent functions that have a *sweet spot*
+    or unique valley. This lets you represent functions that have a *sweet spot*
     with respect to a feature.
 
 *   **Pairwise trust**: This constraint works on a pair of features and suggests
@@ -155,9 +165,9 @@ layer.
     calibration layer to avoid sudden changes in the curvature. It makes the
     function smoother.
 
-*   **Torsion**: Outputs of the lattice will be regularized towards preventing
-    torsion among the features. In other words, the model will be regularized
-    towards independence between the contributions of the features.
+*   **Torsion Regularizer**: Outputs of the lattice will be regularized towards
+    preventing torsion among the features. In other words, the model will be
+    regularized towards independence between the contributions of the features.
 
 ### Mix and match with other Keras layers
 
@@ -168,6 +178,9 @@ include embeddings or other Keras layers.
 
 ## Papers
 
+*   [Deontological Ethics By Monotonicity Shape Constraints](https://arxiv.org/abs/2001.11990),
+    Serena Wang, Maya Gupta, International Conference on Artificial Intelligence
+    and Statistics (AISTATS), 2020
 *   [Shape Constraints for Set Functions](http://proceedings.mlr.press/v97/cotter19a.html),
     Andrew Cotter, Maya Gupta, H. Jiang, Erez Louidor, Jim Muller, Taman
     Narayan, Serena Wang, Tao Zhu. International Conference on Machine Learning

@@ -491,9 +491,7 @@ def plot_outputs(inputs, outputs_map, file_path=None, figsize=(20, 20)):
   Returns:
     Pyplot object containing visualisation.
   """
-  plt.clf()
   legend = []
-
   if isinstance(inputs, tuple):
     figure = plt.figure(figsize=figsize)
     axes = figure.gca(projection='3d')

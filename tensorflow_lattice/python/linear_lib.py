@@ -158,8 +158,8 @@ def verify_hyperparameters(num_input_dims=None,
   specified via list or tuple rather than via single element because that's how
   monotonicites are stored internaly.
 
-  See `tfl.linear_layer.Linear` Layer class level comment for detailed
-  description of arguments.
+  See `tfl.layers.Linear` Layer class level comment for detailed description of
+  arguments.
 
   Args:
     num_input_dims: None or number of input dimensions.
