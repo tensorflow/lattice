@@ -22,14 +22,13 @@ import copy
 import itertools
 import math
 from absl import logging
+import numpy as np
 import six
 
 import tensorflow as tf
 
 
-def compute_interpolation_weights(inputs,
-                                  lattice_sizes,
-                                  clip_inputs=True):
+def compute_interpolation_weights(inputs, lattice_sizes, clip_inputs=True):
   """Computes weights for lattice interpolation.
 
   Running time: `O(batch_size * prod(lattice_sizes))`
@@ -65,8 +64,8 @@ def compute_interpolation_weights(inputs,
   verify_hyperparameters(lattice_sizes=lattice_sizes, input_shape=input_shape)
 
   if clip_inputs:
-    inputs = _clip_onto_lattice_range(inputs=inputs,
-                                      lattice_sizes=lattice_sizes)
+    inputs = _clip_onto_lattice_range(
+        inputs=inputs, lattice_sizes=lattice_sizes)
 
   # Create interpolation keypoints in advance in order to reuse them for all
   # dimensions of same size.
@@ -100,8 +99,8 @@ def compute_interpolation_weights(inputs,
     else:
       one_d_interpolation_weights.extend(tf.unstack(weights, axis=-2))
 
-  return batch_outer_operation(one_d_interpolation_weights,
-                               operation=tf.multiply)
+  return batch_outer_operation(
+      one_d_interpolation_weights, operation=tf.multiply)
 
 
 def batch_outer_operation(list_of_tensors, operation=tf.multiply):
@@ -161,22 +160,22 @@ def _clip_onto_lattice_range(inputs, lattice_sizes):
     return tf.clip_by_value(
         inputs,
         clip_value_min=tf.zeros(shape=len(lattice_sizes), dtype=inputs.dtype),
-        clip_value_max=tf.constant(upper_bounds,
-                                   dtype=inputs.dtype))
+        clip_value_max=tf.constant(upper_bounds, dtype=inputs.dtype))
   else:
     # Share bound constant across dimensions of same size.
     dim_upper_bounds = {}
     for dim_size in set(lattice_sizes):
-      dim_upper_bounds[dim_size] = tf.constant(dim_size - 1.0,
-                                               dtype=inputs[0].dtype)
+      dim_upper_bounds[dim_size] = tf.constant(
+          dim_size - 1.0, dtype=inputs[0].dtype)
     dim_lower_bound = tf.zeros(shape=[], dtype=inputs[0].dtype)
 
     clipped_inputs = []
     for one_d_input, dim_size in zip(inputs, lattice_sizes):
       clipped_inputs.append(
-          tf.clip_by_value(one_d_input,
-                           clip_value_min=dim_lower_bound,
-                           clip_value_max=dim_upper_bounds[dim_size]))
+          tf.clip_by_value(
+              one_d_input,
+              clip_value_min=dim_lower_bound,
+              clip_value_max=dim_upper_bounds[dim_size]))
     return clipped_inputs
 
 
@@ -207,9 +206,9 @@ def _bucketize_consequtive_equal_dims(inputs, lattice_sizes):
     bucket_dim_sizes = []
     current_size = 1
     for i in range(1, len(lattice_sizes)):
-      if lattice_sizes[i] != lattice_sizes[i-1]:
+      if lattice_sizes[i] != lattice_sizes[i - 1]:
         bucket_sizes.append(current_size)
-        bucket_dim_sizes.append(lattice_sizes[i-1])
+        bucket_dim_sizes.append(lattice_sizes[i - 1])
         current_size = 1
       else:
         current_size += 1
@@ -308,6 +307,94 @@ def _linspace(start, stop, num):
   if num == 1:
     return [start]
   return [start + (stop - start) * i / (num - 1.0) for i in range(num)]
+
+
+def random_monotonic_initializer(lattice_sizes,
+                                 output_min,
+                                 output_max,
+                                 units=1,
+                                 dtype=tf.float32):
+  """Returns a uniformly random sampled monotonic lattice layer weight tensor.
+
+  - The uniform random monotonic function will initilaize the lattice parameters
+    uniformly at random and make it such that the parameters are monotonically
+    increasing for each input.
+  - The random parameters will be sampled from `[output_min, output_max]`
+
+  Args:
+    lattice_sizes: List or tuple of integers which represents lattice sizes.
+    output_min: Minimum output of lattice layer after initialization.
+    output_max: Maximum output of lattice layer after initialization.
+    units: Output dimension of the layer. Each of units lattices will be
+      initialized identically.
+    dtype: dtype.
+
+  Returns:
+    Lattice weights tensor of shape: `(prod(lattice_sizes), units)`.
+  """
+  # First we verify parameters
+  verify_hyperparameters(lattice_sizes=lattice_sizes)
+
+  dimension = len(lattice_sizes)
+  # Pre-compute the bases of the global index for each dimension.
+  index_bases = [1] * dimension
+  for i in range(0, dimension - 1)[::-1]:
+    index_bases[i] = index_bases[i + 1] * lattice_sizes[i + 1]
+  total_lattice_size = np.prod(lattice_sizes)
+  # Create parameter indices to later gather parameter values in the proper
+  # ordering.
+  lattice_parameter_indices = [0] * total_lattice_size
+
+  # Starting from the all-0 vertex, expand new vertices by getting the vertices
+  # that are children of the vertices expanded in the last iteration in terms of
+  # monotonic dependencies. Create constant tensor representing order of init
+  # mapping each index to its corresponding random parameter value.
+  parameter_index = 1
+  # Vertices expanded in the last iteration.
+  last_vertices = [0]
+  while last_vertices:
+    new_vertices_set = set()
+    for index in last_vertices:
+      remaining_index = index
+      # For each dimension, if the vertex is not at the end of that dimension,
+      # we can create a child of the current vertex by increasing the value
+      # of the vertex in that dimension by one.
+      for i in range(dimension):
+        index_base = index_bases[i]
+        # The value of the vertex index in the i'th dimension
+        index_dim = remaining_index // index_base
+        if index_dim < lattice_sizes[i] - 1:
+          new_index = index + index_base
+          if new_index not in new_vertices_set:
+            new_vertices_set.add(new_index)
+        remaining_index = remaining_index % index_base
+    # Randomly sort the vertices expanded in the current iteration. Note that
+    # there can be no monotonic dependency between vertices expanded in the same
+    # iteration because their sum of all dimensions are the same (we increase
+    # them one-by-one in each iteration).
+    new_vertices = list(new_vertices_set)
+    np.random.shuffle(new_vertices)
+    # Assign parameter values
+    for vertex in new_vertices:
+      lattice_parameter_indices[vertex] = parameter_index
+      parameter_index += 1
+    last_vertices = new_vertices
+
+  # Convert lattice_parameter_indices into a tensor.
+  lattice_parameter_indices = tf.constant(lattice_parameter_indices)
+  # Uniformly generate the random parameter values.
+  parameter_values = tf.random.uniform(
+      shape=[total_lattice_size],
+      minval=output_min,
+      maxval=output_max,
+      dtype=tf.float32)
+  parameter_values = tf.sort(parameter_values)
+  # Convert lattice_parameter_indices to weights tensor and tile if necessary.
+  weights = tf.gather(parameter_values, lattice_parameter_indices)
+  weights = tf.reshape(weights, shape=[-1, 1])
+  if units > 1:
+    weights = tf.tile(weights, multiples=[1, units])
+  return weights
 
 
 # TODO: Add final projection for unimodality constraints.
@@ -1320,8 +1407,7 @@ def project_by_dykstra(weights,
     Projected weights tensor of same shape as `weights`.
   """
   if ((count_non_zeros(monotonicities, unimodalities) == 0 and
-       not joint_monotonicities) or
-      num_iterations == 0):
+       not joint_monotonicities) or num_iterations == 0):
     return weights
 
   units = weights.shape[1]
@@ -1415,9 +1501,8 @@ def project_by_dykstra(weights,
             constraint_group[1] >= lattice_sizes[weak_dim] - 1):
           continue
 
-        rolled_back_weights = weights - last_change[("MONOTONIC_DOMINANCE",
-                                                     constraint,
-                                                     constraint_group)]
+        rolled_back_weights = weights - last_change[
+            ("MONOTONIC_DOMINANCE", constraint, constraint_group)]
         weights = _project_partial_monotonic_dominance(rolled_back_weights,
                                                        lattice_sizes,
                                                        constraint,
@@ -1432,9 +1517,8 @@ def project_by_dykstra(weights,
             constraint_group[1] >= lattice_sizes[dim2] - 1):
           continue
 
-        rolled_back_weights = weights - last_change[("JOINT_MONOTONICITY",
-                                                     constraint,
-                                                     constraint_group)]
+        rolled_back_weights = weights - last_change[
+            ("JOINT_MONOTONICITY", constraint, constraint_group)]
         weights = _project_partial_joint_monotonicity(rolled_back_weights,
                                                       lattice_sizes, constraint,
                                                       constraint_group)
@@ -1708,8 +1792,8 @@ def verify_hyperparameters(lattice_sizes,
                          "'monotonicities': %s, 'unimodalities': %s" %
                          (i, monotonicities, unimodalities))
 
-  all_trusts = canonicalize_trust(
-      (edgeworth_trusts or []) + (trapezoid_trusts or [])) or []
+  all_trusts = canonicalize_trust((edgeworth_trusts or []) +
+                                  (trapezoid_trusts or [])) or []
   main_dims, cond_dims, trapezoid_cond_dims = set(), set(), set()
   dim_pairs_direction = {}
   for i, constraint in enumerate(all_trusts):
@@ -1759,8 +1843,7 @@ def verify_hyperparameters(lattice_sizes,
                          "elements. Seeing constraint tuple %s" % (constraint,))
       dominant_dim, weak_dim = constraint
       if (dominant_dim >= len(lattice_sizes) or
-          weak_dim >= len(lattice_sizes) or
-          dominant_dim < 0 or weak_dim < 0):
+          weak_dim >= len(lattice_sizes) or dominant_dim < 0 or weak_dim < 0):
         raise ValueError("Dimensions constrained by monotonic dominance "
                          "constraints are not within the range of the lattice. "
                          "'dims': %s, %s, num_dims: %s" %
@@ -1975,8 +2058,8 @@ def assert_constraints(weights,
     for i in range(lattice_sizes[dim1] - 1):
       for j in range(lattice_sizes[dim2] - 1):
         midpoint = (weights_layers[i + 1][j] + weights_layers[i][j + 1]) / 2
-        lower_triangle_diff = tf.reduce_min(
-            weights_layers[i + 1][j + 1] - midpoint)
+        lower_triangle_diff = tf.reduce_min(weights_layers[i + 1][j + 1] -
+                                            midpoint)
         asserts.append(
             tf.Assert(
                 lower_triangle_diff >= -eps,

@@ -154,6 +154,7 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         # absl/logging dep,
+        # numpy dep,
         # tensorflow:tensorflow_no_contrib dep,
     ],
 )
@@ -282,8 +283,8 @@ py_library(
         ":lattice_lib",
         ":linear_layer",
         ":model_info",
+        ":premade",
         ":pwl_calibration_layer",
-        ":pwl_calibration_lib",
         # absl/logging dep,
         # tensorflow dep,
     ],
@@ -303,6 +304,24 @@ py_test(
         ":model_info",
         # absl/logging dep,
         # sklearn dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "premade",
+    srcs = ["premade.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":categorical_calibration_layer",
+        ":configs",
+        ":lattice_layer",
+        ":linear_layer",
+        ":pwl_calibration_layer",
+        # absl/logging dep,
+        # enum dep,
+        # numpy dep,
+        # six dep,
         # tensorflow dep,
     ],
 )

@@ -31,6 +31,7 @@ from tensorflow_lattice.python import linear_layer
 from tensorflow_lattice.python import linear_lib
 from tensorflow_lattice.python import model_info
 from tensorflow_lattice.python import parallel_combination_layer
+from tensorflow_lattice.python import premade
 from tensorflow_lattice.python import pwl_calibration_layer
 from tensorflow_lattice.python import pwl_calibration_lib
 from tensorflow_lattice.python import test_utils

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Tests for Lattice Layer."""
 from __future__ import absolute_import
 from __future__ import division
@@ -162,9 +161,12 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
 
   def _GetMultiOutputInitializer(self, weights):
     """Tiles given weights along 'units' dimension."""
+
     def Initializer(shape, dtype):
-      return tf.tile(tf.constant(weights, shape=[len(weights), 1], dtype=dtype),
-                     multiples=[1, shape[1]])
+      return tf.tile(
+          tf.constant(weights, shape=[len(weights), 1], dtype=dtype),
+          multiples=[1, shape[1]])
+
     return Initializer
 
   def _GetTrainingInputsAndLabels(self, config):
@@ -271,8 +273,8 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
 
     if units > 1:
       lattice_index = config["lattice_index"]
-      model.add(keras.layers.Lambda(
-          lambda x: x[:, lattice_index:lattice_index + 1]))
+      model.add(
+          keras.layers.Lambda(lambda x: x[:, lattice_index:lattice_index + 1]))
 
     optimizer = config["optimizer"](learning_rate=config["learning_rate"])
     model.compile(loss=keras.losses.mean_squared_error, optimizer=optimizer)
@@ -835,8 +837,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self._TestEnsemble(config)
 
   @parameterized.parameters(
-      ([(0, 1)], 36.75898),
-  )
+      ([(0, 1)], 36.75898),)
   def testDenseJointMonotonicity5D(self, joint_monotonicities, expected_loss):
     if self.disable_all:
       return
@@ -997,6 +998,52 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, 0.794330, delta=self.loss_eps)
     self._TestEnsemble(config)
+
+  def testRandomMonotonicInitializer(self):
+    if self.disable_all:
+      return
+    lattice_sizes = [2, 2]
+    units = 1
+    monotonicities = [1, 1]
+    output_min = 0.0
+    output_max = 1.0
+    kernel_initializer = ll.RandomMonotonicInitializer(
+        lattice_sizes=lattice_sizes,
+        output_min=output_min,
+        output_max=output_max)
+    input_shape = (len(lattice_sizes),)
+
+    first_random_lattice = ll.Lattice(
+        lattice_sizes=lattice_sizes,
+        units=units,
+        monotonicities=monotonicities,
+        output_min=output_min,
+        output_max=output_max,
+        kernel_initializer=kernel_initializer,
+        input_shape=input_shape,
+        dtype=tf.float32)
+    first_random_lattice.build(input_shape)
+    first_weights = first_random_lattice.get_weights()
+
+    second_random_lattice = ll.Lattice(
+        lattice_sizes=lattice_sizes,
+        units=units,
+        monotonicities=monotonicities,
+        output_min=output_min,
+        output_max=output_max,
+        kernel_initializer=kernel_initializer,
+        input_shape=input_shape,
+        dtype=tf.float32)
+    second_random_lattice.build(input_shape)
+    second_weights = second_random_lattice.get_weights()
+
+    # Assert Constraints on Lattice
+    first_random_lattice.assert_constraints(eps=1e-6)
+    second_random_lattice.assert_constraints(eps=1e-6)
+    # Assert Weight Bounds And Randomness
+    self.assertAllInRange(first_weights, output_min, output_max)
+    self.assertAllInRange(second_weights, output_min, output_max)
+    self.assertNotAllEqual(first_weights, second_weights)
 
   def testAssertMonotonicity(self):
     if self.disable_all:

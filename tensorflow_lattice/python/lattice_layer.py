@@ -217,8 +217,15 @@ class Lattice(keras.layers.Layer):
           function with positive and equal coefficients for monotonic dimensions
           and 0.0 coefficients for other dimensions. Linear function is such
           that minimum possible output is equal to output_min and maximum
-          possible output is equal to output_max. See LinearInitializer class
-          docstring for more details.
+          possible output is equal to output_max. See
+          `tfl.lattice_layer.LinearInitializer` class docstring for more
+          details.
+        - `'random_monotonic_initializer'`: initialize parameters uniformly at
+          random such that all parameters are monotonically increasing for each
+          input. Parameters will be sampled uniformly at random from the range
+          `[output_min, output_max]`. See
+          `tfl.lattice_layer.RandomMonotonicInitializer` class docstring for
+          more details.
         - Any Keras initializer object.
       kernel_regularizer: None or a single element or a list of following:
         - Tuple `('torsion', l1, l2)` where l1 and l2 represent corresponding
@@ -273,9 +280,8 @@ class Lattice(keras.layers.Layer):
     self.monotonic_at_every_step = monotonic_at_every_step
     self.clip_inputs = clip_inputs
 
-    if kernel_initializer in ["linear_initializer", "LinearInitializer"]:
-      # Come up with reasonable default initialization parameters if they were
-      # not defined explicitly.
+    def default_params(output_min, output_max):
+      """Return reasonable default parameters if not defined explicitly."""
       if output_min is not None:
         output_init_min = output_min
       elif output_max is not None:
@@ -288,10 +294,25 @@ class Lattice(keras.layers.Layer):
         output_init_max = max(1.0, output_min)
       else:
         output_init_max = 1.0
+      # Return our min and max.
+      return output_init_min, output_init_max
+
+    if kernel_initializer in ["linear_initializer", "LinearInitializer"]:
+      output_init_min, output_init_max = default_params(output_min, output_max)
 
       self.kernel_initializer = LinearInitializer(
           lattice_sizes=lattice_sizes,
           monotonicities=monotonicities,
+          output_min=output_init_min,
+          output_max=output_init_max,
+          unimodalities=unimodalities)
+    elif kernel_initializer in [
+        "random_monotonic_initializer", "RandomMonotonicInitializer"
+    ]:
+      output_init_min, output_init_max = default_params(output_min, output_max)
+
+      self.kernel_initializer = RandomMonotonicInitializer(
+          lattice_sizes=lattice_sizes,
           output_min=output_init_min,
           output_max=output_init_max,
           unimodalities=unimodalities)
@@ -300,6 +321,7 @@ class Lattice(keras.layers.Layer):
       # objects.
       with keras.utils.custom_object_scope({
           "LinearInitializer": LinearInitializer,
+          "RandomMonotonicInitializer": RandomMonotonicInitializer,
       }):
         self.kernel_initializer = keras.initializers.get(kernel_initializer)
 
@@ -585,6 +607,75 @@ class LinearInitializer(keras.initializers.Initializer):
     return config
 
 
+class RandomMonotonicInitializer(keras.initializers.Initializer):
+  # pyformat: disable
+  """Initializes a `tfl.layers.Lattice` as uniform random monotonic function.
+
+  - The uniform random monotonic function will initilaize the lattice parameters
+    uniformly at random and make it such that the parameters are monotonically
+    increasing for each input.
+  - The random parameters will be sampled from `[output_min, output_max]`
+
+  Attributes:
+    - All `__init__` arguments.
+  """
+  # pyformat: enable
+
+  def __init__(self,
+               lattice_sizes,
+               output_min,
+               output_max,
+               unimodalities=None):
+    """Initializes an instance of `RandomMonotonicInitializer`.
+
+    Args:
+      lattice_sizes: Lattice sizes of `tfl.layers.Lattice` to initialize.
+      output_min: Minimum layer output after initialization.
+      output_max: Maximum layer output after initialization.
+      unimodalities: None or unimodal dimensions after initialization. Does not
+        need to match `unimodalities` of `tfl.layers.Lattice`.
+
+    Raises:
+      ValueError: If there are invalid hyperparameters.
+    """
+    lattice_lib.verify_hyperparameters(
+        lattice_sizes=lattice_sizes,
+        unimodalities=unimodalities,
+        output_min=output_min,
+        output_max=output_max)
+
+    self.lattice_sizes = lattice_sizes
+    self.output_min = output_min
+    self.output_max = output_max
+    self.unimodalities = unimodalities
+
+  def __call__(self, shape, dtype=None, partition_info=None):
+    """Returns weights of `tfl.layers.Lattice` layer.
+
+    Args:
+      shape: Must be: `(prod(lattice_sizes), units)`.
+      dtype: Standard Keras initializer param.
+      partition_info: Standard Keras initializer param. Not used.
+    """
+    del partition_info
+    return lattice_lib.random_monotonic_initializer(
+        lattice_sizes=self.lattice_sizes,
+        output_min=self.output_min,
+        output_max=self.output_max,
+        units=shape[1],
+        dtype=dtype)
+
+  def get_config(self):
+    """Standard Keras config for serialization."""
+    config = {
+        "lattice_sizes": self.lattice_sizes,
+        "output_min": self.output_min,
+        "output_max": self.output_max,
+        "unimodalities": self.unimodalities,
+    }  # pyformat: disable
+    return config
+
+
 class LatticeConstraints(keras.constraints.Constraint):
   # pyformat: disable
   """Constraints for `tfl.layers.Lattice` layer.
@@ -662,8 +753,8 @@ class LatticeConstraints(keras.constraints.Constraint):
         self.edgeworth_trusts)
     canonical_trapezoid_trusts = lattice_lib.canonicalize_trust(
         self.trapezoid_trusts)
-    num_constraint_dims = lattice_lib.count_non_zeros(
-        canonical_monotonicities, canonical_unimodalities)
+    num_constraint_dims = lattice_lib.count_non_zeros(canonical_monotonicities,
+                                                      canonical_unimodalities)
     # No need to separately check for trust constraints and monotonic dominance,
     # since monotonicity is required to impose them. The only exception is joint
     # monotonicity.

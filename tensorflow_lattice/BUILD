@@ -41,6 +41,7 @@ py_library(
         "//tensorflow_lattice/python:linear_lib",
         "//tensorflow_lattice/python:model_info",
         "//tensorflow_lattice/python:parallel_combination_layer",
+        "//tensorflow_lattice/python:premade",
         "//tensorflow_lattice/python:pwl_calibration_layer",
         "//tensorflow_lattice/python:pwl_calibration_lib",
         "//tensorflow_lattice/python:test_utils",
