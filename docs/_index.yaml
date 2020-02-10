@@ -62,12 +62,12 @@ landing_page:
 
   - classname: devsite-landing-row-cards
     items:
-    - heading: "TensorFlow Lattice: Flexibility empowered by prior knowledge"
+    - heading: "TensorFlow Lattice: Flexible, controlled and interpretable ML"
       image_path: /resources/images/tf-logo-card-16x9.png
-      path: https://ai.googleblog.com/2017/10/tensorflow-lattice-flexibility.html
+      path: https://blog.tensorflow.org/2020/02/tensorflow-lattice-flexible-controlled-and-interpretable-ML.html
       buttons:
-      - label: "Read on the Google AI blog"
-        path: https://ai.googleblog.com/2017/10/tensorflow-lattice-flexibility.html
+      - label: "Read on the TensorFlow blog"
+        path: https://blog.tensorflow.org/2020/02/tensorflow-lattice-flexible-controlled-and-interpretable-ML.html
     - heading: "TensorFlow Lattice: Control your ML with monotonicity"
       youtube_id: ABBnNjbjv2Q
       buttons:
