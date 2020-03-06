@@ -103,8 +103,7 @@ py_library(
 
 py_test(
     name = "categorical_calibration_test",
-    size = "medium",
-    timeout = "long",
+    size = "large",
     srcs = ["categorical_calibration_test.py"],
     python_version = "PY3",
     # shard_count = 4,
@@ -284,6 +283,7 @@ py_library(
         ":linear_layer",
         ":model_info",
         ":premade",
+        ":premade_lib",
         ":pwl_calibration_layer",
         # absl/logging dep,
         # tensorflow dep,
@@ -292,11 +292,10 @@ py_library(
 
 py_test(
     name = "estimators_test",
-    size = "large",
-    timeout = "long",
+    size = "enormous",
     srcs = ["estimators_test.py"],
     python_version = "PY3",
-    # shard_count = 8,
+    # shard_count = 10,
     srcs_version = "PY2AND3",
     deps = [
         ":configs",
@@ -313,6 +312,17 @@ py_library(
     srcs = ["premade.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":configs",
+        ":premade_lib",
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "premade_lib",
+    srcs = ["premade_lib.py"],
+    srcs_version = "PY2AND3",
+    deps = [
         ":categorical_calibration_layer",
         ":configs",
         ":lattice_layer",
@@ -322,6 +332,20 @@ py_library(
         # enum dep,
         # numpy dep,
         # six dep,
+        # tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "premade_test",
+    srcs = ["premade_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":configs",
+        ":premade_lib",
+        # absl/testing:parameterized dep,
+        # numpy dep,
         # tensorflow dep,
     ],
 )

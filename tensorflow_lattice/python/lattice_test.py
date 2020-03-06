@@ -26,7 +26,6 @@ from tensorflow import keras
 from tensorflow_lattice.python import lattice_layer as ll
 from tensorflow_lattice.python import test_utils
 
-
 class LatticeTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
@@ -201,6 +200,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("edgeworth_trusts", None)
     config.setdefault("trapezoid_trusts", None)
     config.setdefault("monotonic_dominances", None)
+    config.setdefault("range_dominances", None)
     config.setdefault("joint_monotonicities", None)
     config.setdefault("output_min", None)
     config.setdefault("output_max", None)
@@ -259,6 +259,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         edgeworth_trusts=config["edgeworth_trusts"],
         trapezoid_trusts=config["trapezoid_trusts"],
         monotonic_dominances=config["monotonic_dominances"],
+        range_dominances=config["range_dominances"],
         joint_monotonicities=config["joint_monotonicities"],
         output_min=config["output_min"],
         output_max=config["output_max"],
@@ -782,6 +783,88 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self._TestEnsemble(config)
 
   @parameterized.parameters(
+      (None, 0.00618),
+      ([(1, 0)], 0.00618),
+      ([(0, 1)], 0.05092),
+  )
+  def testSimpleRangeDominance2D(self, range_dominances, expected_loss):
+    if self.disable_all:
+      return
+    config = {
+        "lattice_sizes": [2, 2],
+        "num_training_records": 100,
+        "num_training_epoch": 20,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 0.1,
+        "x_generator": self._TwoDMeshGrid,
+        "y_function": self._WeightedSum,
+        "monotonicities": [1, 1],
+        "range_dominances": range_dominances,
+        "output_min": 0.0,
+        "output_max": 3.0,
+        # Leave margin of error (floating point) for dominance projection.
+        "target_monotonicity_diff": -1e-6,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  @parameterized.parameters(
+      (None, 0.24449, 1),
+      ([(1, 0)], 0.24449, 2),
+      ([(0, 1)], 0.61649, 3),
+  )
+  def testDenseRangeDominance2D(self, range_dominances, expected_loss, expid):
+    if self.disable_all:
+      return
+    config = {
+        "lattice_sizes": [5, 5],
+        "num_training_records": 100,
+        "num_training_epoch": 40,
+        "num_projection_iterations": 20,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 0.1,
+        "x_generator": self._TwoDMeshGrid,
+        "y_function": self._WeightedSum,
+        "monotonicities": [1, 1],
+        "range_dominances": range_dominances,
+        "output_min": 0.0,
+        "output_max": 12.0,
+        # Leave margin of error (floating point) for dominance projection.
+        "target_monotonicity_diff": -1e-2,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  @parameterized.parameters(
+      ([(1, 0), (2, 1)], 1.24238),
+      ([(0, 1), (1, 2)], 2.14021),
+  )
+  def testDenseRangeDominance5D(self, range_dominances, expected_loss):
+    if self.disable_all:
+      return
+    config = {
+        "lattice_sizes": [5, 5, 5, 5, 5],
+        "num_training_records": 100,
+        "num_training_epoch": 300,
+        "num_projection_iterations": 40,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 1.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._WeightedSum,
+        "monotonicities": [1, 1, 1, 1, 1],
+        "range_dominances": range_dominances,
+        "output_min": 0.0,
+        "output_max": 60.0,
+        # Leave margin of error (floating point) for dominance projection.
+        "target_monotonicity_diff": -1e-1,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, expected_loss, delta=0.01)
+    self._TestEnsemble(config)
+
+  @parameterized.parameters(
       (None, 0.00000),
       ([(0, 1)], 0.05092),
       ([(1, 0)], 0.05092),
@@ -998,6 +1081,13 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, 0.794330, delta=self.loss_eps)
     self._TestEnsemble(config)
+
+    config["unimodalities"] = ["peak", "none"]
+    config["monotonicities"] = ["none", "increasing"]
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 1.082982, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
 
   def testRandomMonotonicInitializer(self):
     if self.disable_all:
@@ -1239,20 +1329,23 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "learning_rate": 1000.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
-        "kernel_regularizer": [("torsion", 1e-6, 1e-6),
-                               ("laplacian", 1e-5, 1e-5)],
+        "kernel_regularizer": [("torsion", 0.0, 1e-6),
+                               ("laplacian", 1e-6, 0.0)],
         "target_monotonicity_diff": -1e-5,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    # TODO: this test behaves differently in graph and eager mode.
-    # Figure out why.
-    self.assertAlmostEqual(loss, 3.689727, delta=0.1)
+    # Delta is large because regularizers for large lattice are prone to
+    # numerical errors due to summing up huge number of floats of various
+    # maginitudes hense loss is different in graph and eager modes.
+    self.assertAlmostEqual(loss, 0.910818, delta=0.05)
 
   @parameterized.parameters(
       ([0], [0], 0.026734),
       ([1], ["none"], 0.195275),
       ([1], None, 0.195275),
-      ([0], ["valley"], 0.045627),
+      ([0], ["Valley"], 0.045627),
+      ([0], ["peak"], 0.045627),
+      ([0], [-1], 0.045627),
       (None, [1], 0.045627),
   )
   def testUnimodalityOneD(self, monotonicities, unimodalities, expected_loss):
@@ -1261,7 +1354,12 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
 
     def WShaped1dFunction(x):
       d = min(abs(x[0] - 3.0), abs(x[0] - 7.0))
-      return d * d / 4.0
+      result = d * d / 4.0 - 2.0
+      # Mirroring to test opposite unimodality direction on same data.
+      if unimodalities:
+        if unimodalities[0] == -1 or unimodalities[0] == "peak":
+          result *= -1.0
+      return result
 
     config = {
         "lattice_sizes": [11],
@@ -1274,8 +1372,8 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "monotonicities": monotonicities,
         "unimodalities": unimodalities,
         "kernel_initializer": "linear_initializer",
-        "output_min": 0.0,
-        "output_max": 4.0,
+        "output_min": -2.0,
+        "output_max": 2.0,
     }  # pyformat: disable
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
@@ -1287,6 +1385,10 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
       ([0, 0], [1, 1], 0.003073),
       ([1, 0], [0, 1], 0.162484),
       ([0, 0], [1, 0], 0.004883),
+      ([0, 0], [-1, -1], 0.003073),
+      ([1, 0], [0, -1], 0.162484),
+      ([0, 0], [-1, 0], 0.004883),
+      ([0, 0], [-1, 1], 0.260546),
   )
   def testUnimodalityTwoD(self, monotonicities, unimodalities, expected_loss):
     if self.disable_all:
@@ -1295,7 +1397,11 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     def WShaped2dFunction(x):
       distance = lambda x1, y1, x2, y2: ((x2 - x1)**2 + (y2 - y1)**2)**0.5
       d = distance(x[0], x[1], 5.0, 5.0)
-      return (d - 2.0)**2 / 8.0
+      result = (d - 2.0)**2 / 8.0 - 2.0
+      # Mirroring to test opposite unimodality direction on same data.
+      if unimodalities[0] == -1 or unimodalities[1] == -1:
+        result *= -1.0
+      return result
 
     config = {
         "lattice_sizes": [11, 11],
@@ -1308,8 +1414,8 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "monotonicities": monotonicities,
         "unimodalities": unimodalities,
         "kernel_initializer": "linear_initializer",
-        "output_min": 0.0,
-        "output_max": 4.0,
+        "output_min": -2.0,
+        "output_max": 2.0,
     }  # pyformat: disable
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)

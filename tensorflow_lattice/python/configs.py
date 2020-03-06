@@ -189,7 +189,7 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
                output_min=None,
                output_max=None,
                output_calibration=False,
-               output_calibration_num_keypoint=10,
+               output_calibration_num_keypoints=10,
                output_initialization='quantiles',
                fix_ensemble_for_2d_constraints=True,
                random_seed=0):
@@ -219,7 +219,7 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
       output_max: Upper bound constraint on the output of the model.
       output_calibration: If a piecewise-linear calibration should be used on
         the output of the lattice.
-      output_calibration_num_keypoint: Number of keypoints to use for the output
+      output_calibration_num_keypoints: Number of keypoints to use for the output
         piecewise-linear calibration.
       output_initialization: The initial values to setup for the output of the
         model. When using output calibration, these values are used to initliaze
@@ -274,7 +274,7 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
                output_min=None,
                output_max=None,
                output_calibration=False,
-               output_calibration_num_keypoint=10,
+               output_calibration_num_keypoints=10,
                output_initialization='quantiles'):
     """Initializes a `CalibratedLatticeConfig` instance.
 
@@ -288,7 +288,7 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
       output_max: Upper bound constraint on the output of the model.
       output_calibration: If a piecewise-linear calibration should be used on
         the output of the lattice.
-      output_calibration_num_keypoint: Number of keypoints to use for the output
+      output_calibration_num_keypoints: Number of keypoints to use for the output
         piecewise-linear calibration.
       output_initialization: The initial values to setup for the output of the
         model. When using output calibration, these values are used to initliaze
@@ -338,7 +338,7 @@ class CalibratedLinearConfig(_Config, _HasFeatureConfigs,
                output_min=None,
                output_max=None,
                output_calibration=False,
-               output_calibration_num_keypoint=10,
+               output_calibration_num_keypoints=10,
                output_initialization='quantiles'):
     """Initializes a `CalibratedLinearConfig` instance.
 
@@ -353,7 +353,7 @@ class CalibratedLinearConfig(_Config, _HasFeatureConfigs,
       output_max: Upper bound constraint on the output of the model.
       output_calibration: If a piecewise-linear calibration should be used on
         the output of the lattice.
-      output_calibration_num_keypoint: Number of keypoints to use for the output
+      output_calibration_num_keypoints: Number of keypoints to use for the output
         piecewise-linear calibration.
       output_initialization: The initial values to setup for the output of the
         model. When using output calibration, these values are used to initliaze
@@ -468,11 +468,14 @@ class FeatureConfig(_Config, _HasRegularizerConfigs):
         - For categorical features, a list of (category_a, category_b) pairs
           from the vocabulary list indicating that with other features fixed,
           model output for category_b should be greater than or equal to
-          category_a.
-      unimodality: For numeric features specifies if the model output should
-        be unimodal in corresponding feature, using 'valley' or 1 to indicate
-        that function first decreases, then increases and 'none' or 0 to
-        indicate no unimodality constraints. Not used for categorical features.
+          category_a. If no vocabulary list is specified, we assume implcit
+          vocabulary in the range `[0, num_buckets - 1]`.
+      unimodality: For numeric features specifies if the model output
+        should be unimodal in corresponding feature, using 'valley' or 1 to
+        indicate that function first decreases then increases, using 'peak' or
+        -1 to indicate that funciton first increases then decreases, using
+        'none' or 0 to indicate no unimodality constraints. Not used for
+        categorical features.
       reflects_trust_in: None or a list of `tfl.configs.TrustConfig` instances.
       dominates: None or a list of `tfl.configs.DominanceConfig` instances.
       pwl_calibration_always_monotonic: Specifies if the piecewise-linear
