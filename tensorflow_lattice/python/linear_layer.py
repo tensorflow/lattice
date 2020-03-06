@@ -23,6 +23,7 @@ from __future__ import division
 from __future__ import print_function
 
 from . import linear_lib
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
@@ -39,9 +40,17 @@ class Linear(keras.layers.Layer):
   increasing or non positive for decreasing monotonicity.
 
   Monotonic dominance can be specified for any pair of dimensions referred to as
-  *dominant* and *weak* dimensions such that  the effect (slope) in the
-  direction of the *dominant* dimension to be greater than that of the *weak*
-  dimension for any point. Both dominant and weak dimensions must be increasing.
+  *dominant* and *weak* dimensions such that the effect (slope) in the direction
+  of the *dominant* dimension to be greater than that of the *weak* dimension
+  for any point. Both dominant and weak dimensions must be increasing.
+
+  Range dominance can be specified for any pair of *dominant* and *weak*
+  dimensions such that the range of possible outputs to be greater if one varies
+  the *dominant* dimension than if one varies the *weak* dimension for any
+  point. We require the slope of the *dominant* dimension scaled by its input
+  range to be greater than the slope of the *weak* dimension similarly scaled by
+  its input range. Both dimensions must have the same direction of monotonicity
+  and their input min and max must be provided.
 
   Weights can be constrained to have a fixed norm.
 
@@ -75,6 +84,9 @@ class Linear(keras.layers.Layer):
                num_input_dims,
                monotonicities=None,
                monotonic_dominances=None,
+               range_dominances=None,
+               input_min=None,
+               input_max=None,
                use_bias=True,
                normalization_order=None,
                kernel_initializer="random_uniform",
@@ -97,8 +109,18 @@ class Linear(keras.layers.Layer):
         Instead of a list or tuple single value can be specified to indicate the
         monotonicity constraint across all dimensions.
       monotonic_dominances: None or list of two-element tuples. First element is
-        the index of the dominant feature. Second element is the index of the
-        weak feature.
+        the index of the dominant dimension. Second element is the index of the
+        weak dimension.
+      range_dominances: None or list of two-element tuples. First element is the
+        index of the dominant dimension. Second element is the index of the weak
+        dimension. Both dominant and weak dimensions must have input_min and
+        input_max set.
+      input_min: None of list or tuple of length 'num_input_dims' of either
+        'none' or float which specifies the minimum value to clip by for each
+        dimension.
+      input_max: None of list or tuple of length 'num_input_dims' of either
+        'none' or float which specifies the maximum value to clip by for each
+        dimension.
       use_bias: Whether linear function has bias.
       normalization_order: If specified learned weights will be adjusted to have
         norm 1. Norm will be computed by: `tf.norm(tensor,
@@ -126,6 +148,9 @@ class Linear(keras.layers.Layer):
     else:
       self.monotonicities = [0] * self.num_input_dims
     self.monotonic_dominances = monotonic_dominances
+    self.range_dominances = range_dominances
+    self.input_min = input_min
+    self.input_max = input_max
     # Verify hyperparameters after converting monotonicities to list because
     # internally everything expects monotonicites to be list or tuple rather
     # than single element.
@@ -170,10 +195,13 @@ class Linear(keras.layers.Layer):
                        "'num_input_dims': " + str(self.num_input_dims))
 
     if (any(self.monotonicities) or self.monotonic_dominances or
-        self.normalization_order):
+        self.range_dominances or self.normalization_order):
       constraints = LinearConstraints(
           monotonicities=self.monotonicities,
           monotonic_dominances=self.monotonic_dominances,
+          range_dominances=self.range_dominances,
+          input_min=self.input_min,
+          input_max=self.input_max,
           normalization_order=self.normalization_order)
     else:
       constraints = None
@@ -211,10 +239,29 @@ class Linear(keras.layers.Layer):
           constraint=None,
           dtype=self.dtype)
 
+    input_min = linear_lib.canonicalize_input_bounds(self.input_min)
+    input_max = linear_lib.canonicalize_input_bounds(self.input_max)
+    if ((input_min and input_min.count(None) < len(input_min)) or
+        (input_max and input_max.count(None) < len(input_max))):
+      lower_bounds = [val if val is not None else -np.inf
+                      for val in input_min or [None] * self.num_input_dims]
+      upper_bounds = [val if val is not None else np.inf
+                      for val in input_max or [None] * self.num_input_dims]
+      self.clip_value_min = tf.constant(lower_bounds, dtype=self.dtype)
+      self.clip_value_max = tf.constant(upper_bounds, dtype=self.dtype)
+    else:
+      self.clip_value_min = None
+      self.clip_value_max = None
+
     super(Linear, self).build(input_shape)
 
   def call(self, inputs):
     """Standard Keras call() method."""
+    if self.clip_value_min is not None and self.clip_value_max is not None:
+      inputs = tf.clip_by_value(inputs,
+                                clip_value_min=self.clip_value_min,
+                                clip_value_max=self.clip_value_max)
+
     result = tf.matmul(inputs, self.kernel)
     if self.use_bias:
       result += self.bias
@@ -233,6 +280,9 @@ class Linear(keras.layers.Layer):
         "use_bias": self.use_bias,
         "normalization_order": self.normalization_order,
         "monotonic_dominances": self.monotonic_dominances,
+        "range_dominances": self.range_dominances,
+        "input_min": self.input_min,
+        "input_max": self.input_max,
         "kernel_initializer":
             keras.initializers.serialize(self.kernel_initializer),
         "kernel_regularizer": [
@@ -268,6 +318,9 @@ class Linear(keras.layers.Layer):
         monotonicities=linear_lib.canonicalize_monotonicities(
             self.monotonicities),
         monotonic_dominances=self.monotonic_dominances,
+        range_dominances=self.range_dominances,
+        input_min=linear_lib.canonicalize_input_bounds(self.input_min),
+        input_max=linear_lib.canonicalize_input_bounds(self.input_max),
         normalization_order=self.normalization_order,
         eps=eps)
 
@@ -280,6 +333,19 @@ class LinearConstraints(keras.constraints.Constraint):
   those dimensions is guaranteed to be either non negative for increasing or non
   positive for decreasing monotonicity.
 
+  Monotonic dominance can be specified for any pair of dimensions referred to as
+  *dominant* and *weak* dimensions such that the effect (slope) in the direction
+  of the *dominant* dimension to be greater than that of the *weak* dimension
+  for any point. Both dominant and weak dimensions must be increasing.
+
+  Range dominance can be specified for any pair of *dominant* and *weak*
+  dimensions such that the range of possible outputs to be greater if one varies
+  the *dominant* dimension than if one varies the *weak* dimension for any
+  point. We require the slope of the *dominant* dimension scaled by its input
+  range to be greater than the slope of the *weak* dimension similarly scaled by
+  its input range. Both dimensions must have the same direction of monotonicity
+  and their input min and max must be provided.
+
   Weights can be constrained to have norm 1.
 
   Attributes:
@@ -288,18 +354,28 @@ class LinearConstraints(keras.constraints.Constraint):
   # pyformat: enable
 
   def __init__(self, monotonicities, monotonic_dominances=None,
+               range_dominances=None, input_min=None, input_max=None,
                normalization_order=None):
     """initializes an instance of `LinearConstraints`.
 
     Args:
       monotonicities: Same meaning as corresponding parameter of `Linear`.
       monotonic_dominances: Same meaning as corresponding parameter of `Linear`.
+      range_dominances: Same meaning as corresponding parameter of `Linear`.
+      input_min: Same meaning as corresponding parameter of `Linear`.
+      input_max: Same meaning as corresponding parameter of `Linear`.
       normalization_order: Same meaning as corresponding parameter of `Linear`.
     """
     linear_lib.verify_hyperparameters(monotonicities=monotonicities,
-                                      monotonic_dominances=monotonic_dominances)
+                                      monotonic_dominances=monotonic_dominances,
+                                      range_dominances=range_dominances,
+                                      input_min=input_min,
+                                      input_max=input_max)
     self.monotonicities = monotonicities
     self.monotonic_dominances = monotonic_dominances
+    self.range_dominances = range_dominances
+    self.input_min = input_min
+    self.input_max = input_max
     self.normalization_order = normalization_order
 
   def __call__(self, w):
@@ -320,6 +396,9 @@ class LinearConstraints(keras.constraints.Constraint):
         monotonicities=linear_lib.canonicalize_monotonicities(
             self.monotonicities),
         monotonic_dominances=self.monotonic_dominances,
+        range_dominances=self.range_dominances,
+        input_min=linear_lib.canonicalize_input_bounds(self.input_min),
+        input_max=linear_lib.canonicalize_input_bounds(self.input_max),
         normalization_order=self.normalization_order)
 
   def get_config(self):
@@ -327,5 +406,8 @@ class LinearConstraints(keras.constraints.Constraint):
     return {
         "monotonicities": self.monotonicities,
         "monotonic_dominances": self.monotonic_dominances,
+        "range_doinances": self.range_dominances,
+        "input_min": self.input_min,
+        "input_max": self.input_max,
         "normalization_order": self.normalization_order
     }  # pyformat: disable

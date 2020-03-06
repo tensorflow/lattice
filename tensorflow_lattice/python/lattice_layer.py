@@ -90,6 +90,12 @@ class Lattice(keras.layers.Layer):
     dimensions must be monotonic. Note that this constraint might not be
     strictly satisified at the end of training. In such cases, increase the
     number of projection iterations.
+  * **Range Dominance:** constraints the function to require the range of
+    possible outputs to be greater than if one varies the *dominant* dimension
+    than if one varies the *weak* dimension for any point. Both dominant and
+    weak dimensions must be monotonic. Note that this constraint might not be
+    strictly satisified at the end of training. In such cases, increase the
+    number of projection iterations.
   * **Joint Monotonicity:** constrains the function to be monotonic along a
     diagonal direction of a two dimensional subspace when all other dimensions
     are fixed. For example, if our function is scoring the profit given *A*
@@ -150,6 +156,7 @@ class Lattice(keras.layers.Layer):
                edgeworth_trusts=None,
                trapezoid_trusts=None,
                monotonic_dominances=None,
+               range_dominances=None,
                joint_monotonicities=None,
                output_min=None,
                output_max=None,
@@ -174,10 +181,11 @@ class Lattice(keras.layers.Layer):
         indicate increasing monotonicity and 'none' or 0 to indicate no
         monotonicity constraints.
       unimodalities: None or list or tuple of same length as lattice_sizes of
-        {'none', 'valley', 0, 1} which specifies if the model output should
-        be unimodal in corresponding feature, using 'valley' or 1 to indicate
-        that function first decreases, then increases and 'none' or 0 to
-        indicate no unimodality constraints.
+        {'none', 'valley', 'peak', 0, 1, -1} which specifies if the model output
+        should be unimodal in corresponding feature, using 'valley' or 1 to
+        indicate that function first decreases then increases, using 'peak' or
+        -1 to indicate that funciton first increases then decreases, using
+        'none' or 0 to indicate no unimodality constraints.
       edgeworth_trusts: None or three-element tuple or iterable of three-element
         tuples. First element is the index of the main (monotonic) feature.
         Second element is the index of the conditional feature. Third element is
@@ -191,6 +199,9 @@ class Lattice(keras.layers.Layer):
         conditional feature should increase trust in the main feature and
         'negative' or -1 otherwise.
       monotonic_dominances: None or two-element tuple or iterable of two-element
+        tuples. First element is the index of the dominant feature. Second
+        element is the index of the weak feature.
+      range_dominances: None or two-element tuple or iterable of two-element
         tuples. First element is the index of the dominant feature. Second
         element is the index of the weak feature.
       joint_monotonicities: None or two-element tuple or iterable of two-element
@@ -269,6 +280,11 @@ class Lattice(keras.layers.Layer):
       self.monotonic_dominances = [monotonic_dominances]
     else:
       self.monotonic_dominances = monotonic_dominances
+    if (isinstance(range_dominances, tuple) and
+        isinstance(range_dominances[0], int)):
+      self.range_dominances = [range_dominances]
+    else:
+      self.range_dominances = range_dominances
     if (isinstance(joint_monotonicities, tuple) and
         isinstance(joint_monotonicities[0], int)):
       self.joint_monotonicities = [joint_monotonicities]
@@ -368,6 +384,7 @@ class Lattice(keras.layers.Layer):
         edgeworth_trusts=self.edgeworth_trusts,
         trapezoid_trusts=self.trapezoid_trusts,
         monotonic_dominances=self.monotonic_dominances,
+        range_dominances=self.range_dominances,
         joint_monotonicities=self.joint_monotonicities,
         output_min=self.output_min,
         output_max=self.output_max,
@@ -413,6 +430,7 @@ class Lattice(keras.layers.Layer):
         edgeworth_trusts=self.edgeworth_trusts,
         trapezoid_trusts=self.trapezoid_trusts,
         monotonic_dominances=self.monotonic_dominances,
+        range_dominances=self.range_dominances,
         joint_monotonicities=self.joint_monotonicities,
         output_min=self.output_min,
         output_max=self.output_max,
@@ -465,6 +483,7 @@ class Lattice(keras.layers.Layer):
         "edgeworth_trusts": self.edgeworth_trusts,
         "trapezoid_trusts": self.trapezoid_trusts,
         "monotonic_dominances": self.monotonic_dominances,
+        "range_dominances": self.range_dominances,
         "joint_monotonicities": self.joint_monotonicities,
         "output_min": self.output_min,
         "output_max": self.output_max,
@@ -513,6 +532,7 @@ class Lattice(keras.layers.Layer):
         edgeworth_trusts=lattice_lib.canonicalize_trust(self.edgeworth_trusts),
         trapezoid_trusts=lattice_lib.canonicalize_trust(self.trapezoid_trusts),
         monotonic_dominances=self.monotonic_dominances,
+        range_dominances=self.range_dominances,
         joint_monotonicities=self.joint_monotonicities,
         output_min=self.output_min,
         output_max=self.output_max,
@@ -680,8 +700,8 @@ class LatticeConstraints(keras.constraints.Constraint):
   # pyformat: disable
   """Constraints for `tfl.layers.Lattice` layer.
 
-  Applies monotonicity, unimodality, trust and bound constraints to the lattice
-  parameters. See `tfl.layers.Lattice` for details.
+  Applies all constraints to the lattice weights. See `tfl.layers.Lattice`
+  for more details.
 
   Attributes:
     - All `__init__` arguments.
@@ -695,6 +715,7 @@ class LatticeConstraints(keras.constraints.Constraint):
                edgeworth_trusts=None,
                trapezoid_trusts=None,
                monotonic_dominances=None,
+               range_dominances=None,
                joint_monotonicities=None,
                output_min=None,
                output_max=None,
@@ -710,6 +731,7 @@ class LatticeConstraints(keras.constraints.Constraint):
       trapezoid_trusts: Same meaning as corresponding parameter of `Lattice`.
       monotonic_dominances: Same meaning as corresponding parameter of
         `Lattice`.
+      range_dominances: Same meaning as corresponding parameter of `Lattice`.
       joint_monotonicities: Same meaning as corresponding parameter of
         `Lattice`.
       output_min: Minimum possible output.
@@ -729,6 +751,7 @@ class LatticeConstraints(keras.constraints.Constraint):
         edgeworth_trusts=edgeworth_trusts,
         trapezoid_trusts=trapezoid_trusts,
         monotonic_dominances=monotonic_dominances,
+        range_dominances=range_dominances,
         joint_monotonicities=joint_monotonicities)
 
     self.lattice_sizes = lattice_sizes
@@ -737,6 +760,7 @@ class LatticeConstraints(keras.constraints.Constraint):
     self.edgeworth_trusts = edgeworth_trusts
     self.trapezoid_trusts = trapezoid_trusts
     self.monotonic_dominances = monotonic_dominances
+    self.range_dominances = range_dominances
     self.joint_monotonicities = joint_monotonicities
     self.output_min = output_min
     self.output_max = output_max
@@ -767,6 +791,7 @@ class LatticeConstraints(keras.constraints.Constraint):
           edgeworth_trusts=canonical_edgeworth_trusts,
           trapezoid_trusts=canonical_trapezoid_trusts,
           monotonic_dominances=self.monotonic_dominances,
+          range_dominances=self.range_dominances,
           joint_monotonicities=self.joint_monotonicities,
           num_iterations=self.num_projection_iterations)
       if self.enforce_strict_monotonicity:
@@ -795,6 +820,7 @@ class LatticeConstraints(keras.constraints.Constraint):
         "edgeworth_trusts": self.edgeworth_trusts,
         "trapezoid_trusts": self.trapezoid_trusts,
         "monotonic_dominances": self.monotonic_dominances,
+        "range_dominances": self.range_dominances,
         "joint_monotonicities": self.joint_monotonicities,
         "output_min": self.output_min,
         "output_max": self.output_max,

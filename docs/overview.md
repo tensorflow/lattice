@@ -86,8 +86,8 @@ The library provides two variations of these ensembles:
 
 ## Why TensorFlow Lattice ?
 
-You can find a brief introduction to TensorFlow Lattice in
-[Google AI's Blog post](https://research.googleblog.com/).
+You can find a brief introduction to TensorFlow Lattice in this
+[TF Blog post](https://blog.tensorflow.org/2020/02/tensorflow-lattice-flexible-controlled-and-interpretable-ML.html).
 
 ### Interpretability
 
@@ -208,6 +208,10 @@ include embeddings or other Keras layers.
 
 ## Tutorials and API docs
 
-You can use [Canned Estimators](tutorials/canned_estimators.ipynb) or
-[Keras Layers](tutorials/keras_layers.ipynb). Check out
-[full API docs](api_docs/python/tfl.ipynb) for details.
+For common model architectures, you can use
+[Keras premade models](tutorials/premade_models.ipynb) or
+[canned Estimators](tutorials/canned_estimators.ipynb). You can also create
+custom models using [TF Lattice Keras layers](tutorials/keras_layers.ipynb) or
+mix and match with other Keras layers. Check out the
+[full API docs](https://www.tensorflow.org/lattice/api_docs/python/tfl) for
+details.

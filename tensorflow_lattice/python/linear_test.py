@@ -89,6 +89,9 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
   def _SetDefaults(self, config):
     config.setdefault("monotonicities", None)
     config.setdefault("monotonic_dominances", None)
+    config.setdefault("range_dominances", None)
+    config.setdefault("clip_min", None)
+    config.setdefault("clip_max", None)
     config.setdefault("use_bias", False)
     config.setdefault("normalization_order", None)
     config.setdefault("kernel_init_constant", 0.0)
@@ -152,6 +155,9 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         num_input_dims=config["num_input_dims"],
         monotonicities=config["monotonicities"],
         monotonic_dominances=config["monotonic_dominances"],
+        range_dominances=config["range_dominances"],
+        input_min=config["clip_min"],
+        input_max=config["clip_max"],
         use_bias=config["use_bias"],
         normalization_order=config["normalization_order"],
         kernel_initializer=keras.initializers.Constant(
@@ -504,6 +510,34 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "input_min": 0.0,
         "input_max": 4.0,
         "y_function": self._GenLinearFunction(weights=[1.0, 2.0])
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, expected_loss, delta=_LOSS_EPS)
+
+  @parameterized.parameters(([(0, 1)], [1, 1, 0], [1.0, 2.0, 3.0], 1.8409),
+                            ([(0, 1)], [-1, -1, 0], [-1.0, -2.0, -3.0], 1.8409),
+                            ([(1, 0)], [1, 1, 0], [1.0, 2.0, 3.0], 0.6567),
+                            ([(1, 0)], [-1, -1, 0], [-1.0, -2.0, -3.0], 0.6567))
+  # Expected losses are computed by running this test. Correctness is verified
+  # manually by looking at visualisation of learned function vs ground truth.
+  def testTwoDRangeDominance(self, dominances, monotonicities, weights,
+                             expected_loss):
+    if _DISABLE_ALL:
+      return
+    config = {
+        "num_input_dims": 3,
+        "monotonicities": monotonicities,
+        "range_dominances": dominances,
+        "clip_min": [0.0, 0.0, "none"],
+        "clip_max": (1.0, 4.0, "none"),
+        "num_training_records": 64,
+        "num_training_epoch": 160,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 1.5,
+        "x_generator": self._ScaterXUniformly,
+        "input_min": 0.0,
+        "input_max": 4.0,
+        "y_function": self._GenLinearFunction(weights=weights)
     }  # pyformat: disable
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, expected_loss, delta=_LOSS_EPS)

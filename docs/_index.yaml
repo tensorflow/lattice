@@ -14,7 +14,8 @@ landing_page:
         <a href="./tutorials/shape_constraints">shape constraints</a>. This is done using a
         collection of <a href="./tutorials/keras_layers">Keras layers</a> that can satisfy
         constraints such as monotonicity, convexity and how features interact. The library also
-        provides easy to setup <a href="./tutorials/canned_estimators">canned estimators</a>.</p>
+        provides easy to setup <a href="./tutorials/premade_models">premade models</a> and
+        <a href="./tutorials/canned_estimators">canned estimators</a>.</p>
         <p>With TF Lattice you can use domain knowledge to better extrapolate to the parts of the
         input space not covered by the training dataset. This helps avoid unexpected model behaviour
         when the serving distribution is different from the training distribution.</p>
@@ -54,7 +55,7 @@ landing_page:
         model.add(
             tfl.layers.Lattice(
                 lattice_size=[2, 3, 2],
-                monotonicities='increasing',
+                monotonicities=['increasing', 'increasing', 'increasing'],
                 # Trust: model is more responsive to input 0 if input 1 increases
                 edgeworth_trusts=(0, 1, 'positive')))
         model.compile(...)

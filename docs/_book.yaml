@@ -20,8 +20,12 @@ upper_tabs:
       - heading: Tutorials
       - title: Shape constraints
         path: /lattice/tutorials/shape_constraints
+      - title: Ethical constraints for ML fairness
+        path: /lattice/tutorials/shape_constraints_for_ethics
       - title: Keras layers
         path: /lattice/tutorials/keras_layers
+      - title: Keras premade models
+        path: /lattice/tutorials/premade_models
       - title: Canned Estimators
         path: /lattice/tutorials/canned_estimators
       - title: Custom Estimators

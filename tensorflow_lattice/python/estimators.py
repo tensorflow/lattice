@@ -79,6 +79,7 @@ from . import lattice_lib
 from . import linear_layer
 from . import model_info
 from . import premade
+from . import premade_lib
 from . import pwl_calibration_layer
 
 from absl import logging
@@ -265,7 +266,7 @@ def _finalize_keypoints(model_config, config, feature_columns,
         # Default feature_values to [0, ... n_class-1] if string label.
         if label.dtype == tf.string:
           feature_values = np.arange(len(set(feature_values)))
-        num_keypoints = model_config.output_calibration_num_keypoint
+        num_keypoints = model_config.output_calibration_num_keypoints
         keypoints = model_config.output_initialization
         clip_min = model_config.output_min
         clip_max = model_config.output_max
@@ -347,7 +348,7 @@ def _finalize_keypoints(model_config, config, feature_columns,
       # range [-2, 2], ignoring the label distribution.
       model_config.output_initialization = [
           float(x) for x in np.linspace(
-              -2, 2, model_config.output_calibration_num_keypoint)
+              -2, 2, model_config.output_calibration_num_keypoints)
       ]
     else:
       model_config.output_initialization = output_init
@@ -392,31 +393,6 @@ def _fix_ensemble_for_2d_constraints(model_config, feature_names):
           'increased from %d to %d.', idx, len(lattice), len(fixed_lattice))
 
   model_config.lattices = fixed_lattices
-
-
-def _set_random_lattice_ensemble(model_config, feature_names):
-  """Sets random lattice ensemble in the given model_config."""
-  # Start by using each feature once.
-  np.random.seed(model_config.random_seed)
-  model_config.lattices = [[] for _ in range(model_config.num_lattices)]
-  for feature_name in feature_names:
-    non_full_indices = [
-        i for (i, lattice) in enumerate(model_config.lattices)
-        if len(lattice) < model_config.lattice_rank
-    ]
-    model_config.lattices[np.random.choice(non_full_indices)].append(
-        feature_name)
-
-  # Fill up lattices avoiding repeated features.
-  for lattice in model_config.lattices:
-    feature_names_not_in_lattice = [
-        feature_name for feature_name in feature_names
-        if feature_name not in lattice
-    ]
-    remaining_size = model_config.lattice_rank - len(lattice)
-    lattice.extend(
-        np.random.choice(
-            feature_names_not_in_lattice, size=remaining_size, replace=False))
 
 
 def _add_pair_to_ensemble(lattices, lattice_rank, i, j):
@@ -473,7 +449,7 @@ def _get_torsions_and_laplacians(prefitting_model_config, prefitting_estimator,
   for (lattice_index, lattice) in enumerate(prefitting_model_config.lattices):
     # Get normalized lattice weights.
     lattice_kernel_variable_name = '{}_{}/{}'.format(
-        premade.LATTICE_LAYER_NAME, lattice_index,
+        premade_lib.LATTICE_LAYER_NAME, lattice_index,
         lattice_layer.LATTICE_KERNEL_NAME)
     weights = prefitting_estimator.get_variable_value(
         lattice_kernel_variable_name)
@@ -750,8 +726,7 @@ def _finalize_model_structure(model_config, label_dimension, feature_columns,
   if ((config is None or config.is_chief) and
       not tf.io.gfile.exists(ensemble_structure_filename)):
     if model_config.lattices == 'random':
-      _set_random_lattice_ensemble(
-          model_config=model_config, feature_names=feature_names)
+      premade_lib.set_random_lattice_ensemble(model_config)
     elif model_config.lattices == 'crystals':
       _set_crystals_lattice_ensemble(
           feature_names=feature_names,
@@ -836,34 +811,8 @@ def _update_by_feature_columns(model_config, feature_columns):
       raise ValueError('Unsupported feature_column: {}'.format(feature_column))
     # pylint: enable=protected-access
 
-    # Change categorical monotonicities to indices.
-    if (feature_config.num_buckets and
-        isinstance(feature_config.monotonicity, list)):
-      if not feature_config.vocabulary_list:
-        raise ValueError('Vocabulary list must be provided to use categorical'
-                         'monotonicities.')
-      if not all(
-          isinstance(m, tuple) and len(m) == 2
-          for m in feature_config.monotonicity):
-        raise ValueError(
-            'Monotonicities should be a list of pairs (tuples): {}'.format(
-                feature_config.monotonicity))
-      indexed_monotonicities = []
-      index_map = {
-          category: index
-          for (index, category) in enumerate(feature_config.vocabulary_list)
-      }
-      if feature_config.default_value is not None:
-        index_map[feature_config.default_value] = feature_config.num_buckets - 1
-      for left, right in feature_config.monotonicity:
-        for category in [left, right]:
-          if category not in index_map:
-            raise ValueError(
-                'Category `{}` not found in vocabulary list for feature `{}`'
-                .format(category, feature_config.name))
-        indexed_monotonicities.append((index_map[left], index_map[right]))
-
-      feature_config.monotonicity = indexed_monotonicities
+  # Change categorical monotonicities to indices.
+  premade_lib.set_categorical_monotonicities(model_config.feature_configs)
 
 
 def _calibrated_lattice_ensemble_model_fn(features, labels, label_dimension,
@@ -873,7 +822,7 @@ def _calibrated_lattice_ensemble_model_fn(features, labels, label_dimension,
   """Calibrated Lattice Ensemble Model."""
   del config
   if label_dimension != 1:
-    ValueError('Only 1-dimensional output is supported.')
+    raise ValueError('Only 1-dimensional output is supported.')
 
   # Get input tensors and corresponding feature configs.
   transformed_features = transform_features(features, feature_columns)
@@ -918,7 +867,7 @@ def _calibrated_lattice_model_fn(features, labels, label_dimension,
   """Calibrated Lattice Model."""
   del config
   if label_dimension != 1:
-    ValueError('Only 1-dimensional output is supported.')
+    raise ValueError('Only 1-dimensional output is supported.')
 
   # Get input tensors and corresponding feature configs.
   transformed_features = transform_features(features, feature_columns)
@@ -961,7 +910,7 @@ def _calibrated_linear_model_fn(features, labels, label_dimension,
   """Calibrated Linear Model."""
   del config
   if label_dimension != 1:
-    ValueError('Only 1-dimensional output is supported.')
+    raise ValueError('Only 1-dimensional output is supported.')
 
   # Get input tensors and corresponding feature configs.
   transformed_features = transform_features(features, feature_columns)
@@ -1545,7 +1494,7 @@ def get_model_graph(saved_model_path, tag='serve'):
     # {CALIB_LAYER_NAME}_{feature_name}/
     #   {CATEGORICAL_CALIBRATION_KERNEL_NAME}/Read/ReadVariableOp
     kernel_op_re = '^{}_(.*)/{}/Read/ReadVariableOp$'.format(
-        premade.CALIB_LAYER_NAME,
+        premade_lib.CALIB_LAYER_NAME,
         categorical_calibration_layer.CATEGORICAL_CALIBRATION_KERNEL_NAME,
     )
     for kernel_op, feature_name in _match_op(ops, kernel_op_re):
@@ -1555,7 +1504,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # {CALIB_LAYER_NAME}_{feature_name}/
       #   {DEFAULT_INPUT_VALUE_NAME}
       default_input_value_op = '^{}_{}/{}$'.format(
-          premade.CALIB_LAYER_NAME,
+          premade_lib.CALIB_LAYER_NAME,
           feature_name,
           categorical_calibration_layer.DEFAULT_INPUT_VALUE_NAME,
       )
@@ -1579,7 +1528,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # {CALIB_PASSTHROUGH_NAME}_{feature_name}_
       #   {calibration_output_idx}_{submodel_idx}_{submodel_input_idx}
       shared_calib_passthrough_op_re = r'^{}_{}_(\d*)_(\d*)_(\d*)$'.format(
-          premade.CALIB_PASSTHROUGH_NAME, feature_name)
+          premade_lib.CALIB_PASSTHROUGH_NAME, feature_name)
       for op, (calibration_output_idx, submodel_idx,
                submodel_input_idx) in _match_op(ops,
                                                 shared_calib_passthrough_op_re):
@@ -1599,14 +1548,14 @@ def get_model_graph(saved_model_path, tag='serve'):
     # Lengths (deltas between keypoints).
     # {CALIB_LAYER_NAME}_{feature_name}/{LENGTHS_NAME}
     lengths_op_re = '^{}_(.*)/{}$'.format(
-        premade.CALIB_LAYER_NAME,
+        premade_lib.CALIB_LAYER_NAME,
         pwl_calibration_layer.LENGTHS_NAME,
     )
     for lengths_op, feature_name in _match_op(ops, lengths_op_re):
       # Interpolation keypoints does not inlcude the last input keypoint.
       # {CALIB_LAYER_NAME}_{feature_name}/{INTERPOLATION_KEYPOINTS_NAME}
       keypoints_op = '{}_{}/{}'.format(
-          premade.CALIB_LAYER_NAME,
+          premade_lib.CALIB_LAYER_NAME,
           feature_name,
           pwl_calibration_layer.INTERPOLATION_KEYPOINTS_NAME,
       )
@@ -1614,7 +1563,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # Output keypoints. We need to call the varible read op.
       # {CALIB_LAYER_NAME}_{feature_name}/{PWL_CALIBRATION_KERNEL_NAME}
       kernel_op = '{}_{}/{}/Read/ReadVariableOp'.format(
-          premade.CALIB_LAYER_NAME,
+          premade_lib.CALIB_LAYER_NAME,
           feature_name,
           pwl_calibration_layer.PWL_CALIBRATION_KERNEL_NAME,
       )
@@ -1632,7 +1581,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # Get missing/default input value if present:
       # {CALIB_LAYER_NAME}_{feature_name}/{MISSING_INPUT_VALUE_NAME}
       default_input_value_op = '{}_{}/{}'.format(
-          premade.CALIB_LAYER_NAME,
+          premade_lib.CALIB_LAYER_NAME,
           feature_name,
           pwl_calibration_layer.MISSING_INPUT_VALUE_NAME,
       )
@@ -1645,7 +1594,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # Find corresponding default/missing output if present.
       # {CALIB_LAYER_NAME}_{feature_name}/{PWL_CALIBRATION_MISSING_OUTPUT_NAME}
       default_output_op = '{}_{}/{}/Read/ReadVariableOp'.format(
-          premade.CALIB_LAYER_NAME,
+          premade_lib.CALIB_LAYER_NAME,
           feature_name,
           pwl_calibration_layer.PWL_CALIBRATION_MISSING_OUTPUT_NAME,
       )
@@ -1672,7 +1621,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # {CALIB_PASSTHROUGH_NAME}_{feature_name}_
       #   {calibration_output_idx}_{submodel_idx}_{submodel_input_idx}
       shared_calib_passthrough_op_re = r'^{}_{}_(\d*)_(\d*)_(\d*)$'.format(
-          premade.CALIB_PASSTHROUGH_NAME, feature_name)
+          premade_lib.CALIB_PASSTHROUGH_NAME, feature_name)
       for op, (calibration_output_idx, submodel_idx,
                submodel_input_idx) in _match_op(ops,
                                                 shared_calib_passthrough_op_re):
@@ -1687,7 +1636,7 @@ def get_model_graph(saved_model_path, tag='serve'):
     # Linear coefficients.
     # {LINEAR_LAYER_NAME}_{submodel_idx}/{LINEAR_LAYER_KERNEL_NAME}
     linear_kernel_op_re = '^{}_(.*)/{}/Read/ReadVariableOp$'.format(
-        premade.LINEAR_LAYER_NAME,
+        premade_lib.LINEAR_LAYER_NAME,
         linear_layer.LINEAR_LAYER_KERNEL_NAME,
     )
     for linear_kernel_op, submodel_idx in _match_op(ops, linear_kernel_op_re):
@@ -1697,7 +1646,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # Bias term.
       # {LINEAR_LAYER_NAME}/{LINEAR_LAYER_BIAS_NAME}
       bias_op = '{}/{}/Read/ReadVariableOp'.format(
-          premade.LINEAR_LAYER_NAME,
+          premade_lib.LINEAR_LAYER_NAME,
           linear_layer.LINEAR_LAYER_BIAS_NAME,
       )
       if bias_op in ops:
@@ -1722,7 +1671,7 @@ def get_model_graph(saved_model_path, tag='serve'):
     # Lattice weights.
     # {Lattice_LAYER_NAME}_{submodel_idx}/{LATTICE_KERNEL_NAME}
     lattice_kernel_op_re = '^{}_(.*)/{}/Read/ReadVariableOp$'.format(
-        premade.LATTICE_LAYER_NAME,
+        premade_lib.LATTICE_LAYER_NAME,
         lattice_layer.LATTICE_KERNEL_NAME,
     )
     for lattice_kernel_op, submodel_idx in _match_op(ops, lattice_kernel_op_re):
@@ -1732,7 +1681,7 @@ def get_model_graph(saved_model_path, tag='serve'):
       # Lattice sizes.
       # {Lattice_LAYER_NAME}_{submodel_idx}/{LATTICE_SIZES_NAME}
       lattice_sizes_op_name = '{}_{}/{}'.format(
-          premade.LATTICE_LAYER_NAME, submodel_idx,
+          premade_lib.LATTICE_LAYER_NAME, submodel_idx,
           lattice_layer.LATTICE_SIZES_NAME)
       lattice_sizes = sess.run(
           g.get_operation_by_name(lattice_sizes_op_name).outputs[0]).flatten()
@@ -1773,21 +1722,21 @@ def get_model_graph(saved_model_path, tag='serve'):
     # Lengths (deltas between keypoints).
     # {OUTPUT_CALIB_LAYER_NAME}/{LENGTHS_NAME}
     lengths_op = '{}/{}'.format(
-        premade.OUTPUT_CALIB_LAYER_NAME,
+        premade_lib.OUTPUT_CALIB_LAYER_NAME,
         pwl_calibration_layer.LENGTHS_NAME,
     )
     if lengths_op in ops:
       # Interpolation keypoints does not inlcude the last input keypoint.
       # {OUTPUT_CALIB_LAYER_NAME}/{INTERPOLATION_KEYPOINTS_NAME}
       keypoints_op = '{}/{}'.format(
-          premade.OUTPUT_CALIB_LAYER_NAME,
+          premade_lib.OUTPUT_CALIB_LAYER_NAME,
           pwl_calibration_layer.INTERPOLATION_KEYPOINTS_NAME,
       )
 
       # Output keypoints. We need to call the varible read op.
       # {OUTPUT_CALIB_LAYER_NAME}/{PWL_CALIBRATION_KERNEL_NAME}
       kernel_op = '{}/{}/Read/ReadVariableOp'.format(
-          premade.OUTPUT_CALIB_LAYER_NAME,
+          premade_lib.OUTPUT_CALIB_LAYER_NAME,
           pwl_calibration_layer.PWL_CALIBRATION_KERNEL_NAME,
       )
 

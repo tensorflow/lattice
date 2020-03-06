@@ -251,9 +251,10 @@ def linear_initializer(lattice_sizes,
     monotonicities: None or list or tuple of same length as lattice_sizes of {0,
       1} which represents monotonicity constraints per dimension. 1 stands for
       increasing (non-decreasing in fact), 0 for no monotonicity constraints.
-    unimodalities: None or list or tuple of same length as lattice_sizes of {0,
-      1} which represents unimodality constraints per dimension. 1 stands for
-      unimodal dimension, 0 for no unimodality constraints.
+    unimodalities: None or list or tuple of same length as lattice_sizes of {-1,
+      0, 1} which represents unimodality constraints per dimension. 1 indicates
+      that function first decreases then increases, -1 indicates that function
+      first increases then decreases, 0 indicates no unimodality constraints.
     units: Output dimension of the layer. Each of units lattices will be
       initialized identically.
     dtype: dtype.
@@ -285,9 +286,12 @@ def linear_initializer(lattice_sizes,
     elif unimodality != 0:
       decreasing = _linspace(start=dim_range, stop=0.0, num=(dim_size + 1) // 2)
       increasing = _linspace(start=0.0, stop=dim_range, num=(dim_size + 1) // 2)
-      # For odd size dimensions we want just 1 lowest point. For even sized we
+      # For odd size dimensions we want just 1 extreme point. For even sized we
       # want 2.
-      one_d = decreasing + increasing[dim_size % 2:]
+      if unimodality == 1:
+        one_d = decreasing + increasing[dim_size % 2:]
+      else:
+        one_d = increasing + decreasing[dim_size % 2:]
     else:
       one_d = [0.0] * dim_size
     # Insert batch dim of size 1 at the beginning for batch_outer_operation.
@@ -387,7 +391,7 @@ def random_monotonic_initializer(lattice_sizes,
       shape=[total_lattice_size],
       minval=output_min,
       maxval=output_max,
-      dtype=tf.float32)
+      dtype=dtype)
   parameter_values = tf.sort(parameter_values)
   # Convert lattice_parameter_indices to weights tensor and tile if necessary.
   weights = tf.gather(parameter_values, lattice_parameter_indices)
@@ -930,9 +934,10 @@ def _project_partial_monotonicity(weights, lattice_sizes, monotonicities,
     monotonicities: None or list or tuple of same length as lattice_sizes of {0,
       1} which represents monotonicity constraints per dimension. 1 stands for
       increasing (non-decreasing in fact), 0 for no monotonicity constraints.
-    unimodalities: None or list or tuple of same length as lattice_sizes of {0,
-      1} which represents unimodality constraints per dimension. 1 stands for
-      unimodal dimension, 0 for no unimodality constraints.
+    unimodalities: None or list or tuple of same length as lattice_sizes of {-1,
+      0, 1} which represents unimodality constraints per dimension. 1 indicates
+      that function first decreases then increases, -1 indicates that function
+      first increases then decreases, 0 indicates no unimodality constraints.
     dimension: Index of feature to which we are applying constraints.
     constraint_group: 0 or 1 as defined above, representing whether we are
       operating on 'even' or 'odd' constraints.
@@ -947,20 +952,27 @@ def _project_partial_monotonicity(weights, lattice_sizes, monotonicities,
 
   if monotonicities[dimension] == 0 and unimodalities[dimension] == 0:
     raise ValueError(
-        "Trying to project onto unconstrained dimension. Dimension: " %
-        (dimension))
+        "Trying to project monotonicity and unimodality onto unconstrained "
+        "dimension: %d." % dimension)
 
   layers = tf.unstack(weights, axis=dimension)
   for i in range(constraint_group, lattice_sizes[dimension] - 1, 2):
     # Project individual independent constraints.
     average = (layers[i] + layers[i + 1]) / 2.0
-    if (monotonicities[dimension] == 1 or
-        (unimodalities[dimension] == 1 and i >= lattice_sizes[dimension] // 2)):
+
+    if monotonicities[dimension] == 1:
       layers[i] = tf.minimum(layers[i], average)
       layers[i + 1] = tf.maximum(layers[i + 1], average)
-    else:
-      layers[i] = tf.maximum(layers[i], average)
-      layers[i + 1] = tf.minimum(layers[i + 1], average)
+
+    if unimodalities[dimension] != 0:
+      is_first_part = (i < lattice_sizes[dimension] // 2)
+      if ((unimodalities[dimension] == -1 and is_first_part) or
+          (unimodalities[dimension] == 1 and not is_first_part)):
+        layers[i] = tf.minimum(layers[i], average)
+        layers[i + 1] = tf.maximum(layers[i + 1], average)
+      else:
+        layers[i] = tf.maximum(layers[i], average)
+        layers[i + 1] = tf.minimum(layers[i + 1], average)
 
   return tf.stack(layers, axis=dimension)
 
@@ -1257,6 +1269,99 @@ def _project_partial_monotonic_dominance(weights, lattice_sizes,
   return _stack_2d(layers, dominant_dim, weak_dim)
 
 
+def _project_partial_range_dominance(weights, lattice_sizes, range_dominance,
+                                     constraint_group):
+  r"""Applies exact range dominance projection to given constraint group.
+
+  Algorithm details:
+
+  For the range dominance projection, each range dominance constraint can be
+  broken up into M x N independent constraints where M and N are the lattice
+  sizes of the dominant and weak dimensions. In other words, there are vertex
+  number of constraints to project onto. This leaves us with M x N x k
+  constraints if we have k range dominance constraints, which we can
+  sequentially project onto with the Dykstra algorithm.
+
+  This function applies to a single independent constraint within a single range
+  dominance constraint as specificed by the given constraint group.
+
+  * k range dominance constraints projection:
+  If we know how to project into single range dominance constraint then we can
+  use Dykstra algorithm to project into union of all k dominance constraints.
+
+  * Single range dominance constraint projection:
+  Range dominance constraints require the range of possible outputs to be
+  greater if one varies the dominant dimension than if one varies the weak
+  dimension for any point. Considering then a fixed slice, and a grid
+
+  ```
+  0---1---2---3
+  |   |   |   |
+  4---5---6---7
+  |   |   |   |
+  8---9---10--11
+  |   |   |   |
+  12--13--14--15
+  ```
+
+  where the dominant dimension is on the x-axis and the weak dimension is on the
+  y-axis, we get, for each vertex defined by the x and y coordinates, a
+  constraint where the range for direction in x-axis is required to be greater
+  than the range for direction in y-axis. For example, vertex 1 requires its
+  dominant range defined by vertices 0 and 3 to be greater than its weak range
+  defined by vertices 1 and 13.
+
+  * Individual weight projection:
+  The projection moves the weights of all four vertices defining the dominant
+  and weak ranges by the constraint violation / 4 such that the dominant range
+  grows and the weak range shrinks. The only exception is the four corner
+  vertices, i.e. vertices 0, 3, 12, 15. In this case, there are three
+  participating vertices and since one of the vertices is shared by the two
+  conflicting ranges, we only move the weights of the other two vertices. This
+  means, for vertex 0, we move the weight of vertex 3 up halfway, the weight of
+  vertex 12 down halfway and leave the weight of vertex 0 unchanged.
+
+  Args:
+    weights: tensor with weights of lattice layer, with shape lattice_sizes.
+    lattice_sizes: list or tuple of integers which represents lattice sizes
+      which correspond to weights.
+    range_dominance: two-element tuple representing a single range dominance
+      constraint. First element is the index of the dominant feature. Second
+      element is the index of the weak feature.
+    constraint_group: two-element tuple as defined above, representing the
+      location of a vertex we are acting on.
+
+  Returns:
+    Tensor with projected weights matching shape of input weights.
+  """
+
+  dom_dim, weak_dim = range_dominance
+  dom_dim_size = lattice_sizes[dom_dim]
+  weak_dim_size = lattice_sizes[weak_dim]
+  i, j = constraint_group
+  layers = _unstack_2d(weights, dom_dim, weak_dim)
+  difference = ((layers[i][weak_dim_size - 1] - layers[i][0]) -
+                (layers[dom_dim_size - 1][j] - layers[0][j]))
+  if (i == 0 or i == dom_dim_size - 1) and (j == 0 or j == weak_dim_size - 1):
+    correction = tf.maximum(difference / 2, 0)
+    if i == 0:
+      layers[dom_dim_size - 1][j] += correction
+    else:
+      layers[0][j] -= correction
+    if j == 0:
+      layers[i][weak_dim_size - 1] -= correction
+    else:
+      layers[i][0] += correction
+  else:
+    correction = tf.maximum(difference / 4, 0)
+    layers[i][weak_dim_size - 1] -= correction
+    layers[i][0] += correction
+    layers[dom_dim_size - 1][j] += correction
+    layers[0][j] -= correction
+
+  return _stack_2d(layers, dom_dim, weak_dim)
+
+
 def _project_partial_joint_monotonicity(weights, lattice_sizes,
                                         joint_monotonicity, constraint_group):
   """Applies exact joint monotonicity projection to given constraint group.
@@ -1358,6 +1463,7 @@ def project_by_dykstra(weights,
                        edgeworth_trusts=None,
                        trapezoid_trusts=None,
                        monotonic_dominances=None,
+                       range_dominances=None,
                        joint_monotonicities=None,
                        num_iterations=1):
   """Applies dykstra's projection algorithm for monotonicity/trust constraints.
@@ -1383,9 +1489,10 @@ def project_by_dykstra(weights,
     monotonicities: None or list or tuple of same length as lattice_sizes of {0,
       1} which represents monotonicity constraints per dimension. 1 stands for
       increasing (non-decreasing in fact), 0 for no monotonicity constraints.
-    unimodalities: None or list or tuple of same length as lattice_sizes of {0,
-      1} which represents unimodality constraints per dimension. 1 stands for
-      unimodal dimension, 0 for no unimodality constraints.
+    unimodalities: None or list or tuple of same length as lattice_sizes of {-1,
+      0, 1} which represents unimodality constraints per dimension. 1 indicates
+      that function first decreases then increases, -1 indicates that function
+      first increases then decreases, 0 indicates no unimodality constraints.
     edgeworth_trusts: None or iterable of three-element tuples. First element is
       the index of the main (monotonic) feature. Second element is the index of
       the conditional feature. Third element is the direction of trust: 1 if
@@ -1399,6 +1506,9 @@ def project_by_dykstra(weights,
     monotonic_dominances: None or iterable of two-element tuples. First element
       is the index of the dominant feature. Second element is the index of the
       weak feature.
+    range_dominances: None or iterable of two-element tuples. First element is
+      the index of the dominant feature. Second element is the index of the weak
+      feature.
     joint_monotonicities: None or iterable of two-element tuples. Each tuple
       represents a pair of feature indices that require joint monotoniticity.
     num_iterations: number of iterations of Dykstra's algorithm.
@@ -1421,6 +1531,8 @@ def project_by_dykstra(weights,
     trapezoid_trusts = []
   if monotonic_dominances is None:
     monotonic_dominances = []
+  if range_dominances is None:
+    range_dominances = []
   if joint_monotonicities is None:
     joint_monotonicities = []
   if units > 1:
@@ -1508,6 +1620,20 @@ def project_by_dykstra(weights,
                                                        constraint,
                                                        constraint_group)
         last_change[("MONOTONIC_DOMINANCE", constraint,
+                     constraint_group)] = weights - rolled_back_weights
+
+    for constraint in range_dominances:
+      dominant_dim, weak_dim = constraint
+      dom_dim_idx = range(lattice_sizes[dominant_dim])
+      weak_dim_idx = range(lattice_sizes[weak_dim])
+      for constraint_group in itertools.product(dom_dim_idx, weak_dim_idx):
+        rolled_back_weights = weights - last_change[
+            ("RANGE_DOMINANCE", constraint, constraint_group)]
+        weights = _project_partial_range_dominance(rolled_back_weights,
+                                                   lattice_sizes,
+                                                   constraint,
+                                                   constraint_group)
+        last_change[("RANGE_DOMINANCE", constraint,
                      constraint_group)] = weights - rolled_back_weights
 
     for constraint in joint_monotonicities:
@@ -1715,6 +1841,52 @@ def torsion_regularizer(weights, lattice_sizes, l1=0.0, l2=0.0):
   return result
 
 
+def _verify_dominances_hyperparameters(dominances, dominance_type,
+                                       monotonicities, num_input_dims):
+  """Verifies that dominances hyperparameters are consistent.
+
+  Args:
+    dominances: Dominances hyperparameters of `Lattice` layer.
+    dominance_type: Type of dominance constraints which is either 'monotonic' or
+      'range'.
+    monotonicities: Monotonicities hyperparameter of `Lattice` layer.
+    num_input_dims: Number of input dimensions.
+
+  Raises:
+    ValueError: If something is inconsistent.
+  """
+  assert dominance_type in ("monotonic", "range")
+  dim_pairs = set()
+  for constraint in dominances:
+    if len(constraint) != 2:
+      raise ValueError("%s dominance constraints must consist of 2 elements. "
+                       "Seeing constraint tuple %s" %
+                       (dominance_type.capitalize(), constraint))
+    dominant_dim, weak_dim = constraint
+    if (dominant_dim >= num_input_dims or weak_dim >= num_input_dims or
+        dominant_dim < 0 or weak_dim < 0):
+      raise ValueError("Dimensions constrained by %s dominance constraints are "
+                       "not within the range of the lattice. 'dims': %s, %s, "
+                       "num_dims: %s" %
+                       (dominance_type, dominant_dim, weak_dim, num_input_dims))
+    if not isinstance(dominant_dim, int) or not isinstance(weak_dim, int):
+      raise ValueError("%s dominance constraint dimensions must be integers. "
+                       "Seeing dominant_dim %s and weak_dim %s" %
+                       (dominance_type.capitalize(), dominant_dim, weak_dim))
+    for dim in [dominant_dim, weak_dim]:
+      if monotonicities[dim] != 1:
+        raise ValueError("%s dominance constraint's dimensions must be "
+                         "monotonic. Dimension %d is not monotonic." %
+                         (dominance_type.capitalize(), dim))
+    # TODO: Determine partial ordering of features by dominance and
+    # detect any inconsistencies.
+    if (weak_dim, dominant_dim) in dim_pairs:
+      raise ValueError("Cannot have two %s dominance constraints on the same "
+                       "pair of features conflicting. Features: %d, %d" %
+                       (dominance_type, dominant_dim, weak_dim))
+    dim_pairs.add((dominant_dim, weak_dim))
+
+
 def verify_hyperparameters(lattice_sizes,
                            units=None,
                            weights_shape=None,
@@ -1724,6 +1896,7 @@ def verify_hyperparameters(lattice_sizes,
                            edgeworth_trusts=None,
                            trapezoid_trusts=None,
                            monotonic_dominances=None,
+                           range_dominances=None,
                            joint_monotonicities=None,
                            output_min=None,
                            output_max=None,
@@ -1748,6 +1921,7 @@ def verify_hyperparameters(lattice_sizes,
     trapezoid_trusts: Trapezoid_trusts hyperparameter of `Lattice` layer.
     monotonic_dominances: Monotonic dominances hyperparameter of `Lattice`
       layer.
+    range_dominances: Range dominances hyperparameter of `Lattice` layer.
     joint_monotonicities: Joint monotonicities hyperparameter of `Lattice`
       layer.
     output_min: Minimum output of `Lattice` layer.
@@ -1778,7 +1952,7 @@ def verify_hyperparameters(lattice_sizes,
                        "of elements as 'lattice_sizes'. 'unimodalities': %s, "
                        "'lattice_sizes: %s" % (unimodalities, lattice_sizes))
     for unimodality, dim_size in zip(unimodalities, lattice_sizes):
-      if unimodality == 1 and dim_size < 3:
+      if unimodality != 0 and dim_size < 3:
         raise ValueError("Unimodal dimensions must have lattice size at "
                          "least 3. unimodalities: %s, lattice_sizes: %s" %
                          (unimodalities, lattice_sizes))
@@ -1836,33 +2010,11 @@ def verify_hyperparameters(lattice_sizes,
                      "Seeing dimension %d in both" % (main_and_cond.pop()))
 
   if monotonic_dominances is not None:
-    dim_pairs = set([])
-    for i, constraint in enumerate(monotonic_dominances):
-      if len(constraint) != 2:
-        raise ValueError("Monotonic dominance constraints must consist of 2 "
-                         "elements. Seeing constraint tuple %s" % (constraint,))
-      dominant_dim, weak_dim = constraint
-      if (dominant_dim >= len(lattice_sizes) or
-          weak_dim >= len(lattice_sizes) or dominant_dim < 0 or weak_dim < 0):
-        raise ValueError("Dimensions constrained by monotonic dominance "
-                         "constraints are not within the range of the lattice. "
-                         "'dims': %s, %s, num_dims: %s" %
-                         (dominant_dim, weak_dim, len(lattice_sizes)))
-      if not isinstance(dominant_dim, int) or not isinstance(weak_dim, int):
-        raise ValueError("Monotonic dominance constraint dimensions must be "
-                         "integers. Seeing dominant_dim %s and weak_dim %s" %
-                         (dominant_dim, weak_dim))
-      for dim in [dominant_dim, weak_dim]:
-        if monotonicities[dim] != 1:
-          raise ValueError("Monotonic dominance constraint's features must be "
-                           "monotonic. Dimension %d is not monotonic." % (dim))
-      # TODO: Determine partial ordering of features by dominance and
-      # detect any inconsistencies.
-      if (weak_dim, dominant_dim) in dim_pairs:
-        raise ValueError("Cannot have two dominance constraints on the same "
-                         "pair of features conflicting. Features: %d, %d" %
-                         (dominant_dim, weak_dim))
-      dim_pairs.add((dominant_dim, weak_dim))
+    _verify_dominances_hyperparameters(monotonic_dominances, "monotonic",
+                                       monotonicities, len(lattice_sizes))
+  if range_dominances is not None:
+    _verify_dominances_hyperparameters(range_dominances, "range",
+                                       monotonicities, len(lattice_sizes))
 
   if joint_monotonicities is not None:
     for i, constraint in enumerate(joint_monotonicities):
@@ -1935,6 +2087,7 @@ def assert_constraints(weights,
                        edgeworth_trusts,
                        trapezoid_trusts,
                        monotonic_dominances,
+                       range_dominances,
                        joint_monotonicities,
                        output_min=None,
                        output_max=None,
@@ -1948,6 +2101,7 @@ def assert_constraints(weights,
     edgeworth_trusts: Edgeworth trust constraints.
     trapezoid_trusts: Trapezoid trust constraints.
     monotonic_dominances: Monotonic dominance constraints.
+    range_dominances: Range dominance constraints.
     joint_monotonicities: Joint monotonicity constraints.
     output_min: None or lower bound constraints.
     output_max: None or upper bound constraints.
@@ -2053,6 +2207,26 @@ def assert_constraints(weights,
                     weights_layers[i + 1][j], weights_layers[i + 1][j + 1]
                 ]))
 
+  for dominant_dim, weak_dim in range_dominances or []:
+    weights_layers = _unstack_2d(weights, dominant_dim, weak_dim)
+    dom_dim_size = lattice_sizes[dominant_dim]
+    weak_dim_size = lattice_sizes[weak_dim]
+    for i in range(dom_dim_size):
+      for j in range(weak_dim_size):
+        diff = tf.reduce_min(
+            (weights_layers[dom_dim_size - 1][j] - weights_layers[0][j]) -
+            (weights_layers[i][weak_dim_size - 1] - weights_layers[i][0]))
+        asserts.append(
+            tf.Assert(
+                diff >= -eps,
+                data=[
+                    "Range dominance violation", "Feature indices:",
+                    dominant_dim, ",", weak_dim, "Min dominance diff:", diff,
+                    "Epsilon:", eps, "Layers:",
+                    weights_layers[dom_dim_size - 1][j], weights_layers[0][j],
+                    weights_layers[i][weak_dim_size - 1], weights_layers[i][0]
+                ]))
+
   for dim1, dim2 in joint_monotonicities or []:
     weights_layers = _unstack_2d(weights, dim1, dim2)
     for i in range(lattice_sizes[dim1] - 1):
@@ -2151,22 +2325,24 @@ def canonicalize_unimodalities(unimodalities):
     ValueError if one of unimodalities is invalid.
 
   Returns:
-    unimodalities represented as 0 or 1.
+    unimodalities represented as -1, 0 or 1.
   """
-  if unimodalities:
-    canonicalized = []
-    for item in unimodalities:
-      if item in [0, 1]:
-        canonicalized.append(item)
-      elif isinstance(item, six.string_types) and item.lower() == "valley":
-        canonicalized.append(1)
-      elif isinstance(item, six.string_types) and item.lower() == "none":
-        canonicalized.append(0)
-      else:
-        raise ValueError("'unimodalities' elements must be from: [0, 1, "
-                         "'valley', 'none']. Given: %s" % unimodalities)
-    return canonicalized
-  return None
+  if not unimodalities:
+    return None
+  canonicalized = []
+  for item in unimodalities:
+    if item in [-1, 0, 1]:
+      canonicalized.append(item)
+    elif isinstance(item, six.string_types) and item.lower() == "valley":
+      canonicalized.append(1)
+    elif isinstance(item, six.string_types) and item.lower() == "peak":
+      canonicalized.append(-1)
+    elif isinstance(item, six.string_types) and item.lower() == "none":
+      canonicalized.append(0)
+    else:
+      raise ValueError("'unimodalities' elements must be from: [-1, 0, 1, "
+                       "'peak', 'none', 'valley']. Given: %s" % unimodalities)
+  return canonicalized
 
 
 def canonicalize_trust(trusts):
