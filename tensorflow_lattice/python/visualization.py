@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Tools to analyse and plot TFL models."""
 
 from __future__ import absolute_import
@@ -20,6 +19,7 @@ from __future__ import print_function
 
 import math
 import os
+import sys
 import tempfile
 
 from . import model_info
@@ -107,8 +107,19 @@ def draw_model_graph(model_graph, calibrator_dpi=30):
       dot.edge(input_node_id + ':s', node_id)  # + ':n')
 
   filename = os.path.join(tempfile.tempdir, 'dot')
-  dot.render(filename)
-  IPython.display.display(IPython.display.Image('{}.png'.format(filename)))
+  try:
+    dot.render(filename)
+    IPython.display.display(IPython.display.Image('{}.png'.format(filename)))
+  except graphviz.backend.ExecutableNotFound as e:
+    if 'IPython.core.magics.namespace' in sys.modules:
+      # Similar to Keras visualization lib, we don't raise an exception here to
+      # avoid crashing notebooks during tests.
+      print(
+          'dot binaries were not found or not in PATH. The system running the '
+          'colab binary might not have graphviz package installed: format({})'
+          .format(e))
+    else:
+      raise e
 
 
 def plot_calibrator_nodes(nodes,

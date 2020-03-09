@@ -26,6 +26,7 @@ from tensorflow import keras
 from tensorflow_lattice.python import lattice_layer as ll
 from tensorflow_lattice.python import test_utils
 
+
 class LatticeTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
