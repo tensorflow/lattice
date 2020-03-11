@@ -99,17 +99,19 @@ def compute_interpolation_weights(inputs, lattice_sizes, clip_inputs=True):
     else:
       one_d_interpolation_weights.extend(tf.unstack(weights, axis=-2))
 
-  return batch_outer_operation(
-      one_d_interpolation_weights, operation=tf.multiply)
+  return batch_outer_operation(one_d_interpolation_weights, operation="auto")
 
 
-def batch_outer_operation(list_of_tensors, operation=tf.multiply):
+def batch_outer_operation(list_of_tensors, operation="auto"):
   """Computes outer operation of last dimensions of each of given tensors.
 
   Args:
     list_of_tensors: List of tensors of same shape `(batch_size, ..., k[i])`
       where everything expect `k_i` matches.
-    operation: Binary TF operation which supports broadcasting to be applied.
+    operation:
+      - binary TF operation which supports broadcasting to be applied.
+      - string "auto" in order to apply tf.multiply for first several tensors
+        and tf.matmul for remaining.
 
   Returns:
     Tensor of shape: `(batch_size, ..., mul_i(k[i]))`.
@@ -122,7 +124,13 @@ def batch_outer_operation(list_of_tensors, operation=tf.multiply):
   result = tf.expand_dims(list_of_tensors[0], axis=-1)
 
   for i, tensor in enumerate(list_of_tensors[1:]):
-    result = operation(result, tf.expand_dims(tensor, axis=-2))
+    if operation == "auto":
+      # Threshold 6 determined empirically for 2^d lattices.
+      op = tf.multiply if i < 6 else tf.matmul
+    else:
+      op = operation
+
+    result = op(result, tf.expand_dims(tensor, axis=-2))
 
     # For TF1 compatibility convert shape to integers allowing first dimension
     # to be undefined.
