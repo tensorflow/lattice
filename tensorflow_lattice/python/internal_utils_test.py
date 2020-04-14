@@ -21,10 +21,10 @@ from __future__ import print_function
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
-from tensorflow_lattice.python import utils
+from tensorflow_lattice.python import internal_utils as iu
 
 
-class UtilsTest(parameterized.TestCase, tf.test.TestCase):
+class InternalUtilsTest(parameterized.TestCase, tf.test.TestCase):
 
   def _ResetAllBackends(self):
     tf.compat.v1.reset_default_graph()
@@ -41,7 +41,7 @@ class UtilsTest(parameterized.TestCase, tf.test.TestCase):
     self._ResetAllBackends()
     weights = tf.Variable(weights)
     projected_weights = (
-        utils.approximately_project_categorical_partial_monotonicities(
+        iu.approximately_project_categorical_partial_monotonicities(
             weights, monotonicities))
     self.evaluate(tf.compat.v1.global_variables_initializer())
     self.assertAllClose(self.evaluate(projected_weights),

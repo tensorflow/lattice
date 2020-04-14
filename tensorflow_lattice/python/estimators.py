@@ -66,7 +66,6 @@ from __future__ import print_function
 
 import collections
 import copy
-import itertools
 import json
 import os
 import re
@@ -75,7 +74,6 @@ import time
 from . import categorical_calibration_layer
 from . import configs
 from . import lattice_layer
-from . import lattice_lib
 from . import linear_layer
 from . import model_info
 from . import premade
@@ -118,15 +116,6 @@ _LABEL_FEATURE_NAME = '__label__'
 # Pooling interval and maximum wait time for workers waiting for files.
 _MAX_WAIT_TIME = 1200
 _POLL_INTERVAL_SECS = 10
-
-# Weight of laplacian in feature importance for the crystal algorithm.
-_LAPLACIAN_WEIGHT_IN_IMPORTANCE = 6.0
-
-# Discount amount for repeated co-occurrence of pairs of features in crystals.
-_REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE = 0.5
-
-# Maximum number of swaps for the crystals algorithm.
-_MAX_CRYSTALS_SWAPS = 1000
 
 
 class WaitTimeOutError(Exception):
@@ -395,234 +384,6 @@ def _fix_ensemble_for_2d_constraints(model_config, feature_names):
   model_config.lattices = fixed_lattices
 
 
-def _add_pair_to_ensemble(lattices, lattice_rank, i, j):
-  """Adds pair (i, j) to the ensemble heuristically."""
-  # First check if (i, j) pair is already present in a lattice.
-  for lattice in lattices:
-    if i in lattice and j in lattice:
-      return
-
-  # Try adding to a lattice that already has either i or j.
-  for lattice in lattices:
-    if len(lattice) < lattice_rank:
-      if i in lattice:
-        lattice.add(j)
-        return
-      if j in lattice:
-        lattice.add(i)
-        return
-
-  # Add both i and j to a lattice that has enough space left.
-  for lattice in lattices:
-    if len(lattice) < lattice_rank - 1:
-      lattice.add(i)
-      lattice.add(j)
-      return
-
-  # Create a new lattice with pair (i, j).
-  lattices.append(set([i, j]))
-
-
-def _set_all_pairs_cover_lattices(prefitting_model_config, feature_names):
-  """Sets prefitting lattice ensemble such that it covers all feature pairs."""
-  # Pairs of co-occurrence that need to exist in the all-pairs cover.
-  to_cover = list(itertools.combinations(range(len(feature_names)), 2))
-  np.random.seed(prefitting_model_config.random_seed)
-  np.random.shuffle(to_cover)
-
-  lattices = []
-
-  for (i, j) in to_cover:
-    _add_pair_to_ensemble(lattices, prefitting_model_config.lattice_rank, i, j)
-
-  prefitting_model_config.lattices = [
-      [feature_names[i] for i in lattice] for lattice in lattices
-  ]
-
-
-def _get_torsions_and_laplacians(prefitting_model_config, prefitting_estimator,
-                                 feature_names):
-  """Returns average torsion and laplacian regularizers in prefitted model."""
-  num_fatures = len(feature_names)
-  laplacians = [[] for _ in range(num_fatures)]
-  torsions = [[[] for _ in range(num_fatures)] for _ in range(num_fatures)]
-  for (lattice_index, lattice) in enumerate(prefitting_model_config.lattices):
-    # Get normalized lattice weights.
-    lattice_kernel_variable_name = '{}_{}/{}'.format(
-        premade_lib.LATTICE_LAYER_NAME, lattice_index,
-        lattice_layer.LATTICE_KERNEL_NAME)
-    weights = prefitting_estimator.get_variable_value(
-        lattice_kernel_variable_name)
-    weights -= np.min(weights)
-    weights /= np.max(weights)
-    weights = tf.constant(weights)
-
-    # Convert feature names in the lattice to their index in feature_names.
-    lattice = [feature_names.index(feature_name) for feature_name in lattice]
-    lattice_sizes = [2] * len(lattice)
-    # feature_* refers to feature index in feature_names.
-    # within_lattice_index_* is the index of input dimenstion of the lattice.
-    for within_lattice_index_0, feature_0 in enumerate(lattice):
-      l2 = [0] * len(lattice)
-      l2[within_lattice_index_0] = 1
-      laplacians[feature_0].append(
-          lattice_lib.laplacian_regularizer(
-              weights=weights, lattice_sizes=lattice_sizes, l2=l2))
-      for within_lattice_index_1, feature_1 in enumerate(lattice):
-        if within_lattice_index_1 > within_lattice_index_0:
-          l2 = [0] * len(lattice)
-          l2[within_lattice_index_0] = 1
-          l2[within_lattice_index_1] = 1
-          torsion = lattice_lib.torsion_regularizer(
-              weights=weights, lattice_sizes=lattice_sizes, l2=l2)
-          torsions[feature_0][feature_1].append(torsion)
-          torsions[feature_1][feature_0].append(torsion)
-
-  if not tf.executing_eagerly():
-    with tf.compat.v1.Session() as sess:
-      laplacians = sess.run(laplacians)
-      torsions = sess.run(torsions)
-
-  laplacians = [np.mean(v) for v in laplacians]
-  torsions = [[np.mean(v) if v else 0.0 for v in row] for row in torsions]
-  return torsions, laplacians
-
-
-def _set_final_crystal_lattices(model_config, feature_names,
-                                prefitting_model_config, prefitting_estimator):
-  """Sets the lattice ensemble in model_config based on a prefitted model."""
-  torsions, laplacians = _get_torsions_and_laplacians(
-      prefitting_model_config=prefitting_model_config,
-      prefitting_estimator=prefitting_estimator,
-      feature_names=feature_names)
-
-  # Calculate features' importance_score = lambda * laplacians + torsion.
-  # Used to allocate slots to useful features with more non-linear interactions.
-  num_features = len(feature_names)
-  importance_scores = np.array(laplacians) * _LAPLACIAN_WEIGHT_IN_IMPORTANCE
-  for feature_0, feature_1 in itertools.combinations(range(num_features), 2):
-    importance_scores[feature_0] += torsions[feature_0][feature_1]
-    importance_scores[feature_1] += torsions[feature_0][feature_1]
-
-  # Each feature is used at least once, and the remaining slots are distributed
-  # proportional to the importance_scores.
-  features_uses = [1] * num_features
-  total_feature_use = model_config.num_lattices * model_config.lattice_rank
-  remaining_uses = total_feature_use - num_features
-  remaining_scores = np.sum(importance_scores)
-  for feature in np.argsort(-importance_scores):
-    added_uses = int(
-        round(remaining_uses * importance_scores[feature] / remaining_scores))
-    # Each feature cannot be used more than once in a finalized lattice.
-    added_uses = min(added_uses, model_config.num_lattices - 1)
-    features_uses[feature] += added_uses
-    remaining_uses -= added_uses
-    remaining_scores -= importance_scores[feature]
-  assert np.sum(features_uses) == total_feature_use
-
-  # Add features to add list in round-robin order.
-  add_list = []
-  for use in range(1, max(features_uses) + 1):
-    for feature_index, feature_use in enumerate(features_uses):
-      if use <= feature_use:
-        add_list.append(feature_index)
-  assert len(add_list) == total_feature_use
-
-  # Setup initial lattices that will be optimized by swapping later.
-  lattices = [[] for _ in range(model_config.num_lattices)]
-  cooccurrence_counts = [[0] * num_features for _ in range(num_features)]
-  for feature_to_be_added in add_list:
-    # List of pairs of (addition_score, candidate_lattice_to_add_to).
-    score_candidates_pairs = []
-    for candidate_lattice_to_add_to in range(model_config.num_lattices):
-      # addition_score indicates the priority of an addition.
-      if len(
-          lattices[candidate_lattice_to_add_to]) >= model_config.lattice_rank:
-        # going out of bound on the lattice
-        addition_score = -2.0
-      elif feature_to_be_added in lattices[candidate_lattice_to_add_to]:
-        # repeates (fixed repeats later by swapping)
-        addition_score = -1.0
-      elif not lattices[candidate_lattice_to_add_to]:
-        # adding a new lattice roughly has an "average" lattice score
-        addition_score = np.mean(torsions) * model_config.lattice_rank**2 / 2
-      else:
-        # all other cases: change in total discounted torsion after addition.
-        addition_score = 0.0
-        for other_feature in lattices[candidate_lattice_to_add_to]:
-          addition_score += (
-              torsions[feature_to_be_added][other_feature] *
-              _REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE
-              **(cooccurrence_counts[feature_to_be_added][other_feature]))
-
-      score_candidates_pairs.append(
-          (addition_score, candidate_lattice_to_add_to))
-
-    # Use the highest scoring addition.
-    score_candidates_pairs.sort(reverse=True)
-    best_candidate_lattice_to_add_to = score_candidates_pairs[0][1]
-    for other_feature in lattices[best_candidate_lattice_to_add_to]:
-      cooccurrence_counts[feature_to_be_added][other_feature] += 1
-      cooccurrence_counts[other_feature][feature_to_be_added] += 1
-    lattices[best_candidate_lattice_to_add_to].append(feature_to_be_added)
-
-  # Apply swapping operations to increase within-lattice torsion.
-  changed = True
-  iteration = 0
-  while changed:
-    if iteration > _MAX_CRYSTALS_SWAPS:
-      logging.info('Crystals algorithm did not fully converge.')
-      break
-    changed = False
-    iteration += 1
-    for lattice_0, lattice_1 in itertools.combinations(lattices, 2):
-      # For every pair of lattices: lattice_0, lattice_1
-      for index_0, index_1 in itertools.product(
-          range(len(lattice_0)), range(len(lattice_1))):
-        # Consider swapping lattice_0[index_0] with lattice_1[index_1]
-        rest_lattice_0 = list(lattice_0)
-        rest_lattice_1 = list(lattice_1)
-        feature_0 = rest_lattice_0.pop(index_0)
-        feature_1 = rest_lattice_1.pop(index_1)
-        if feature_0 == feature_1:
-          continue
-
-        # Calculate the change in the overall discounted sum of torsion terms.
-        added_cooccurrence = set(
-            [tuple(sorted((feature_1, other))) for other in rest_lattice_0] +
-            [tuple(sorted((feature_0, other))) for other in rest_lattice_1])
-        removed_cooccurrence = set(
-            [tuple(sorted((feature_0, other))) for other in rest_lattice_0] +
-            [tuple(sorted((feature_1, other))) for other in rest_lattice_1])
-        wash = added_cooccurrence.intersection(removed_cooccurrence)
-        added_cooccurrence = added_cooccurrence.difference(wash)
-        removed_cooccurrence = removed_cooccurrence.difference(wash)
-        swap_diff_torsion = (
-            sum(torsions[i][j] * _REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE**
-                cooccurrence_counts[i][j] for (i, j) in added_cooccurrence) -
-            sum(torsions[i][j] * _REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE**
-                (cooccurrence_counts[i][j] - 1)
-                for (i, j) in removed_cooccurrence))
-
-        # Swap if a feature is repeated or if the score change is positive.
-        if (feature_0 not in lattice_1 and feature_1 not in lattice_0 and
-            (lattice_0.count(feature_0) > 1 or lattice_1.count(feature_1) > 1 or
-             swap_diff_torsion > 0)):
-          for (i, j) in added_cooccurrence:
-            cooccurrence_counts[i][j] += 1
-            cooccurrence_counts[j][i] += 1
-          for (i, j) in removed_cooccurrence:
-            cooccurrence_counts[i][j] -= 1
-            cooccurrence_counts[j][i] -= 1
-          lattice_0[index_0], lattice_1[index_1] = (lattice_1[index_1],
-                                                    lattice_0[index_0])
-          changed = True
-
-  model_config.lattices = [[
-      feature_names[features_index] for features_index in lattice
-  ] for lattice in lattices]
-
-
 def _set_crystals_lattice_ensemble(model_config, feature_names, label_dimension,
                                    feature_columns, head, prefitting_input_fn,
                                    prefitting_optimizer, prefitting_steps,
@@ -631,19 +392,9 @@ def _set_crystals_lattice_ensemble(model_config, feature_names, label_dimension,
   if prefitting_input_fn is None:
     raise ValueError('prefitting_input_fn must be set for crystals models')
 
-  prefitting_model_config = copy.deepcopy(model_config)
-  _set_all_pairs_cover_lattices(
-      prefitting_model_config=prefitting_model_config,
-      feature_names=feature_names)
-
-  # Trim the model for faster prefitting.
-  for feature_config in prefitting_model_config.feature_configs:
-    feature_config.lattice_size = 2
-    # Unimodality requires lattice_size > 2.
-    feature_config.unimodality = 0
-    # Disable 2d constraints to avoid potential constraint violations.
-    feature_config.dominates = None
-    feature_config.reflects_trust_in = None
+  # Get prefitting model config.
+  prefitting_model_config = premade_lib.construct_prefitting_model_config(
+      model_config, feature_names)
 
   def prefitting_model_fn(features, labels, mode, config):
     return _calibrated_lattice_ensemble_model_fn(
@@ -669,11 +420,11 @@ def _set_crystals_lattice_ensemble(model_config, feature_names, label_dimension,
   logging.info('Training the prefitting estimator.')
   prefitting_estimator.train(
       input_fn=prefitting_input_fn, steps=prefitting_steps)
-  _set_final_crystal_lattices(
-      feature_names=feature_names,
+  premade_lib.set_crystals_lattice_ensemble(
       model_config=model_config,
       prefitting_model_config=prefitting_model_config,
-      prefitting_estimator=prefitting_estimator)
+      prefitting_model=prefitting_estimator,
+      feature_names=feature_names)
   logging.info('Finished training the prefitting estimator.')
 
   # Cleanup model_dir since we might be reusing it for the main estimator.
@@ -726,7 +477,7 @@ def _finalize_model_structure(model_config, label_dimension, feature_columns,
   if ((config is None or config.is_chief) and
       not tf.io.gfile.exists(ensemble_structure_filename)):
     if model_config.lattices == 'random':
-      premade_lib.set_random_lattice_ensemble(model_config)
+      premade_lib.set_random_lattice_ensemble(model_config, feature_names)
     elif model_config.lattices == 'crystals':
       _set_crystals_lattice_ensemble(
           feature_names=feature_names,
@@ -884,8 +635,7 @@ def _calibrated_lattice_model_fn(features, labels, label_dimension,
   model_config.feature_configs.extend(feature_configs)
 
   training = (mode == tf.estimator.ModeKeys.TRAIN)
-  model = premade.CalibratedLattice(
-      model_config=model_config, dtype=dtype)
+  model = premade.CalibratedLattice(model_config=model_config, dtype=dtype)
   logits = tf.identity(
       model(input_tensors, training=training), name=OUTPUT_NAME)
 
@@ -927,8 +677,7 @@ def _calibrated_linear_model_fn(features, labels, label_dimension,
   model_config.feature_configs.extend(feature_configs)
 
   training = (mode == tf.estimator.ModeKeys.TRAIN)
-  model = premade.CalibratedLinear(
-      model_config=model_config, dtype=dtype)
+  model = premade.CalibratedLinear(model_config=model_config, dtype=dtype)
   logits = tf.identity(
       model(input_tensors, training=training), name=OUTPUT_NAME)
 

@@ -158,6 +158,7 @@ class Lattice(keras.layers.Layer):
                monotonic_dominances=None,
                range_dominances=None,
                joint_monotonicities=None,
+               joint_unimodalities=None,
                output_min=None,
                output_max=None,
                num_projection_iterations=10,
@@ -207,6 +208,12 @@ class Lattice(keras.layers.Layer):
       joint_monotonicities: None or two-element tuple or iterable of two-element
         tuples which represents indices of two features requiring joint
         monotonicity.
+      joint_unimodalities: None or tuple or iterable of tuples. Each tuple
+        contains 2 elements: iterable of indices of single group of jointly
+        unimodal features followed by string 'valley' or 'peak', using 'valley'
+        to indicate that function first decreases then increases, using 'peak'
+        to indicate that funciton first increases then decreases. For example:
+        ([0, 3, 4], 'valley').
       output_min: None or lower bound of the output.
       output_max: None or upper bound of the output.
       num_projection_iterations: Number of iterations of Dykstra projections
@@ -290,6 +297,12 @@ class Lattice(keras.layers.Layer):
       self.joint_monotonicities = [joint_monotonicities]
     else:
       self.joint_monotonicities = joint_monotonicities
+    if (isinstance(joint_unimodalities, tuple) and
+        len(joint_unimodalities) == 2 and
+        isinstance(joint_unimodalities[1], six.string_types)):
+      self.joint_unimodalities = [joint_unimodalities]
+    else:
+      self.joint_unimodalities = joint_unimodalities
     self.output_min = output_min
     self.output_max = output_max
     self.num_projection_iterations = num_projection_iterations
@@ -313,6 +326,17 @@ class Lattice(keras.layers.Layer):
       # Return our min and max.
       return output_init_min, output_init_max
 
+    # Initialize joint unimodalities identical to regular ones.
+    all_unimodalities = [0] * len(lattice_sizes)
+    if self.unimodalities:
+      for i, value in enumerate(self.unimodalities):
+        if value:
+          all_unimodalities[i] = value
+    if self.joint_unimodalities:
+      for dimensions, direction in self.joint_unimodalities:
+        for dim in dimensions:
+          all_unimodalities[dim] = direction
+
     if kernel_initializer in ["linear_initializer", "LinearInitializer"]:
       output_init_min, output_init_max = default_params(output_min, output_max)
 
@@ -321,17 +345,16 @@ class Lattice(keras.layers.Layer):
           monotonicities=monotonicities,
           output_min=output_init_min,
           output_max=output_init_max,
-          unimodalities=unimodalities)
-    elif kernel_initializer in [
-        "random_monotonic_initializer", "RandomMonotonicInitializer"
-    ]:
+          unimodalities=all_unimodalities)
+    elif kernel_initializer in ["random_monotonic_initializer",
+                                "RandomMonotonicInitializer"]:
       output_init_min, output_init_max = default_params(output_min, output_max)
 
       self.kernel_initializer = RandomMonotonicInitializer(
           lattice_sizes=lattice_sizes,
           output_min=output_init_min,
           output_max=output_init_max,
-          unimodalities=unimodalities)
+          unimodalities=all_unimodalities)
     else:
       # This is needed for Keras deserialization logic to be aware of our custom
       # objects.
@@ -386,6 +409,7 @@ class Lattice(keras.layers.Layer):
         monotonic_dominances=self.monotonic_dominances,
         range_dominances=self.range_dominances,
         joint_monotonicities=self.joint_monotonicities,
+        joint_unimodalities=self.joint_unimodalities,
         output_min=self.output_min,
         output_max=self.output_max,
         num_projection_iterations=self.num_projection_iterations,
@@ -432,6 +456,7 @@ class Lattice(keras.layers.Layer):
         monotonic_dominances=self.monotonic_dominances,
         range_dominances=self.range_dominances,
         joint_monotonicities=self.joint_monotonicities,
+        joint_unimodalities=self.joint_unimodalities,
         output_min=self.output_min,
         output_max=self.output_max,
         num_projection_iterations=20,
@@ -485,6 +510,7 @@ class Lattice(keras.layers.Layer):
         "monotonic_dominances": self.monotonic_dominances,
         "range_dominances": self.range_dominances,
         "joint_monotonicities": self.joint_monotonicities,
+        "joint_unimodalities": self.joint_unimodalities,
         "output_min": self.output_min,
         "output_max": self.output_max,
         "num_projection_iterations": self.num_projection_iterations,
@@ -534,6 +560,7 @@ class Lattice(keras.layers.Layer):
         monotonic_dominances=self.monotonic_dominances,
         range_dominances=self.range_dominances,
         joint_monotonicities=self.joint_monotonicities,
+        joint_unimodalities=self.joint_unimodalities,
         output_min=self.output_min,
         output_max=self.output_max,
         eps=eps)
@@ -717,6 +744,7 @@ class LatticeConstraints(keras.constraints.Constraint):
                monotonic_dominances=None,
                range_dominances=None,
                joint_monotonicities=None,
+               joint_unimodalities=None,
                output_min=None,
                output_max=None,
                num_projection_iterations=1,
@@ -733,6 +761,8 @@ class LatticeConstraints(keras.constraints.Constraint):
         `Lattice`.
       range_dominances: Same meaning as corresponding parameter of `Lattice`.
       joint_monotonicities: Same meaning as corresponding parameter of
+        `Lattice`.
+      joint_unimodalities: Same meaning as corresponding parameter of
         `Lattice`.
       output_min: Minimum possible output.
       output_max: Maximum possible output.
@@ -752,7 +782,8 @@ class LatticeConstraints(keras.constraints.Constraint):
         trapezoid_trusts=trapezoid_trusts,
         monotonic_dominances=monotonic_dominances,
         range_dominances=range_dominances,
-        joint_monotonicities=joint_monotonicities)
+        joint_monotonicities=joint_monotonicities,
+        joint_unimodalities=joint_unimodalities)
 
     self.lattice_sizes = lattice_sizes
     self.monotonicities = monotonicities
@@ -762,6 +793,7 @@ class LatticeConstraints(keras.constraints.Constraint):
     self.monotonic_dominances = monotonic_dominances
     self.range_dominances = range_dominances
     self.joint_monotonicities = joint_monotonicities
+    self.joint_unimodalities = joint_unimodalities
     self.output_min = output_min
     self.output_max = output_max
     self.num_projection_iterations = num_projection_iterations
@@ -782,7 +814,8 @@ class LatticeConstraints(keras.constraints.Constraint):
     # No need to separately check for trust constraints and monotonic dominance,
     # since monotonicity is required to impose them. The only exception is joint
     # monotonicity.
-    if (num_constraint_dims > 0 or self.joint_monotonicities):
+    if (num_constraint_dims > 0 or self.joint_monotonicities or
+        self.joint_unimodalities):
       w = lattice_lib.project_by_dykstra(
           w,
           lattice_sizes=self.lattice_sizes,
@@ -793,6 +826,7 @@ class LatticeConstraints(keras.constraints.Constraint):
           monotonic_dominances=self.monotonic_dominances,
           range_dominances=self.range_dominances,
           joint_monotonicities=self.joint_monotonicities,
+          joint_unimodalities=self.joint_unimodalities,
           num_iterations=self.num_projection_iterations)
       if self.enforce_strict_monotonicity:
         w = lattice_lib.finalize_constraints(
@@ -822,6 +856,7 @@ class LatticeConstraints(keras.constraints.Constraint):
         "monotonic_dominances": self.monotonic_dominances,
         "range_dominances": self.range_dominances,
         "joint_monotonicities": self.joint_monotonicities,
+        "joint_unimodalities": self.joint_unimodalities,
         "output_min": self.output_min,
         "output_max": self.output_max,
         "num_projection_iterations": self.num_projection_iterations,

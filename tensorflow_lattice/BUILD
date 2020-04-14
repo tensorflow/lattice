@@ -31,6 +31,7 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
+        "//tensorflow_lattice/python:aggregation_layer",
         "//tensorflow_lattice/python:categorical_calibration_layer",
         "//tensorflow_lattice/python:categorical_calibration_lib",
         "//tensorflow_lattice/python:configs",
@@ -45,6 +46,7 @@ py_library(
         "//tensorflow_lattice/python:premade_lib",
         "//tensorflow_lattice/python:pwl_calibration_layer",
         "//tensorflow_lattice/python:pwl_calibration_lib",
+        "//tensorflow_lattice/python:rtl_layer",
         "//tensorflow_lattice/python:test_utils",
         "//tensorflow_lattice/python:visualization",
     ],

@@ -29,6 +29,7 @@ from tensorflow_lattice.python import linear_layer
 from tensorflow_lattice.python import pwl_calibration_layer
 
 
+# TODO: Add support for calibrators with units > 1.
 class ParallelCombination(keras.layers.Layer):
   # pyformat: disable
   """Wraps several parallel calibration layers under single one.
@@ -114,17 +115,12 @@ class ParallelCombination(keras.layers.Layer):
         raise ValueError("Number of ParallelCombination input tensors does not "
                          "match number of calibration layers. input_shape: %s, "
                          "layers: %s" % (input_shape, self.calibration_layers))
-      for layer, shape in zip(self.calibration_layers, input_shape):
-        layer.build(shape)
     else:
       if input_shape[1] != len(self.calibration_layers):
         raise ValueError("Second dimension of ParallelCombination input tensor "
                          "does not match number of calibration layers. "
                          "input_shape: %s, layers: %s" %
                          (input_shape, self.calibration_layers))
-      for layer in self.calibration_layers:
-        layer.build(tf.TensorShape([input_shape[0], 1]))
-
     super(ParallelCombination, self).build(input_shape)
 
   def call(self, inputs):
@@ -149,9 +145,9 @@ class ParallelCombination(keras.layers.Layer):
 
   def compute_output_shape(self, input_shape):
     if self.single_output:
-      return tf.TensorShape(None, len(self.calibration_layers))
+      return tf.TensorShape([None, len(self.calibration_layers)])
     else:
-      return [tf.TensorShape(None, 1)] * len(self.calibration_layers)
+      return [tf.TensorShape([None, 1])] * len(self.calibration_layers)
 
   def get_config(self):
     """Standard Keras config for serialization."""

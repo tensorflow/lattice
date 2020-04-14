@@ -21,6 +21,7 @@ from __future__ import absolute_import
 
 import tensorflow_lattice.layers
 
+from tensorflow_lattice.python import aggregation_layer
 from tensorflow_lattice.python import categorical_calibration_layer
 from tensorflow_lattice.python import categorical_calibration_lib
 from tensorflow_lattice.python import configs

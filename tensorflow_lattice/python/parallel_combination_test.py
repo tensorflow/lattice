@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Tests for Lattice Layer."""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import tempfile
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
@@ -134,6 +134,18 @@ class ParallelCombinationTest(parameterized.TestCase, tf.test.TestCase):
     print("predictions")
     print(predictions)
     self.assertTrue(np.allclose(predictions, np.asarray([[0.0], [1.4], [6.0]])))
+
+    with tempfile.NamedTemporaryFile(suffix=".h5") as f:
+      model.save(f.name)
+      loaded_model = tf.keras.models.load_model(
+          f.name,
+          custom_objects={
+              "ParallelCombination": pcl.ParallelCombination,
+              "Lattice": ll.Lattice
+          })
+      predictions = loaded_model.predict(test_inputs)
+      self.assertTrue(
+          np.allclose(predictions, np.asarray([[0.0], [1.4], [6.0]])))
 
 
 if __name__ == "__main__":

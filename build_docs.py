@@ -62,11 +62,13 @@ def local_definitions_filter(path, parent, children):
 def main(_):
   private_map = {
       'tfl': ['python'],
+      'tfl.aggregation_layer': ['Aggregation'],
       'tfl.categorical_calibration_layer': ['CategoricalCalibration'],
       'tfl.lattice_layer': ['Lattice'],
       'tfl.linear_layer': ['Linear'],
       'tfl.pwl_calibration_layer': ['PWLCalibration'],
-      'tfl.parallel_combination_layer': ['ParallelCombination']
+      'tfl.parallel_combination_layer': ['ParallelCombination'],
+      'tfl.rtl_layer': ['RTL'],
   }
   doc_generator = generate_lib.DocGenerator(
       root_title='TensorFlow Lattice 2.0',

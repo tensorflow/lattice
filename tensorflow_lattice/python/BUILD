@@ -75,7 +75,7 @@ py_library(
     srcs = ["linear_lib.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":utils",
+        ":internal_utils",
         # tensorflow:tensorflow_no_contrib dep,
     ],
 )
@@ -95,7 +95,7 @@ py_library(
     srcs = ["categorical_calibration_lib.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":utils",
+        ":internal_utils",
         # enum dep,
         # tensorflow:tensorflow_no_contrib dep,
     ],
@@ -205,6 +205,33 @@ py_test(
 )
 
 py_library(
+    name = "rtl_layer",
+    srcs = ["rtl_layer.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":lattice_layer",
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_test(
+    name = "rtl_test",
+    size = "large",
+    srcs = ["rtl_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":linear_layer",
+        ":pwl_calibration_layer",
+        ":rtl_layer",
+        # absl/logging dep,
+        # absl/testing:parameterized dep,
+        # numpy dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
     name = "configs",
     srcs = ["configs.py"],
     srcs_version = "PY2AND3",
@@ -221,15 +248,20 @@ py_test(
     python_version = "PY3",
     srcs_version = "PY2AND3",
     deps = [
+        ":categorical_calibration_layer",
         ":configs",
+        ":lattice_layer",
+        ":linear_layer",
+        ":premade",
+        ":pwl_calibration_layer",
         # absl/logging dep,
         # tensorflow dep,
     ],
 )
 
 py_library(
-    name = "utils",
-    srcs = ["utils.py"],
+    name = "internal_utils",
+    srcs = ["internal_utils.py"],
     srcs_version = "PY2AND3",
     deps = [
         # tensorflow dep,
@@ -237,12 +269,12 @@ py_library(
 )
 
 py_test(
-    name = "utils_test",
-    srcs = ["utils_test.py"],
+    name = "internal_utils_test",
+    srcs = ["internal_utils_test.py"],
     python_version = "PY3",
     srcs_version = "PY2AND3",
     deps = [
-        ":utils",
+        ":internal_utils",
         # tensorflow dep,
     ],
 )
@@ -279,7 +311,6 @@ py_library(
         ":categorical_calibration_layer",
         ":configs",
         ":lattice_layer",
-        ":lattice_lib",
         ":linear_layer",
         ":model_info",
         ":premade",
@@ -312,8 +343,14 @@ py_library(
     srcs = ["premade.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":aggregation_layer",
+        ":categorical_calibration_layer",
         ":configs",
+        ":lattice_layer",
+        ":parallel_combination_layer",
         ":premade_lib",
+        ":pwl_calibration_layer",
+        # absl/logging dep,
         # tensorflow dep,
     ],
 )
@@ -323,9 +360,11 @@ py_library(
     srcs = ["premade_lib.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":aggregation_layer",
         ":categorical_calibration_layer",
         ":configs",
         ":lattice_layer",
+        ":lattice_lib",
         ":linear_layer",
         ":pwl_calibration_layer",
         # absl/logging dep,
@@ -338,14 +377,37 @@ py_library(
 
 py_test(
     name = "premade_test",
+    size = "enormous",
     srcs = ["premade_test.py"],
     python_version = "PY3",
+    # shard_count = 10,
     srcs_version = "PY2AND3",
     deps = [
         ":configs",
+        ":premade",
         ":premade_lib",
-        # absl/testing:parameterized dep,
+        # absl/logging dep,
         # numpy dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "aggregation_layer",
+    srcs = ["aggregation_layer.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        # tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "aggregation_test",
+    srcs = ["aggregation_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":aggregation_layer",
         # tensorflow dep,
     ],
 )
