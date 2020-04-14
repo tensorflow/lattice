@@ -11,19 +11,141 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Tests for TFL model configuration library."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
 import tensorflow as tf
+from tensorflow_lattice.python import categorical_calibration_layer
 from tensorflow_lattice.python import configs
+from tensorflow_lattice.python import lattice_layer
+from tensorflow_lattice.python import linear_layer
+from tensorflow_lattice.python import premade
+from tensorflow_lattice.python import pwl_calibration_layer
+
+tfl_custom_objects = {
+    'CalibratedLatticeEnsemble':
+        premade.CalibratedLatticeEnsemble,
+    'CalibratedLattice':
+        premade.CalibratedLattice,
+    'CalibratedLinear':
+        premade.CalibratedLinear,
+    'CategoricalCalibration':
+        categorical_calibration_layer.CategoricalCalibration,
+    'FeatureConfig':
+        configs.FeatureConfig,
+    'RegularizerConfig':
+        configs.RegularizerConfig,
+    'TrustConfig':
+        configs.TrustConfig,
+    'DominanceConfig':
+        configs.DominanceConfig,
+    'CalibratedLatticeEnsembleConfig':
+        configs.CalibratedLatticeEnsembleConfig,
+    'CalibratedLatticeConfig':
+        configs.CalibratedLatticeConfig,
+    'CalibratedLinearConfig':
+        configs.CalibratedLinearConfig,
+    'Lattice':
+        lattice_layer.Lattice,
+    'Linear':
+        linear_layer.Linear,
+    'PWLCalibration':
+        pwl_calibration_layer.PWLCalibration,
+}
 
 
 class ConfigsTest(tf.test.TestCase):
+
+  def test_from_config(self):
+    feature_configs = [
+        configs.FeatureConfig(
+            name='feature_a',
+            pwl_calibration_input_keypoints='quantiles',
+            pwl_calibration_num_keypoints=8,
+            monotonicity=1,
+            pwl_calibration_clip_max=100,
+        ),
+        configs.FeatureConfig(
+            name='feature_b',
+            lattice_size=3,
+            unimodality='valley',
+            pwl_calibration_input_keypoints='uniform',
+            pwl_calibration_num_keypoints=5,
+            pwl_calibration_clip_min=130,
+            pwl_calibration_convexity='convex',
+            regularizer_configs=[
+                configs.RegularizerConfig(name='calib_hesian', l2=3e-3),
+            ],
+        ),
+        configs.FeatureConfig(
+            name='feature_c',
+            pwl_calibration_input_keypoints=[0.0, 0.5, 1.0],
+            reflects_trust_in=[
+                configs.TrustConfig(feature_name='feature_a'),
+                configs.TrustConfig(feature_name='feature_b', direction=-1),
+            ],
+            dominates=[
+                configs.DominanceConfig(
+                    feature_name='feature_d', dominance_type='monotonic'),
+            ],
+        ),
+        configs.FeatureConfig(
+            name='feature_d',
+            num_buckets=3,
+            vocabulary_list=['a', 'b', 'c'],
+            default_value=-1,
+        ),
+    ]
+    # First we test CalibratedLatticeEnsembleConfig
+    model_config = configs.CalibratedLatticeEnsembleConfig(
+        feature_configs=feature_configs,
+        lattices=[['feature_a', 'feature_b'], ['feature_c', 'feature_d']],
+        separate_calibrators=True,
+        regularizer_configs=[
+            configs.RegularizerConfig('torsion', l2=1e-4),
+        ],
+        output_min=0.0,
+        output_max=1.0,
+        output_calibration=True,
+        output_calibration_num_keypoints=5,
+        output_initialization=[0.0, 1.0])
+    model_config_copy = configs.CalibratedLatticeEnsembleConfig.from_config(
+        model_config.get_config(), tfl_custom_objects)
+    self.assertDictEqual(model_config.get_config(),
+                         model_config_copy.get_config())
+    # Next we test CalibratedLatticeConfig
+    model_config = configs.CalibratedLatticeConfig(
+        feature_configs=feature_configs,
+        regularizer_configs=[
+            configs.RegularizerConfig('torsion', l2=1e-4),
+        ],
+        output_min=0.0,
+        output_max=1.0,
+        output_calibration=True,
+        output_calibration_num_keypoints=8,
+        output_initialization='quantiles')
+    model_config_copy = configs.CalibratedLatticeConfig.from_config(
+        model_config.get_config(), tfl_custom_objects)
+    self.assertDictEqual(model_config.get_config(),
+                         model_config_copy.get_config())
+    # Last we test CalibratedLinearConfig
+    model_config = configs.CalibratedLinearConfig(
+        feature_configs=feature_configs,
+        regularizer_configs=[
+            configs.RegularizerConfig('calib_hessian', l2=1e-4),
+        ],
+        use_bias=True,
+        output_min=0.0,
+        output_max=None,
+        output_calibration=True,
+        output_initialization='uniform')
+    model_config_copy = configs.CalibratedLinearConfig.from_config(
+        model_config.get_config(), tfl_custom_objects)
+    self.assertDictEqual(model_config.get_config(),
+                         model_config_copy.get_config())
 
   def test_updates(self):
     model_config = configs.CalibratedLatticeConfig(

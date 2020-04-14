@@ -61,8 +61,10 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import copy
 
 from absl import logging
+import tensorflow as tf
 
 _HPARAM_FEATURE_PREFIX = 'feature'
 _HPARAM_REGULARIZER_PREFIX = 'regularizer'
@@ -80,6 +82,69 @@ class _Config(object):
 
   def __repr__(self):
     return self.__dict__.__repr__()
+
+  def get_config(self):
+    """Returns a configuration dictionary."""
+    config = copy.deepcopy(self.__dict__)
+    if 'self' in config:
+      config.pop('self')
+    if '__class__' in config:
+      config.pop('__class__')
+    if 'feature_configs' in config and config['feature_configs'] is not None:
+      config['feature_configs'] = [
+          tf.keras.utils.serialize_keras_object(feature_config)
+          for feature_config in config['feature_configs']
+      ]
+    if 'regularizer_configs' in config and config[
+        'regularizer_configs'] is not None:
+      config['regularizer_configs'] = [
+          tf.keras.utils.serialize_keras_object(regularizer_config)
+          for regularizer_config in config['regularizer_configs']
+      ]
+    if ('reflects_trust_in' in config and
+        config['reflects_trust_in'] is not None):
+      config['reflects_trust_in'] = [
+          tf.keras.utils.serialize_keras_object(trust_config)
+          for trust_config in config['reflects_trust_in']
+      ]
+    if 'dominates' in config and config['dominates'] is not None:
+      config['dominates'] = [
+          tf.keras.utils.serialize_keras_object(dominance_config)
+          for dominance_config in config['dominates']
+      ]
+    return config
+
+  @classmethod
+  def deserialize_nested_configs(cls, config, custom_objects=None):
+    """Returns a deserialized configuration dictionary."""
+    config = copy.deepcopy(config)
+    if 'feature_configs' in config and config['feature_configs'] is not None:
+      config['feature_configs'] = [
+          tf.keras.utils.deserialize_keras_object(
+              feature_config, custom_objects=custom_objects)
+          for feature_config in config['feature_configs']
+      ]
+    if 'regularizer_configs' in config and config[
+        'regularizer_configs'] is not None:
+      config['regularizer_configs'] = [
+          tf.keras.utils.deserialize_keras_object(
+              regularizer_config, custom_objects=custom_objects)
+          for regularizer_config in config['regularizer_configs']
+      ]
+    if ('reflects_trust_in' in config and
+        config['reflects_trust_in'] is not None):
+      config['reflects_trust_in'] = [
+          tf.keras.utils.deserialize_keras_object(
+              trust_config, custom_objects=custom_objects)
+          for trust_config in config['reflects_trust_in']
+      ]
+    if 'dominates' in config and config['dominates'] is not None:
+      config['dominates'] = [
+          tf.keras.utils.deserialize_keras_object(
+              dominance_config, custom_objects=custom_objects)
+          for dominance_config in config['dominates']
+      ]
+    return config
 
 
 class _HasFeatureConfigs(object):
@@ -219,13 +284,13 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
       output_max: Upper bound constraint on the output of the model.
       output_calibration: If a piecewise-linear calibration should be used on
         the output of the lattice.
-      output_calibration_num_keypoints: Number of keypoints to use for the output
-        piecewise-linear calibration.
+      output_calibration_num_keypoints: Number of keypoints to use for the
+        output piecewise-linear calibration.
       output_initialization: The initial values to setup for the output of the
-        model. When using output calibration, these values are used to initliaze
-        the output keypoints of the output piecewise-linear calibration.
-        Otherwise the lattice parameters will be setup to form a linear function
-        in the range of output_initialization. It can be one of:
+        model. When using output calibration, these values are used to
+        initialize the output keypoints of the output piecewise-linear
+        calibration. Otherwise the lattice parameters will be setup to form a
+        linear function in the range of output_initialization. It can be one of:
           - String `'quantiles'`: Output is initliazed to label quantiles, if
             possible.
           - String `'uniform'`: Output is initliazed uniformly in label range.
@@ -241,6 +306,11 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
     """
     # pyformat: enable
     super(CalibratedLatticeEnsembleConfig, self).__init__(locals())
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return CalibratedLatticeEnsembleConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
 
 
 class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
@@ -288,13 +358,13 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
       output_max: Upper bound constraint on the output of the model.
       output_calibration: If a piecewise-linear calibration should be used on
         the output of the lattice.
-      output_calibration_num_keypoints: Number of keypoints to use for the output
-        piecewise-linear calibration.
+      output_calibration_num_keypoints: Number of keypoints to use for the
+        output piecewise-linear calibration.
       output_initialization: The initial values to setup for the output of the
-        model. When using output calibration, these values are used to initliaze
-        the output keypoints of the output piecewise-linear calibration.
-        Otherwise the lattice parameters will be setup to form a linear function
-        in the range of output_initialization. It can be one of:
+        model. When using output calibration, these values are used to
+        initialize the output keypoints of the output piecewise-linear
+        calibration. Otherwise the lattice parameters will be setup to form a
+        linear function in the range of output_initialization. It can be one of:
           - String `'quantiles'`: Output is initliazed to label quantiles, if
             possible.
           - String `'uniform'`: Output is initliazed uniformly in label range.
@@ -302,6 +372,11 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
             lattice or output calibrator.
     """
     super(CalibratedLatticeConfig, self).__init__(locals())
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return CalibratedLatticeConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
 
 
 class CalibratedLinearConfig(_Config, _HasFeatureConfigs,
@@ -353,13 +428,13 @@ class CalibratedLinearConfig(_Config, _HasFeatureConfigs,
       output_max: Upper bound constraint on the output of the model.
       output_calibration: If a piecewise-linear calibration should be used on
         the output of the lattice.
-      output_calibration_num_keypoints: Number of keypoints to use for the output
-        piecewise-linear calibration.
+      output_calibration_num_keypoints: Number of keypoints to use for the
+        output piecewise-linear calibration.
       output_initialization: The initial values to setup for the output of the
-        model. When using output calibration, these values are used to initliaze
-        the output keypoints of the output piecewise-linear calibration.
-        Otherwise the lattice parameters will be setup to form a linear function
-        in the range of output_initialization. It can be one of:
+        model. When using output calibration, these values are used to
+        initialize the output keypoints of the output piecewise-linear
+        calibration. Otherwise the lattice parameters will be setup to form a
+        linear function in the range of output_initialization. It can be one of:
           - String `'quantiles'`: Output is initliazed to label quantiles, if
             possible.
           - String `'uniform'`: Output is initliazed uniformly in label range.
@@ -367,6 +442,92 @@ class CalibratedLinearConfig(_Config, _HasFeatureConfigs,
             lattice or output calibrator.
     """
     super(CalibratedLinearConfig, self).__init__(locals())
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return CalibratedLinearConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
+
+
+# TODO: add option for different pre-aggregation model (linear/ensemble)
+class AggregateFunctionConfig(_Config, _HasFeatureConfigs,
+                              _HasRegularizerConfigs):
+  """Config for aggregate function learning model.
+
+  An aggregate function learning model applies piecewise-linear and categorical
+  calibration on the ragged input features, followed by an aggregation layer
+  that aggregates the calibrated inputs. Lastly a lattice model and an optional
+  output piecewise-linear calibration are applied.
+
+  Example:
+
+  ```python
+  model_config = tfl.configs.AggregateFunctionConfig(
+      feature_configs=[...],
+  )
+  model = tfl.premade.AggregateFunction(model_config)
+  model.compile(...)
+  model.fit(...)
+  model.evaluate(...)
+  ```
+  """
+  _HAS_DYNAMIC_ATTRIBUTES = True  # Required for pytype checks.
+
+  def __init__(self,
+               feature_configs,
+               regularizer_configs=None,
+               middle_dimension=1,
+               middle_lattice_size=2,
+               middle_calibration=False,
+               middle_calibration_num_keypoints=10,
+               middle_monotonicity=None,
+               output_min=None,
+               output_max=None,
+               output_calibration=False,
+               output_calibration_num_keypoints=10,
+               output_initialization='uniform'):
+    """Initializes an `AggregateFunctionConfig` instance.
+
+    Args:
+      feature_configs: A list of `tfl.configs.FeatureConfig` instances that
+        specify configurations for each feature.
+      regularizer_configs: A list of `tfl.configs.RegularizerConfig` instances
+        that apply global regularization.
+      middle_dimension: The number of calibrated lattices that are applied to
+        each block. The outputs of these lattices are then averaged over the
+        blocks, and the middle_dimension resulting numbers are then passed into
+        the "middle" calibrated lattice. This middle lattice therefore has input
+        dimension equal to middle_dimension.
+      middle_lattice_size: Size of each of the middle_lattice dimensions.
+      middle_calibration: If a piecewise-linear calibration should be used on
+        the inputs to the middle lattice.
+      middle_calibration_num_keypoints: Number of keypoints to use for the
+        middle piecewise-linear calibration.
+      middle_monotonicity: Specifies if the middle calibrators should be
+        monotonic, using 'increasing' or 1 to indicate increasing monotonicity,
+        'decreasing' or -1 to indicate decreasing monotonicity, and 'none' or 0
+        to indicate no monotonicity constraints.
+      output_min: Lower bound constraint on the output of the model.
+      output_max: Upper bound constraint on the output of the model.
+      output_calibration: If a piecewise-linear calibration should be used on
+        the output of the lattice.
+      output_calibration_num_keypoints: Number of keypoints to use for the
+        output piecewise-linear calibration.
+      output_initialization: The initial values to setup for the output of the
+        model. When using output calibration, these values are used to
+        initialize the output keypoints of the output piecewise-linear
+        calibration. Otherwise the lattice parameters will be setup to form a
+        linear function in the range of output_initialization. It can be one of:
+          - String `'uniform'`: Output is initliazed uniformly in label range.
+          - A list of numbers: To be used for initialization of the output
+            lattice or output calibrator.
+    """
+    super(AggregateFunctionConfig, self).__init__(locals())
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return AggregateFunctionConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
 
 
 class FeatureConfig(_Config, _HasRegularizerConfigs):
@@ -460,22 +621,20 @@ class FeatureConfig(_Config, _HasRegularizerConfigs):
         num_buckets.
       lattice_size: The number of lattice verticies to be used along the axis
         for this feature.
-      monotonicity:
-        - For numeric features, specifies if the model output should
-          be monotonic in this feature, using 'increasing' or 1 to indicate
-          increasing monotonicity, 'decreasing' or -1 to indicate decreasing
-          monotonicity, and 'none' or 0 to indicate no monotonicity constraints.
-        - For categorical features, a list of (category_a, category_b) pairs
-          from the vocabulary list indicating that with other features fixed,
-          model output for category_b should be greater than or equal to
-          category_a. If no vocabulary list is specified, we assume implcit
-          vocabulary in the range `[0, num_buckets - 1]`.
-      unimodality: For numeric features specifies if the model output
-        should be unimodal in corresponding feature, using 'valley' or 1 to
-        indicate that function first decreases then increases, using 'peak' or
-        -1 to indicate that funciton first increases then decreases, using
-        'none' or 0 to indicate no unimodality constraints. Not used for
-        categorical features.
+      monotonicity: - For numeric features, specifies if the model output should
+        be monotonic in this feature, using 'increasing' or 1 to indicate
+        increasing monotonicity, 'decreasing' or -1 to indicate decreasing
+        monotonicity, and 'none' or 0 to indicate no monotonicity constraints. -
+        For categorical features, a list of (category_a, category_b) pairs from
+        the vocabulary list indicating that with other features fixed, model
+        output for category_b should be greater than or equal to category_a. If
+        no vocabulary list is specified, we assume implcit vocabulary in the
+        range `[0, num_buckets - 1]`.
+      unimodality: For numeric features specifies if the model output should be
+        unimodal in corresponding feature, using 'valley' or 1 to indicate that
+        function first decreases then increases, using 'peak' or -1 to indicate
+        that funciton first increases then decreases, using 'none' or 0 to
+        indicate no unimodality constraints. Not used for categorical features.
       reflects_trust_in: None or a list of `tfl.configs.TrustConfig` instances.
       dominates: None or a list of `tfl.configs.DominanceConfig` instances.
       pwl_calibration_always_monotonic: Specifies if the piecewise-linear
@@ -511,6 +670,11 @@ class FeatureConfig(_Config, _HasRegularizerConfigs):
         `tfl.configs.RegularizerConfig` instances.
     """
     super(FeatureConfig, self).__init__(locals())
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return FeatureConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
 
 
 class RegularizerConfig(_Config):
@@ -601,6 +765,11 @@ class RegularizerConfig(_Config):
       l2: l2 regularization amount.
     """
     super(RegularizerConfig, self).__init__(locals())
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return RegularizerConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
 
 
 class TrustConfig(_Config):
@@ -710,6 +879,11 @@ class TrustConfig(_Config):
     """
     super(TrustConfig, self).__init__(locals())
 
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return TrustConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
+
 
 class DominanceConfig(_Config):
   """Configuration for dominance constraints in TFL canned estimators.
@@ -734,7 +908,7 @@ class DominanceConfig(_Config):
               name='num_purchases',
               dominates=[
                   configs.DominanceConfig(
-                      feature_name='num_clicks', trust_type='monotonic'),
+                      feature_name='num_clicks', dominance_type='monotonic'),
               ],
           ),
           tfl.configs.FeatureConfig(
@@ -755,6 +929,11 @@ class DominanceConfig(_Config):
         `'monotonic'`.
     """
     super(DominanceConfig, self).__init__(locals())
+
+  @classmethod
+  def from_config(cls, config, custom_objects=None):
+    return DominanceConfig(**_Config.deserialize_nested_configs(
+        config, custom_objects=custom_objects))
 
 
 class _TypeDict(collections.defaultdict):

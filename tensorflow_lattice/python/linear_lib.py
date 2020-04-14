@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import utils
+from . import internal_utils as iu
 import six
 import tensorflow as tf
 
@@ -82,8 +82,7 @@ def project(weights, monotonicities, monotonic_dominances=None,
 
   if monotonic_dominances:
     monotonic_dominances = [(j, i) for i, j in monotonic_dominances]
-    weights = utils.approximately_project_categorical_partial_monotonicities(
-        weights, monotonic_dominances)
+    weights = iu.approximately_project_categorical_partial_monotonicities(weights, monotonic_dominances)
 
   if range_dominances:
     range_dominances = [(j, i) for i, j in range_dominances]
@@ -93,7 +92,7 @@ def project(weights, monotonicities, monotonic_dominances=None,
         scalings[dim] *= upper - lower
     scalings = tf.constant(scalings, dtype=weights.dtype, shape=weights.shape)
     weights *= scalings
-    weights = utils.approximately_project_categorical_partial_monotonicities(
+    weights = iu.approximately_project_categorical_partial_monotonicities(
         weights, range_dominances)
     weights /= scalings
 

@@ -1,6 +1,7 @@
 book_path: /lattice/_book.yaml
 project_path: /lattice/_project.yaml
-description: <!--no description-->
+description: A library for training constrained and interpretable lattice based models. Inject
+ domain knowledge into the learning process through constraints on Keras layers.
 landing_page:
   custom_css_path: /site-assets/css/style.css
   rows:

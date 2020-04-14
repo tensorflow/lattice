@@ -197,17 +197,17 @@ class CategoricalCalibration(keras.layers.Layer):
 
   def call(self, inputs):
     """Standard Keras call() method."""
+    if inputs.dtype not in [tf.uint8, tf.int32, tf.int64]:
+      inputs = tf.cast(inputs, dtype=tf.int32)
+
     if self.default_input_value is not None:
       default_input_value_tensor = tf.constant(
-          self.default_input_value,
-          name=DEFAULT_INPUT_VALUE_NAME,
-          dtype=inputs.dtype)
+          int(self.default_input_value),
+          dtype=inputs.dtype,
+          name=DEFAULT_INPUT_VALUE_NAME)
       replacement = tf.zeros_like(inputs) + (self.num_buckets - 1)
       inputs = tf.where(
           tf.equal(inputs, default_input_value_tensor), replacement, inputs)
-
-    if inputs.dtype not in [tf.uint8, tf.int32, tf.int64]:
-      inputs = tf.cast(inputs, dtype=tf.int32)
 
     # We can't use tf.gather_nd(self.kernel, inputs) as it doesn't support
     # constraints (constraint functions are not supported for IndexedSlices).

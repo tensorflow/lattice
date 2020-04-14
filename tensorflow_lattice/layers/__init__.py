@@ -14,8 +14,10 @@
 
 """'layers' namespace for TFL layers."""
 
+from tensorflow_lattice.python.aggregation_layer import Aggregation
 from tensorflow_lattice.python.categorical_calibration_layer import CategoricalCalibration
 from tensorflow_lattice.python.lattice_layer import Lattice
 from tensorflow_lattice.python.linear_layer import Linear
 from tensorflow_lattice.python.parallel_combination_layer import ParallelCombination
 from tensorflow_lattice.python.pwl_calibration_layer import PWLCalibration
+from tensorflow_lattice.python.rtl_layer import RTL

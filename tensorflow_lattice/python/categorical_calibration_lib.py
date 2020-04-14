@@ -11,14 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Helpers and computations of categorical calibration layer."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import utils
+from . import internal_utils as iu
 import tensorflow as tf
 
 
@@ -52,7 +51,7 @@ def project(weights, output_min, output_max, monotonicities):
 
   if monotonicities:
     projected_weights = (
-        utils.approximately_project_categorical_partial_monotonicities(
+        iu.approximately_project_categorical_partial_monotonicities(
             projected_weights, monotonicities))
 
   if output_min is not None:
@@ -149,9 +148,10 @@ def verify_hyperparameters(num_buckets=None,
           "They are: ({}, {})".format(output_min, output_max))
 
   if monotonicities:
-    if (not isinstance(monotonicities, list) or
-        not all(isinstance(m, tuple) and len(m) == 2 for m in monotonicities)):
-      raise ValueError("Monotonicities should be a list of pairs (tuples).")
+    if (not isinstance(monotonicities, list) or not all(
+        isinstance(m, (list, tuple)) and len(m) == 2 for m in monotonicities)):
+      raise ValueError(
+          "Monotonicities should be a list of pairs (list/tuples).")
     for (i, j) in monotonicities:
       if (i < 0 or j < 0 or (num_buckets is not None and
                              (i >= num_buckets or j >= num_buckets))):

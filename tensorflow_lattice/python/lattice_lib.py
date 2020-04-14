@@ -566,7 +566,7 @@ def _approximately_project_edgeworth(weights, lattice_sizes, edgeworth_trusts):
   # Project onto trust constraints by cumulatively fixing violations.
   trust_projection = weights
   for main_dim, cond_dim, cond_direction in edgeworth_trusts or []:
-    layers = _unstack_2d(trust_projection, main_dim, cond_dim)
+    layers = _unstack_nd(trust_projection, [main_dim, cond_dim])
     # Unlike other trust projections, cannot simply reverse layers beforehand
     # based on cond_direction; asymmetry would break algorithm.
     if cond_direction > 0:
@@ -586,7 +586,7 @@ def _approximately_project_edgeworth(weights, lattice_sizes, edgeworth_trusts):
                                   (layers[i + 1][j] - layers[i][j]))
           max_violation = tf.maximum(tf.reduce_max(difference_in_slopes), 0)
           layers[i][j] -= max_violation
-    trust_projection = _stack_2d(layers, main_dim, cond_dim)
+    trust_projection = _stack_nd(layers, [main_dim, cond_dim])
 
   return trust_projection
 
@@ -704,7 +704,7 @@ def _approximately_project_trapezoid(weights, lattice_sizes, trapezoid_trusts,
 
   # Project onto trust constraints by cumulatively fixing violations.
   for main_dim, cond_dim, cond_direction in trapezoid_trusts or []:
-    layers = _unstack_2d(weights, main_dim, cond_dim)
+    layers = _unstack_nd(weights, [main_dim, cond_dim])
     max_main_dim = lattice_sizes[main_dim] - 1
     same_edgeworth = (main_dim, cond_dim,
                       cond_direction) in set(edgeworth_trusts or [])
@@ -722,7 +722,7 @@ def _approximately_project_trapezoid(weights, lattice_sizes, trapezoid_trusts,
       layers[max_main_dim][j + 1] += rhs_update
     if cond_direction < 0:
       layers = _reverse_second_list_dimension(layers)
-    weights = _stack_2d(layers, main_dim, cond_dim)
+    weights = _stack_nd(layers, [main_dim, cond_dim])
 
   return weights
 
@@ -1065,7 +1065,7 @@ def _project_partial_edgeworth(weights, lattice_sizes, edgeworth_trust,
   """
 
   main_dim, cond_dim, cond_direction = edgeworth_trust
-  layers = _unstack_2d(weights, main_dim, cond_dim)
+  layers = _unstack_nd(weights, [main_dim, cond_dim])
 
   if cond_direction < 0:
     layers = _reverse_second_list_dimension(layers)
@@ -1081,7 +1081,7 @@ def _project_partial_edgeworth(weights, lattice_sizes, edgeworth_trust,
   if cond_direction < 0:
     layers = _reverse_second_list_dimension(layers)
 
-  return _stack_2d(layers, main_dim, cond_dim)
+  return _stack_nd(layers, [main_dim, cond_dim])
 
 
 def _project_partial_trapezoid(weights, lattice_sizes, trapezoid_trust,
@@ -1165,7 +1165,7 @@ def _project_partial_trapezoid(weights, lattice_sizes, trapezoid_trust,
   """
 
   main_dim, cond_dim, cond_direction = trapezoid_trust
-  layers = _unstack_2d(weights, main_dim, cond_dim)
+  layers = _unstack_nd(weights, [main_dim, cond_dim])
 
   max_main_dim = lattice_sizes[main_dim] - 1
   if cond_direction < 0:
@@ -1183,7 +1183,7 @@ def _project_partial_trapezoid(weights, lattice_sizes, trapezoid_trust,
   if cond_direction < 0:
     layers = _reverse_second_list_dimension(layers)
 
-  return _stack_2d(layers, main_dim, cond_dim)
+  return _stack_nd(layers, [main_dim, cond_dim])
 
 
 def _project_partial_monotonic_dominance(weights, lattice_sizes,
@@ -1259,7 +1259,7 @@ def _project_partial_monotonic_dominance(weights, lattice_sizes,
   """
 
   dominant_dim, weak_dim = monotonic_dominance
-  layers = _unstack_2d(weights, dominant_dim, weak_dim)
+  layers = _unstack_nd(weights, [dominant_dim, weak_dim])
   for i in range(constraint_group[0], lattice_sizes[dominant_dim] - 1, 2):
     for j in range(constraint_group[1], lattice_sizes[weak_dim] - 1, 2):
       midpoint = (layers[i][j] + layers[i + 1][j + 1]) / 2
@@ -1274,7 +1274,7 @@ def _project_partial_monotonic_dominance(weights, lattice_sizes,
       layers[i][j] -= correction
       layers[i + 1][j + 1] -= correction
 
-  return _stack_2d(layers, dominant_dim, weak_dim)
+  return _stack_nd(layers, [dominant_dim, weak_dim])
 
 
 def _project_partial_range_dominance(weights, lattice_sizes, range_dominance,
@@ -1347,7 +1347,7 @@ def _project_partial_range_dominance(weights, lattice_sizes, range_dominance,
   dom_dim_size = lattice_sizes[dom_dim]
   weak_dim_size = lattice_sizes[weak_dim]
   i, j = constraint_group
-  layers = _unstack_2d(weights, dom_dim, weak_dim)
+  layers = _unstack_nd(weights, [dom_dim, weak_dim])
   difference = ((layers[i][weak_dim_size - 1] - layers[i][0]) -
                 (layers[dom_dim_size - 1][j] - layers[0][j]))
   if (i == 0 or i == dom_dim_size - 1) and (j == 0 or j == weak_dim_size - 1):
@@ -1367,7 +1367,7 @@ def _project_partial_range_dominance(weights, lattice_sizes, range_dominance,
     layers[dom_dim_size - 1][j] += correction
     layers[0][j] -= correction
 
-  return _stack_2d(layers, dom_dim, weak_dim)
+  return _stack_nd(layers, [dom_dim, weak_dim])
 
 
 def _project_partial_joint_monotonicity(weights, lattice_sizes,
@@ -1444,7 +1444,7 @@ def _project_partial_joint_monotonicity(weights, lattice_sizes,
   """
 
   dim1, dim2 = joint_monotonicity
-  layers = _unstack_2d(weights, dim1, dim2)
+  layers = _unstack_nd(weights, [dim1, dim2])
   for i in range(constraint_group[0], lattice_sizes[dim1] - 1, 2):
     for j in range(constraint_group[1], lattice_sizes[dim2] - 1, 2):
       midpoint = (layers[i + 1][j] + layers[i][j + 1]) / 2
@@ -1459,7 +1459,139 @@ def _project_partial_joint_monotonicity(weights, lattice_sizes,
       layers[i + 1][j] -= correction
       layers[i][j + 1] -= correction
 
-  return _stack_2d(layers, dim1, dim2)
+  return _stack_nd(layers, [dim1, dim2])
+
+
+def _project_partial_joint_unimodality(weights, lattice_sizes,
+                                       joint_unimodalities, vertex, offsets):
+  """Applies exact joint unimodality projection to given constraint group.
+
+  Constraint group is represented by vertex and offsets. Vertex means vertex
+  of lattice for which directional derivatives are being computed. Offsets is a
+  list of {-1, 1} which represent which of hypercubes adjacent to vertex is
+  being processed.
+  Each pair of vertex and offsets results in linear equation involving
+  len(vertex) + 1 of constrained vertices. We project onto this equation being
+  positive or negative depending on whether we need peak or valley.
+
+  Args:
+    weights: tensor with weights of lattice layer, with shape lattice_sizes.
+    lattice_sizes: list or tuple of integers which represents lattice sizes
+      which correspond to weights.
+    joint_unimodalities: tuple representing single joint unimodality constraint.
+      Elements are the indices of constrained features followed by 'valley' or
+      'peak'.
+    vertex: len(joint_unimodalities)-1 dimensional lattice vertex from
+      dimensions specified by joint_unimodalities.
+    offsets: list of {-1, 1} which represents which of hypercubes adjacent to
+      vertex is being processed.
+
+  Returns:
+    None or tensor with projected weights matching shape of input weights. In
+    case of None pair: (vertex, offset) resulted into constraint group for
+    which no update to weights is needed.
+  """
+  # This functoin builds hyperplane equation and then calls
+  # _project_onto_hyperplane() to project.
+  dimensions = joint_unimodalities[0]
+  if len(vertex) != len(dimensions):
+    raise ValueError("%s %s" % (vertex, joint_unimodalities))
+
+  upper_bound = [lattice_sizes[dim] for dim in dimensions]
+  center = [size // 2 for size in upper_bound]
+
+  if all(v == c for v, c in zip(vertex, center)):
+    return None
+
+  equation = []
+  all_vertices = []
+
+  for dim, offset in enumerate(offsets):
+    dim_weight = vertex[dim] - center[dim]
+    if dim_weight == 0:
+      continue
+
+    neighbour = list(vertex)
+    neighbour[dim] += offset
+    if neighbour[dim] < 0 or neighbour[dim] >= upper_bound[dim]:
+      return None
+
+    all_vertices.append(neighbour)
+    equation.append(dim_weight * offset)
+
+  if not all_vertices:
+    return None
+
+  # Add 'vertex' iteself with corresponding weights.
+  all_vertices.append(list(vertex))
+  equation.append(-sum(equation))
+
+  return _project_onto_hyperplane(
+      weights=weights,
+      joint_unimodalities=joint_unimodalities,
+      hyperplane=equation,
+      vertices=all_vertices)
+
+
+def _project_onto_hyperplane(weights, joint_unimodalities,
+                             hyperplane, vertices):
+  """Projects onto hyperplane.
+
+  Args:
+    weights: tensor with weights of lattice layer, with shape lattice_sizes.
+    joint_unimodalities: tuple representing a single joint unimodality
+      constraint. Elements are the index of constrained features, followed by
+      'valley' or 'peak'.
+    hyperplane: list of coefficients of hyperplane onto which we project.
+    vertices: list of len(joint_unimodalities)-1 dimensional points of lenght
+      len(hyperplane) which correspond to coefficients of hyperplane. This
+      points will be used to extract elements from 'weights' which are related
+      to given hyperplane.
+
+  Returns:
+    Tensor with projected weights matching shape of input weights.
+  """
+  hyperplane = tf.constant(hyperplane, dtype=weights.dtype)
+
+  # TODO: unstacking entire set of weights for the purpuse of projection
+  # onto single hyperplane is very inefficient for high number of jointly
+  # unimodal dims. Consider other options. So far I see 4 candidates:
+  # 1) Find a way to efficiently combine independent hyperplanes so we can
+  #    project onto several hyperplane at once. This would be correct projection
+  #    with respect to L2 norm, but headroom for this approach is limited
+  #    because for example for 4 constrained dims of size 3 (3^4) we have 81
+  #    different varialbes and 5 variables per equation. This gives us upper
+  #    bound of 81/5 = 16 times speed up. In reality it will probably be around
+  #    5-10 times.
+  # 2) Use tf.gather_nd() to gather affected weights instead of stacking and
+  #    unstacking. Hard to estimare how much of an improvement it will be.
+  # 3) Project onto all hyperplanes in a single step. This will violate Dykstra
+  #    algorithm, so projection will not be into nearest point because according
+  #    to Dykstra we need to porject into all dependent hyperplanes
+  #    consequently. But regardless it could work well enough in practice and
+  #    hopefully will be fast enough.
+  # 4) Come up with better option.
+  dimensions, direction = joint_unimodalities
+  layers = _unstack_nd(weights, dims=dimensions)
+  affected_weights = [_get_element(lists=layers, indices=position)
+                      for position in vertices]
+
+  affected_weights = tf.stack(affected_weights, axis=-1)
+  violation = tf.reduce_sum(affected_weights * hyperplane, axis=-1)
+  if direction == "valley":
+    violation = tf.minimum(violation, 0.0)
+  else:
+    violation = tf.maximum(violation, 0.0)
+
+  correction_factor = violation / tf.reduce_sum(hyperplane * hyperplane)
+  correction = tf.expand_dims(correction_factor, axis=-1) * hyperplane
+  projection = affected_weights - correction
+
+  affected_weights = tf.unstack(projection, axis=-1)
+  for tensor, position in zip(affected_weights, vertices):
+    _set_element(lists=layers, indices=position, value=tensor)
+
+  return _stack_nd(layers, dims=dimensions)
 
 
 # TODO: Test whether adding min/max capping to dykstra projection would
@@ -1473,6 +1605,7 @@ def project_by_dykstra(weights,
                        monotonic_dominances=None,
                        range_dominances=None,
                        joint_monotonicities=None,
+                       joint_unimodalities=None,
                        num_iterations=1):
   """Applies dykstra's projection algorithm for monotonicity/trust constraints.
 
@@ -1519,13 +1652,19 @@ def project_by_dykstra(weights,
       feature.
     joint_monotonicities: None or iterable of two-element tuples. Each tuple
       represents a pair of feature indices that require joint monotoniticity.
+    joint_unimodalities: None or tuple or iterable of tuples. Each tuple
+      represents indices of single group of jointly unimodal features followed
+      by 'valley' or 'peak'.
     num_iterations: number of iterations of Dykstra's algorithm.
 
   Returns:
     Projected weights tensor of same shape as `weights`.
   """
-  if ((count_non_zeros(monotonicities, unimodalities) == 0 and
-       not joint_monotonicities) or num_iterations == 0):
+  if num_iterations == 0:
+    return weights
+  if (count_non_zeros(monotonicities, unimodalities) == 0 and
+      not joint_monotonicities and not joint_unimodalities and
+      not range_dominances):
     return weights
 
   units = weights.shape[1]
@@ -1543,6 +1682,8 @@ def project_by_dykstra(weights,
     range_dominances = []
   if joint_monotonicities is None:
     joint_monotonicities = []
+  if joint_unimodalities is None:
+    joint_unimodalities = []
   if units > 1:
     lattice_sizes = lattice_sizes + [int(units)]
     monotonicities = monotonicities + [0]
@@ -1658,6 +1799,28 @@ def project_by_dykstra(weights,
                                                       constraint_group)
         last_change[("JOINT_MONOTONICITY", constraint,
                      constraint_group)] = weights - rolled_back_weights
+
+    for constraint in joint_unimodalities:
+      dimensions = tuple(constraint[0])
+      lattice_ranges = [range(lattice_sizes[dim]) for dim in dimensions]
+      for vertex in itertools.product(*lattice_ranges):
+        for offsets in itertools.product([-1, 1], repeat=len(dimensions)):
+          # For this projection constraint group is represented by pair: vertex,
+          # offsets.
+          projection_key = ("JOINT_UNIMODALITY", dimensions, vertex, offsets)
+          if projection_key in last_change:
+            rolled_back_weights = weights - last_change[projection_key]
+          else:
+            rolled_back_weights = weights
+          projected_weights = _project_partial_joint_unimodality(
+              weights=rolled_back_weights,
+              lattice_sizes=lattice_sizes,
+              joint_unimodalities=constraint,
+              vertex=vertex,
+              offsets=offsets)
+          if projected_weights is not None:
+            weights = projected_weights
+            last_change[projection_key] = weights - rolled_back_weights
     return iteration + 1, weights, last_change
 
   def cond(iteration, weights, last_change):
@@ -1906,6 +2069,7 @@ def verify_hyperparameters(lattice_sizes,
                            monotonic_dominances=None,
                            range_dominances=None,
                            joint_monotonicities=None,
+                           joint_unimodalities=None,
                            output_min=None,
                            output_max=None,
                            regularization_amount=None,
@@ -1931,6 +2095,8 @@ def verify_hyperparameters(lattice_sizes,
       layer.
     range_dominances: Range dominances hyperparameter of `Lattice` layer.
     joint_monotonicities: Joint monotonicities hyperparameter of `Lattice`
+      layer.
+    joint_unimodalities: Joint unimodalities hyperparameter of `Lattice`
       layer.
     output_min: Minimum output of `Lattice` layer.
     output_max: Maximum output of `Lattice` layer.
@@ -2040,6 +2206,36 @@ def verify_hyperparameters(lattice_sizes,
         raise ValueError("Joint monotonicity constraint dimensions must be "
                          "integers. Seeing dimensions %s, %s" % (dim1, dim2))
 
+  if joint_unimodalities is not None:
+    for single_constraint in joint_unimodalities:
+      dimensions, direction = single_constraint
+      if (not isinstance(direction, six.string_types) or
+          (direction.lower() != "valley" and direction.lower() != "peak")):
+        raise ValueError("Joint unimodality tuple must end with string 'valley'"
+                         " or 'peak' which represents unimodality direction. "
+                         "Given: %s" % (single_constraint,))
+      for dim in dimensions:
+        if dim < 0 or dim >= len(lattice_sizes):
+          raise ValueError("Dimension constrained by joint unimodality is not "
+                           "within the range of the lattice. Joint unimodality "
+                           "dimension: %s, total number of dimensions: "
+                           "%s" % (dim, len(lattice_sizes)))
+        if not isinstance(dim, int):
+          raise ValueError("Joint unimodality constraint dimensions must be "
+                           "integer. Seeing: %s" % dim)
+        if lattice_sizes[dim] < 3:
+          raise ValueError("Dimensions constrained for joint unimodality must "
+                           "have lattice size at least 3. "
+                           "Dim: %s has size: %s" % (dim, lattice_sizes[dim]))
+        if monotonicities and monotonicities[dim] != 0:
+          raise ValueError("Dimension %d constrained for joint_unimodalities "
+                           "can not also by monotonic." % dim)
+      dims_set = set(dimensions)
+      if len(dims_set) != len(dimensions):
+        raise ValueError("All dimensions within single joint unimodality "
+                         "constraint must be distinct. "
+                         "Given: %s" % single_constraint)
+
   if weights_shape is not None:
     if len(weights_shape) != 2:
       raise ValueError("Weights must have shape of rank-2. "
@@ -2097,6 +2293,7 @@ def assert_constraints(weights,
                        monotonic_dominances,
                        range_dominances,
                        joint_monotonicities,
+                       joint_unimodalities,
                        output_min=None,
                        output_max=None,
                        eps=1e-6):
@@ -2111,14 +2308,18 @@ def assert_constraints(weights,
     monotonic_dominances: Monotonic dominance constraints.
     range_dominances: Range dominance constraints.
     joint_monotonicities: Joint monotonicity constraints.
+    joint_unimodalities: Joint unimodality constraints.
     output_min: None or lower bound constraints.
     output_max: None or upper bound constraints.
     eps: Allowed constraints violation.
 
   Returns:
-    List of assetion ops in graph mode or directly executes assertions in eager
+    List of assertion ops in graph mode or directly executes assertions in eager
     mode.
   """
+  # TODO: actually assert them.
+  del joint_unimodalities
+
   if weights.shape[1] > 1:
     lattice_sizes = lattice_sizes + [int(weights.shape[1])]
     if monotonicities:
@@ -2144,7 +2345,7 @@ def assert_constraints(weights,
               ]))
 
   for main_dim, cond_dim, cond_direction in edgeworth_trusts or []:
-    weights_layers = _unstack_2d(weights, main_dim, cond_dim)
+    weights_layers = _unstack_nd(weights, [main_dim, cond_dim])
     for i in range(lattice_sizes[main_dim] - 1):
       for j in range(lattice_sizes[cond_dim] - 1):
         diff = tf.reduce_min(
@@ -2163,7 +2364,7 @@ def assert_constraints(weights,
                 ]))
 
   for main_dim, cond_dim, cond_direction in trapezoid_trusts or []:
-    weights_layers = _unstack_2d(weights, main_dim, cond_dim)
+    weights_layers = _unstack_nd(weights, [main_dim, cond_dim])
     max_main_dim = lattice_sizes[main_dim] - 1
     for j in range(lattice_sizes[cond_dim] - 1):
       lhs_diff = tf.reduce_min(
@@ -2190,7 +2391,7 @@ def assert_constraints(weights,
               ]))
 
   for dominant_dim, weak_dim in monotonic_dominances or []:
-    weights_layers = _unstack_2d(weights, dominant_dim, weak_dim)
+    weights_layers = _unstack_nd(weights, [dominant_dim, weak_dim])
     for i in range(lattice_sizes[dominant_dim] - 1):
       for j in range(lattice_sizes[weak_dim] - 1):
         midpoint = (weights_layers[i + 1][j + 1] + weights_layers[i][j]) / 2
@@ -2216,7 +2417,7 @@ def assert_constraints(weights,
                 ]))
 
   for dominant_dim, weak_dim in range_dominances or []:
-    weights_layers = _unstack_2d(weights, dominant_dim, weak_dim)
+    weights_layers = _unstack_nd(weights, [dominant_dim, weak_dim])
     dom_dim_size = lattice_sizes[dominant_dim]
     weak_dim_size = lattice_sizes[weak_dim]
     for i in range(dom_dim_size):
@@ -2236,7 +2437,7 @@ def assert_constraints(weights,
                 ]))
 
   for dim1, dim2 in joint_monotonicities or []:
-    weights_layers = _unstack_2d(weights, dim1, dim2)
+    weights_layers = _unstack_nd(weights, [dim1, dim2])
     for i in range(lattice_sizes[dim1] - 1):
       for j in range(lattice_sizes[dim2] - 1):
         midpoint = (weights_layers[i + 1][j] + weights_layers[i][j + 1]) / 2
@@ -2388,20 +2589,66 @@ def canonicalize_trust(trusts):
   return None
 
 
-def _unstack_2d(tensor, first_dim, second_dim):
-  """Returns list of list of tensors resulting from two unstack operations."""
-  layers = tf.unstack(tensor, axis=first_dim)
-  unstacked_second_dim = (
-      second_dim if second_dim < first_dim else second_dim - 1)
-  return [tf.unstack(layer, axis=unstacked_second_dim) for layer in layers]
+def _unstack_nested_lists(tensor_or_list, axis):
+  """Unstacks tensors stored within nested list."""
+  if isinstance(tensor_or_list, list):
+    return [_unstack_nested_lists(item, axis) for item in tensor_or_list]
+  else:
+    return tf.unstack(tensor_or_list, axis=axis)
 
 
-def _stack_2d(layers, first_dim, second_dim):
+def _unstack_nd(tensor, dims):
+  """Returns nested lists of tensors resulting from n unstack operations."""
+  dims = list(dims)
+  # Following unstack operations will remove some dims. It will result in dims
+  # higher than removed dims shifting left. So update passed in dims to reflect
+  # shift resulted from tf.unstack() in advance.
+  for i in range(len(dims) - 1, 0, -1):
+    dims[i] -= sum([dims[i] > previous_dims for previous_dims in dims[:i]])
+
+  result = tensor
+  for dim in dims:
+    result = _unstack_nested_lists(result, axis=dim)
+  return result
+
+
+def _stack_nested_lists(tensor_or_list, axis):
+  """Stacks tensors stored within nested list.."""
+  if isinstance(tensor_or_list[0], list):
+    return [_stack_nested_lists(item, axis) for item in tensor_or_list]
+  else:
+    return tf.stack(tensor_or_list, axis=axis)
+
+
+def _stack_nd(tensor, dims):
   """Returns tensor that re-stacks tensor layers formed from unstacking."""
-  unstacked_second_dim = (
-      second_dim if second_dim < first_dim else second_dim - 1)
-  layers = [tf.stack(layer, axis=unstacked_second_dim) for layer in layers]
-  return tf.stack(layers, axis=first_dim)
+  dims = list(dims)
+  # Following stack operations will add some dims. It will result in dims higher
+  # than removed dims shifting right. So update passed in dims to reflect
+  # shift resulted from tf.stack() in advance.
+  for i in range(len(dims) - 1, 0, -1):
+    dims[i] -= sum([dims[i] > previous_dims for previous_dims in dims[:i]])
+
+  result = tensor
+  for dim in reversed(dims):
+    result = _stack_nested_lists(result, axis=dim)
+  return result
+
+
+def _get_element(lists, indices):
+  """Gets element from nested lists of arbitrary depth."""
+  result = lists
+  for i in indices:
+    result = result[i]
+  return result
+
+
+def _set_element(lists, indices, value):
+  """Sets element into nested lists of arbitrary depth."""
+  result = lists
+  for i in indices[:-1]:
+    result = result[i]
+  result[indices[-1]] = value
 
 
 def _reverse_second_list_dimension(layers):

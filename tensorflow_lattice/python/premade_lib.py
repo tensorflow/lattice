@@ -18,10 +18,14 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import copy
+import itertools
 
+from . import aggregation_layer
 from . import categorical_calibration_layer
 from . import configs
 from . import lattice_layer
+from . import lattice_lib
 from . import linear_layer
 from . import pwl_calibration_layer
 from . import pwl_calibration_lib
@@ -34,8 +38,9 @@ import six
 import tensorflow as tf
 
 # Layer names used for layers in the premade models.
-INPUT_LAYER_NAME = 'tfl_input'
+AGGREGATION_LAYER_NAME = 'tfl_aggregation'
 CALIB_LAYER_NAME = 'tfl_calib'
+INPUT_LAYER_NAME = 'tfl_input'
 LATTICE_LAYER_NAME = 'tfl_lattice'
 LINEAR_LAYER_NAME = 'tfl_linear'
 OUTPUT_CALIB_LAYER_NAME = 'tfl_output_calib'
@@ -50,11 +55,29 @@ _INPUT_CALIB_REGULARIZER_PREFIX = 'calib_'
 # Prefix for defining output calibrator regularizers.
 _OUTPUT_CALIB_REGULARIZER_PREFIX = 'output_calib_'
 
+# Weight of laplacian in feature importance for the crystal algorithm.
+_LAPLACIAN_WEIGHT_IN_IMPORTANCE = 6.0
+
+# Discount amount for repeated co-occurrence of pairs of features in crystals.
+_REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE = 0.5
+
+# Maximum number of swaps for the crystals algorithm.
+_MAX_CRYSTALS_SWAPS = 1000
+
 
 def _input_calibration_regularizers(model_config, feature_config):
   """Returns pwl layer regularizers defined in the model and feature configs."""
   regularizer_configs = []
   regularizer_configs.extend(feature_config.regularizer_configs or [])
+  regularizer_configs.extend(model_config.regularizer_configs or [])
+  return [(r.name.replace(_INPUT_CALIB_REGULARIZER_PREFIX, ''), r.l1, r.l2)
+          for r in regularizer_configs
+          if r.name.startswith(_INPUT_CALIB_REGULARIZER_PREFIX)]
+
+
+def _middle_calibration_regularizers(model_config):
+  """Returns pwl layer regularizers defined in the model config."""
+  regularizer_configs = []
   regularizer_configs.extend(model_config.regularizer_configs or [])
   return [(r.name.replace(_INPUT_CALIB_REGULARIZER_PREFIX, ''), r.l1, r.l2)
           for r in regularizer_configs
@@ -124,27 +147,29 @@ def _output_range(layer_output_range, model_config, feature_config=None):
   return output_min, output_max, output_init_min, output_init_max
 
 
-def build_input_layer(feature_configs, dtype):
+def build_input_layer(feature_configs, dtype, ragged=False):
   """Creates a mapping from feature name to `tf.keras.Input`.
 
   Args:
     feature_configs: A list of `tfl.configs.FeatureConfig` instances that
       specify configurations for each feature.
     dtype: dtype
+    ragged: If the inputs are ragged tensors.
 
   Returns:
     Mapping from feature name to `tf.keras.Input` for the inputs specified by
       `feature_configs`.
   """
   input_layer = {}
+  shape = (None,) if ragged else (1,)
   for feature_config in feature_configs:
     layer_name = '{}_{}'.format(INPUT_LAYER_NAME, feature_config.name)
     if feature_config.num_buckets:
       input_layer[feature_config.name] = tf.keras.Input(
-          shape=(1,), dtype=tf.int32, name=layer_name)
+          shape=shape, ragged=ragged, dtype=tf.int32, name=layer_name)
     else:
       input_layer[feature_config.name] = tf.keras.Input(
-          shape=(1,), dtype=dtype, name=layer_name)
+          shape=shape, ragged=ragged, dtype=dtype, name=layer_name)
   return input_layer
 
 
@@ -194,7 +219,7 @@ def build_calibration_layers(calibration_input_layer, feature_configs,
                                       feature_config)
 
     if feature_config.num_buckets:
-      kernel_initializer = tf.compat.v1.random_uniform_initializer(
+      kernel_initializer = tf.keras.initializers.RandomUniform(
           output_init_min, output_init_max)
       calibrated = (
           categorical_calibration_layer.CategoricalCalibration(
@@ -265,6 +290,82 @@ def build_calibration_layers(calibration_input_layer, feature_configs,
   return submodels_inputs
 
 
+def build_aggregation_layer(aggregation_input_layer, model_config,
+                            calibrated_lattice_models, layer_output_range,
+                            submodel_index, dtype):
+  """Creates an aggregation layer using the given calibrated lattice models.
+
+  Args:
+    aggregation_input_layer: A mapping from feature name to `tf.keras.Input`.
+    model_config: Model configuration object describing model architecture.
+      Should be one of the model configs in `tfl.configs`.
+    calibrated_lattice_models: A list of calibrated lattice models of size
+      model_config.middle_diemnsion, where each calbirated lattice model
+      instance is constructed using the same model configuration object.
+    layer_output_range: A `tfl.premade_lib.LayerOutputRange` enum.
+    submodel_index: Corresponding index into submodels.
+    dtype: dtype
+
+  Returns:
+    A list of list of Tensors representing a calibration layer for `submodels`.
+  """
+  (output_min, output_max, output_init_min,
+   output_init_max) = _output_range(layer_output_range, model_config)
+
+  lattice_sizes = [model_config.middle_lattice_size
+                  ] * model_config.middle_dimension
+  lattice_monotonicities = [1] * model_config.middle_dimension
+
+  # Create the aggergated embeddings to pass to the middle lattice.
+  lattice_inputs = []
+  for i in range(model_config.middle_dimension):
+    agg_layer_name = '{}_{}'.format(AGGREGATION_LAYER_NAME, i)
+    agg_output = aggregation_layer.Aggregation(
+        calibrated_lattice_models[i], name=agg_layer_name)(
+            aggregation_input_layer)
+    agg_output = tf.keras.layers.Reshape((1,))(agg_output)
+    if model_config.middle_calibration:
+      agg_output = pwl_calibration_layer.PWLCalibration(
+          input_keypoints=np.linspace(
+              -1.0,
+              1.0,
+              num=model_config.middle_calibration_num_keypoints,
+              dtype=np.float32),
+          output_min=0.0,
+          output_max=lattice_sizes[i] - 1.0,
+          monotonicity=pwl_calibration_lib.canonicalize_monotonicity(
+              model_config.middle_monotonicity),
+          kernel_regularizer=_middle_calibration_regularizers(model_config),
+          dtype=dtype,
+      )(
+          agg_output)
+      agg_output = tf.keras.layers.Reshape((1,))(agg_output)
+    lattice_inputs.append(agg_output)
+
+  # We use random monotonic initialization here to break the symmetry that we
+  # would otherwise have between middle lattices. Since we use the same
+  # CalibratedLattice for each of the middle dimensions, if we do not randomly
+  # initialize the middle lattice we will have the same gradient flow back for
+  # each middle dimension, thus acting the same as if there was only one middle
+  # dimension.
+  kernel_initializer = lattice_layer.RandomMonotonicInitializer(
+      lattice_sizes=lattice_sizes,
+      output_min=output_init_min,
+      output_max=output_init_max)
+  lattice_layer_name = '{}_{}'.format(LATTICE_LAYER_NAME, submodel_index)
+  return lattice_layer.Lattice(
+      lattice_sizes=lattice_sizes,
+      monotonicities=lattice_monotonicities,
+      output_min=output_min,
+      output_max=output_max,
+      clip_inputs=False,
+      kernel_initializer=kernel_initializer,
+      dtype=dtype,
+      name=lattice_layer_name,
+  )(
+      lattice_inputs)
+
+
 def _monotonicities_from_feature_configs(feature_configs):
   """Returns list of monotonicities defined in the given feature_configs."""
   monotonicities = []
@@ -317,9 +418,9 @@ def build_linear_layer(linear_input, feature_configs, model_config,
 
   linear_input = tf.keras.layers.Concatenate(axis=1)(linear_input)
   num_input_dims = len(feature_configs)
-  kernel_initializer = tf.compat.v1.constant_initializer(
-      [1.0 / num_input_dims] * num_input_dims)
-  bias_initializer = tf.compat.v1.constant_initializer(0)
+  kernel_initializer = tf.keras.initializers.Constant([1.0 / num_input_dims] *
+                                                      num_input_dims)
+  bias_initializer = tf.keras.initializers.Constant(0)
 
   if weighted_average:
     # Linear coefficients should be possitive and sum up to one.
@@ -451,7 +552,7 @@ def build_output_calibration_layer(output_calibration_input, model_config,
       model_config.output_initialization,
       to_begin=model_config.output_initialization[0])
   input_keypoints = np.linspace(0.0, 1.0, num=len(kernel_init_values))
-  kernel_initializer = tf.compat.v1.constant_initializer(kernel_init_values)
+  kernel_initializer = tf.keras.initializers.Constant(kernel_init_values)
   kernel_regularizer = _output_calibration_regularizers(model_config)
   return pwl_calibration_layer.PWLCalibration(
       input_keypoints=input_keypoints,
@@ -484,10 +585,10 @@ def set_categorical_monotonicities(feature_configs):
       if not feature_config.vocabulary_list:
         continue
       if not all(
-          isinstance(m, tuple) and len(m) == 2
+          isinstance(m, (list, tuple)) and len(m) == 2
           for m in feature_config.monotonicity):
         raise ValueError(
-            'Monotonicities should be a list of pairs (tuples): {}'.format(
+            'Monotonicities should be a list of pairs (list/tuples): {}'.format(
                 feature_config.monotonicity))
       indexed_monotonicities = []
       index_map = {
@@ -507,21 +608,30 @@ def set_categorical_monotonicities(feature_configs):
       feature_config.monotonicity = indexed_monotonicities
 
 
-def set_random_lattice_ensemble(model_config):
+def set_random_lattice_ensemble(model_config, feature_names=None):
   """Sets random lattice ensemble in the given model_config.
 
   Args:
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
+    feature_names: A list of feature names. If not provided, feature names will
+      be extracted from the feature configs contained in the model_config.
   """
+  if not isinstance(model_config, configs.CalibratedLatticeEnsembleConfig):
+    raise ValueError(
+        'model_config must be a tfl.configs.CalibratedLatticeEnsembleConfig: {}'
+        .format(type(model_config)))
   if model_config.lattices != 'random':
     raise ValueError('model_config.lattices must be set to \'random\'.')
-  if model_config.feature_configs is None:
-    raise ValueError('Feature configs must be specified.')
   # Extract feature names
-  feature_names = [
-      feature_config.name for feature_config in model_config.feature_configs
-  ]
+  if feature_names is None:
+    if model_config.feature_configs is None:
+      raise ValueError(
+          'Feature configs must be specified if feature names are not provided.'
+      )
+    feature_names = [
+        feature_config.name for feature_config in model_config.feature_configs
+    ]
   # Start by using each feature once.
   np.random.seed(model_config.random_seed)
   model_config.lattices = [[] for _ in range(model_config.num_lattices)]
@@ -545,6 +655,384 @@ def set_random_lattice_ensemble(model_config):
             feature_names_not_in_lattice, size=remaining_size, replace=False))
 
 
+def _add_pair_to_ensemble(lattices, lattice_rank, i, j):
+  """Adds pair (i, j) to the ensemble heuristically."""
+  # First check if (i, j) pair is already present in a lattice.
+  for lattice in lattices:
+    if i in lattice and j in lattice:
+      return
+
+  # Try adding to a lattice that already has either i or j.
+  for lattice in lattices:
+    if len(lattice) < lattice_rank:
+      if i in lattice:
+        lattice.add(j)
+        return
+      if j in lattice:
+        lattice.add(i)
+        return
+
+  # Add both i and j to a lattice that has enough space left.
+  for lattice in lattices:
+    if len(lattice) < lattice_rank - 1:
+      lattice.add(i)
+      lattice.add(j)
+      return
+
+  # Create a new lattice with pair (i, j).
+  lattices.append(set([i, j]))
+
+
+def _set_all_pairs_cover_lattices(prefitting_model_config, feature_names):
+  """Sets prefitting lattice ensemble such that it covers all feature pairs."""
+  # Pairs of co-occurrence that need to exist in the all-pairs cover.
+  to_cover = list(itertools.combinations(range(len(feature_names)), 2))
+  np.random.seed(prefitting_model_config.random_seed)
+  np.random.shuffle(to_cover)
+
+  lattices = []
+
+  for (i, j) in to_cover:
+    _add_pair_to_ensemble(lattices, prefitting_model_config.lattice_rank, i, j)
+
+  prefitting_model_config.lattices = [
+      [feature_names[i] for i in lattice] for lattice in lattices
+  ]
+
+
+def construct_prefitting_model_config(model_config, feature_names=None):
+  """Constructs a model config for a prefitting model for crystal extraction.
+
+  Args:
+    model_config: Model configuration object describing model architecture.
+      Should be a `tfl.configs.CalibratedLatticeEnsemble` instance.
+    feature_names: A list of feature names. If not provided, feature names will
+      be extracted from the feature configs contained in the model_config.
+
+  Returns:
+    A `tfl.configs.CalibratedLatticeEnsembleConfig` instance.
+  """
+  if not isinstance(model_config, configs.CalibratedLatticeEnsembleConfig):
+    raise ValueError(
+        'model_config must be a tfl.configs.CalibratedLatticeEnsembleConfig: {}'
+        .format(type(model_config)))
+  if model_config.lattices != 'crystals':
+    raise ValueError('model_config.lattices must be set to \'crystals\'.')
+  # Extract feature names from model_config if not provided.
+  if feature_names is None:
+    if model_config.feature_configs is None:
+      raise ValueError(
+          'Feature configs must be specified if feature names are not provided.'
+      )
+    feature_names = [
+        feature_config.name for feature_config in model_config.feature_configs
+    ]
+
+  # Make a copy of the model config provided and set all pairs covered.
+  prefitting_model_config = copy.deepcopy(model_config)
+  _set_all_pairs_cover_lattices(
+      prefitting_model_config=prefitting_model_config,
+      feature_names=feature_names)
+
+  # Trim the model for faster prefitting.
+  for feature_config in prefitting_model_config.feature_configs:
+    feature_config.lattice_size = 2
+    # Unimodality requires lattice_size > 2.
+    feature_config.unimodality = 0
+    # Disable 2d constraints to avoid potential constraint violations.
+    feature_config.dominates = None
+    feature_config.reflects_trust_in = None
+
+  # Return our properly constructed prefitting model config.
+  return prefitting_model_config
+
+
+def _verify_prefitting_model(prefitting_model, feature_names):
+  """Checks that prefitting_model has the proper input layer."""
+  if isinstance(prefitting_model, tf.keras.Model):
+    layer_names = [layer.name for layer in prefitting_model.layers]
+  elif isinstance(prefitting_model, tf.estimator.Estimator):
+    layer_names = prefitting_model.get_variable_names()
+  else:
+    raise ValueError('Invalid model type for prefitting_model: {}'.format(
+        type(prefitting_model)))
+  for feature_name in feature_names:
+    if isinstance(prefitting_model, tf.keras.Model):
+      input_layer_name = '{}_{}'.format(INPUT_LAYER_NAME, feature_name)
+      if input_layer_name not in layer_names:
+        raise ValueError(
+            'prefitting_model does not match prefitting_model_config. Make '
+            'sure that prefitting_model is the proper type and constructed '
+            'from the prefitting_model_config: {}'.format(
+                type(prefitting_model)))
+    else:
+      pwl_input_layer_name = '{}_{}/{}'.format(
+          CALIB_LAYER_NAME, feature_name,
+          pwl_calibration_layer.PWL_CALIBRATION_KERNEL_NAME)
+      cat_input_layer_name = '{}_{}/{}'.format(
+          CALIB_LAYER_NAME, feature_name,
+          categorical_calibration_layer.CATEGORICAL_CALIBRATION_KERNEL_NAME)
+      if (pwl_input_layer_name not in layer_names and
+          cat_input_layer_name not in layer_names):
+        raise ValueError(
+            'prefitting_model does not match prefitting_model_config. Make '
+            'sure that prefitting_model is the proper type and constructed '
+            'from the prefitting_model_config: {}'.format(
+                type(prefitting_model)))
+
+
+def _get_lattice_weights(prefitting_model, lattice_index):
+  """Gets the weights of the lattice at the specfied index."""
+  if isinstance(prefitting_model, tf.keras.Model):
+    lattice_layer_name = '{}_{}'.format(LATTICE_LAYER_NAME, lattice_index)
+    weights = tf.keras.backend.get_value(
+        prefitting_model.get_layer(lattice_layer_name).weights[0])
+  else:
+    # We have already checked the types by this point, so if prefitting_model
+    # is not a keras Model it must be an Estimator.
+    lattice_kernel_variable_name = '{}_{}/{}'.format(
+        LATTICE_LAYER_NAME, lattice_index, lattice_layer.LATTICE_KERNEL_NAME)
+    weights = prefitting_model.get_variable_value(lattice_kernel_variable_name)
+  return weights
+
+
+def _get_torsions_and_laplacians(prefitting_model_config, prefitting_model,
+                                 feature_names):
+  """Returns average torsion and laplacian regularizers in prefitted model."""
+  num_fatures = len(feature_names)
+  laplacians = [[] for _ in range(num_fatures)]
+  torsions = [[[] for _ in range(num_fatures)] for _ in range(num_fatures)]
+  for (lattice_index, lattice) in enumerate(prefitting_model_config.lattices):
+    # Get lattice weights and normalize them.
+    weights = _get_lattice_weights(prefitting_model, lattice_index)
+    weights -= np.min(weights)
+    weights /= np.max(weights)
+    weights = tf.constant(weights)
+
+    # Convert feature names in the lattice to their index in feature_names.
+    lattice = [feature_names.index(feature_name) for feature_name in lattice]
+    lattice_sizes = [2] * len(lattice)
+    # feature_* refers to feature index in feature_names.
+    # within_lattice_index_* is the index of input dimenstion of the lattice.
+    for within_lattice_index_0, feature_0 in enumerate(lattice):
+      l2 = [0] * len(lattice)
+      l2[within_lattice_index_0] = 1
+      laplacians[feature_0].append(
+          lattice_lib.laplacian_regularizer(
+              weights=weights, lattice_sizes=lattice_sizes, l2=l2))
+      for within_lattice_index_1, feature_1 in enumerate(lattice):
+        if within_lattice_index_1 > within_lattice_index_0:
+          l2 = [0] * len(lattice)
+          l2[within_lattice_index_0] = 1
+          l2[within_lattice_index_1] = 1
+          torsion = lattice_lib.torsion_regularizer(
+              weights=weights, lattice_sizes=lattice_sizes, l2=l2)
+          torsions[feature_0][feature_1].append(torsion)
+          torsions[feature_1][feature_0].append(torsion)
+
+  if not tf.executing_eagerly():
+    with tf.compat.v1.Session() as sess:
+      laplacians = sess.run(laplacians)
+      torsions = sess.run(torsions)
+
+  laplacians = [np.mean(v) for v in laplacians]
+  torsions = [[np.mean(v) if v else 0.0 for v in row] for row in torsions]
+  return torsions, laplacians
+
+
+def _get_final_crystal_lattices(model_config, prefitting_model_config,
+                                prefitting_model, feature_names):
+  """Extracts the lattice ensemble structure from the prefitting model."""
+  torsions, laplacians = _get_torsions_and_laplacians(
+      prefitting_model_config=prefitting_model_config,
+      prefitting_model=prefitting_model,
+      feature_names=feature_names)
+
+  # Calculate features' importance_score = lambda * laplacians + torsion.
+  # Used to allocate slots to useful features with more non-linear interactions.
+  num_features = len(feature_names)
+  importance_scores = np.array(laplacians) * _LAPLACIAN_WEIGHT_IN_IMPORTANCE
+  for feature_0, feature_1 in itertools.combinations(range(num_features), 2):
+    importance_scores[feature_0] += torsions[feature_0][feature_1]
+    importance_scores[feature_1] += torsions[feature_0][feature_1]
+
+  # Each feature is used at least once, and the remaining slots are distributed
+  # proportional to the importance_scores.
+  features_uses = [1] * num_features
+  total_feature_use = model_config.num_lattices * model_config.lattice_rank
+  remaining_uses = total_feature_use - num_features
+  remaining_scores = np.sum(importance_scores)
+  for feature in np.argsort(-importance_scores):
+    added_uses = int(
+        round(remaining_uses * importance_scores[feature] / remaining_scores))
+    # Each feature cannot be used more than once in a finalized lattice.
+    added_uses = min(added_uses, model_config.num_lattices - 1)
+    features_uses[feature] += added_uses
+    remaining_uses -= added_uses
+    remaining_scores -= importance_scores[feature]
+  assert np.sum(features_uses) == total_feature_use
+
+  # Add features to add list in round-robin order.
+  add_list = []
+  for use in range(1, max(features_uses) + 1):
+    for feature_index, feature_use in enumerate(features_uses):
+      if use <= feature_use:
+        add_list.append(feature_index)
+  assert len(add_list) == total_feature_use
+
+  # Setup initial lattices that will be optimized by swapping later.
+  lattices = [[] for _ in range(model_config.num_lattices)]
+  cooccurrence_counts = [[0] * num_features for _ in range(num_features)]
+  for feature_to_be_added in add_list:
+    # List of pairs of (addition_score, candidate_lattice_to_add_to).
+    score_candidates_pairs = []
+    for candidate_lattice_to_add_to in range(model_config.num_lattices):
+      # addition_score indicates the priority of an addition.
+      if len(
+          lattices[candidate_lattice_to_add_to]) >= model_config.lattice_rank:
+        # going out of bound on the lattice
+        addition_score = -2.0
+      elif feature_to_be_added in lattices[candidate_lattice_to_add_to]:
+        # repeates (fixed repeats later by swapping)
+        addition_score = -1.0
+      elif not lattices[candidate_lattice_to_add_to]:
+        # adding a new lattice roughly has an "average" lattice score
+        addition_score = np.mean(torsions) * model_config.lattice_rank**2 / 2
+      else:
+        # all other cases: change in total discounted torsion after addition.
+        addition_score = 0.0
+        for other_feature in lattices[candidate_lattice_to_add_to]:
+          addition_score += (
+              torsions[feature_to_be_added][other_feature] *
+              _REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE
+              **(cooccurrence_counts[feature_to_be_added][other_feature]))
+
+      score_candidates_pairs.append(
+          (addition_score, candidate_lattice_to_add_to))
+
+    # Use the highest scoring addition.
+    score_candidates_pairs.sort(reverse=True)
+    best_candidate_lattice_to_add_to = score_candidates_pairs[0][1]
+    for other_feature in lattices[best_candidate_lattice_to_add_to]:
+      cooccurrence_counts[feature_to_be_added][other_feature] += 1
+      cooccurrence_counts[other_feature][feature_to_be_added] += 1
+    lattices[best_candidate_lattice_to_add_to].append(feature_to_be_added)
+
+  # Apply swapping operations to increase within-lattice torsion.
+  changed = True
+  iteration = 0
+  while changed:
+    if iteration > _MAX_CRYSTALS_SWAPS:
+      logging.info('Crystals algorithm did not fully converge.')
+      break
+    changed = False
+    iteration += 1
+    for lattice_0, lattice_1 in itertools.combinations(lattices, 2):
+      # For every pair of lattices: lattice_0, lattice_1
+      for index_0, index_1 in itertools.product(
+          range(len(lattice_0)), range(len(lattice_1))):
+        # Consider swapping lattice_0[index_0] with lattice_1[index_1]
+        rest_lattice_0 = list(lattice_0)
+        rest_lattice_1 = list(lattice_1)
+        feature_0 = rest_lattice_0.pop(index_0)
+        feature_1 = rest_lattice_1.pop(index_1)
+        if feature_0 == feature_1:
+          continue
+
+        # Calculate the change in the overall discounted sum of torsion terms.
+        added_cooccurrence = set(
+            [tuple(sorted((feature_1, other))) for other in rest_lattice_0] +
+            [tuple(sorted((feature_0, other))) for other in rest_lattice_1])
+        removed_cooccurrence = set(
+            [tuple(sorted((feature_0, other))) for other in rest_lattice_0] +
+            [tuple(sorted((feature_1, other))) for other in rest_lattice_1])
+        wash = added_cooccurrence.intersection(removed_cooccurrence)
+        added_cooccurrence = added_cooccurrence.difference(wash)
+        removed_cooccurrence = removed_cooccurrence.difference(wash)
+        swap_diff_torsion = (
+            sum(torsions[i][j] * _REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE**
+                cooccurrence_counts[i][j] for (i, j) in added_cooccurrence) -
+            sum(torsions[i][j] * _REPEATED_PAIR_DISCOUNT_IN_CRYSTALS_SCORE**
+                (cooccurrence_counts[i][j] - 1)
+                for (i, j) in removed_cooccurrence))
+
+        # Swap if a feature is repeated or if the score change is positive.
+        if (feature_0 not in lattice_1 and feature_1 not in lattice_0 and
+            (lattice_0.count(feature_0) > 1 or lattice_1.count(feature_1) > 1 or
+             swap_diff_torsion > 0)):
+          for (i, j) in added_cooccurrence:
+            cooccurrence_counts[i][j] += 1
+            cooccurrence_counts[j][i] += 1
+          for (i, j) in removed_cooccurrence:
+            cooccurrence_counts[i][j] -= 1
+            cooccurrence_counts[j][i] -= 1
+          lattice_0[index_0], lattice_1[index_1] = (lattice_1[index_1],
+                                                    lattice_0[index_0])
+          changed = True
+  # Return the extracted lattice structure.
+  return lattices
+
+
+def set_crystals_lattice_ensemble(model_config,
+                                  prefitting_model_config,
+                                  prefitting_model,
+                                  feature_names=None):
+  """Extracts crystals from a prefitting model and finalizes model_config.
+
+  Args:
+    model_config: Model configuration object describing model architecture.
+      Should be a `tfl.configs.CalibratedLatticeEnsemble` instance.
+    prefitting_model_config: Model configuration object describing prefitting
+      model architecture. Should be a `tfl.configs.CalibratedLatticeEnsemble`
+      insance constructed using
+      `tfl.premade_lib.construct_prefitting_model_config`.
+    prefitting_model: A trained `tfl.premade.CalibratedLatticeEnsemble`,
+      `tfl.estimators.CannedEstimator`, `tfl.estimators.CannedClassifier`, or
+      `tfl.estiamtors.CannedRegressor` instance.
+    feature_names: A list of feature names. If not provided, feature names will
+      be extracted from the feature configs contained in the model_config.
+  """
+  # Error checking parameter types.
+  if not isinstance(model_config, configs.CalibratedLatticeEnsembleConfig):
+    raise ValueError(
+        'model_config must be a tfl.configs.CalibratedLatticeEnsembleConfig: {}'
+        .format(type(model_config)))
+  if not isinstance(prefitting_model_config,
+                    configs.CalibratedLatticeEnsembleConfig):
+    raise ValueError('prefitting_model_config must be a '
+                     'tfl.configs.CalibratedLatticeEnsembleConfig: {}'.format(
+                         type(model_config)))
+  if model_config.lattices != 'crystals':
+    raise ValueError('model_config.lattices must be set to \'crystals\'.')
+  # Note that we cannot check the type of the prefitting model without importing
+  # premade/estimators, which would cause a cyclic dependency. However, we can
+  # check that the model is a tf.keras.Model or tf.Estimator instance that has
+  # the proper input layers matching prefitting_model_config feature_configs.
+  # Beyond that, a prefitting_model with proper input layer names that is not of
+  # the proper type will have undefined behavior.
+  # To perform this check, we must first extract feature names if they are not
+  # provided, which we need for later steps anyway.
+  if feature_names is None:
+    if model_config.feature_configs is None:
+      raise ValueError(
+          'Feature configs must be specified if feature names are not provided.'
+      )
+    feature_names = [
+        feature_config.name for feature_config in model_config.feature_configs
+    ]
+  _verify_prefitting_model(prefitting_model, feature_names)
+
+  # Now we can extract the crystals and finalize model_config.
+  lattices = _get_final_crystal_lattices(
+      model_config=model_config,
+      prefitting_model_config=prefitting_model_config,
+      prefitting_model=prefitting_model,
+      feature_names=feature_names)
+  model_config.lattices = [[
+      feature_names[features_index] for features_index in lattice
+  ] for lattice in lattices]
+
+
 def verify_config(model_config):
   """Verifies that the model_config and feature_configs are fully specified.
 
@@ -560,6 +1048,15 @@ def verify_config(model_config):
           any(not isinstance(x, str) for x in lattice)):
         raise ValueError(
             'Lattices are not fully specified for ensemble config.')
+  if isinstance(model_config, configs.AggregateFunctionConfig):
+    if model_config.middle_dimension < 1:
+      raise ValueError('Middle dimension must be at least 1: {}'.format(
+          model_config.middle_dimension))
+    if (model_config.middle_monotonicity is not None and
+        not model_config.middle_calibration):
+      raise ValueError(
+          'middle_calibration must be true when middle_monotonicity is '
+          'specified.')
   if model_config.feature_configs is None:
     raise ValueError('Feature configs must be fully specified.')
   for feature_config in model_config.feature_configs:
@@ -580,17 +1077,17 @@ def verify_config(model_config):
       for i, t in enumerate(feature_config.monotonicity):
         if not np.iterable(t):
           raise ValueError(
-              'Element {} is not a tuple for feature {} monotonicty: {}'.format(
-                  i, feature_config.name, t))
+              'Element {} is not a list/tuple for feature {} monotonicty: {}'
+              .format(i, feature_config.name, t))
         for j, val in enumerate(t):
           if not isinstance(val, int):
             raise ValueError(
-                'Element {} for tuple {} for feature {} monotonicity is not an '
-                'index: {}'.format(j, i, feature_config.name, val))
+                'Element {} for list/tuple {} for feature {} monotonicity is '
+                'not an index: {}'.format(j, i, feature_config.name, val))
           if val < 0 or val >= feature_config.num_buckets:
             raise ValueError(
-                'Element {} for tuple {} for feature {} monotonicity is an '
-                'invalid index not in range [0, num_buckets - 1]: {}'.format(
+                'Element {} for list/tuple {} for feature {} monotonicity is '
+                'an invalid index not in range [0, num_buckets - 1]: {}'.format(
                     j, i, feature_config.name, val))
   if (not np.iterable(model_config.output_initialization) or
       any(not isinstance(x, (int, float))

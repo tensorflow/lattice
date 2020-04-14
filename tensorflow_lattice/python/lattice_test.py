@@ -203,6 +203,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("monotonic_dominances", None)
     config.setdefault("range_dominances", None)
     config.setdefault("joint_monotonicities", None)
+    config.setdefault("joint_unimodalities", None)
     config.setdefault("output_min", None)
     config.setdefault("output_max", None)
     config.setdefault("signal_name", "TEST")
@@ -262,6 +263,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         monotonic_dominances=config["monotonic_dominances"],
         range_dominances=config["range_dominances"],
         joint_monotonicities=config["joint_monotonicities"],
+        joint_unimodalities=config["joint_unimodalities"],
         output_min=config["output_min"],
         output_max=config["output_max"],
         num_projection_iterations=config["num_projection_iterations"],
@@ -893,6 +895,182 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self._TestEnsemble(config)
 
   @parameterized.parameters(
+      (None, 0.001765),
+      (([0], "valley"), 0.306134),
+      (((0,), "peak"), 0.306134),
+  )
+  def testJointUnimodality1D(self, joint_unimodalities, expected_loss):
+    if self.disable_all:
+      return
+    def _Sin(x):
+      result = math.sin(x[0])
+      # Make test exactly symmetric for both unimodality directions.
+      if joint_unimodalities and joint_unimodalities[-1] == "peak":
+        result *= -1
+      return result
+
+    config = {
+        "lattice_sizes": [15],
+        "num_training_records": 100,
+        "num_training_epoch": 20,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 1.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": _Sin,
+        "monotonicities": [0],
+        "joint_unimodalities": joint_unimodalities,
+        "output_min": -1.0,
+        "output_max": 1.0,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  def testJointUnimodality2DSinOfSum(self):
+    # This test demonstrates difference of joint unimodaity vs independently
+    # unimofal dims. For latter loss would be 0.225369
+    if self.disable_all:
+      return
+    config = {
+        "lattice_sizes": [3, 3],
+        "num_training_records": 36*9,
+        "num_training_epoch": 150,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 0.1,
+        "x_generator": self._TwoDMeshGrid,
+        "y_function": lambda x: -math.sin(sum(x) * 2.0),
+        "monotonicities": [0, 0],
+        "joint_unimodalities": ([0, 1], "peak"),
+        "output_min": -1.0,
+        "output_max": 1.0,
+        "target_monotonicity_diff": -1e-6,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.136693, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  @parameterized.parameters(
+      (None, 0.036196),
+      ([([0], "valley")], 0.221253),
+      ([([1], "valley")], 0.221253),
+      ([([0, 1], "valley")], 0.280938),
+      ([((1, 0), "valley")], 0.280938),
+  )
+  def testJointUnimodality2DWshaped(self, joint_unimodalities, expected_loss):
+    # Test larger lattice.
+    if self.disable_all:
+      return
+
+    center = (3, 3)
+    def WShaped2dFunction(x):
+      distance = lambda x1, y1, x2, y2: ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+      d = distance(x[0], x[1], center[0], center[1])
+      t = (d - 0.6*center[0])**2
+      return min(t, 6.0 - t)
+
+    config = {
+        "lattice_sizes": [coordinate * 2 + 1 for coordinate in center],
+        "num_training_records": 36 * 9,
+        "num_training_epoch": 18,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 10.0,
+        "x_generator": self._TwoDMeshGrid,
+        "y_function": WShaped2dFunction,
+        "monotonicities": [0, 0],
+        "joint_unimodalities": joint_unimodalities,
+        "output_min": 0.0,
+        "output_max": 3.0,
+        "target_monotonicity_diff": -1e-6,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  @parameterized.parameters(
+      (([0, 1], "valley"),),
+      (([1, 0], "valley"),),
+      (([0, 2], "valley"),),
+      (([0, 3], "valley"),),
+      (([3, 0], "valley"),),
+      (([1, 2], "valley"),),
+      (([1, 3], "valley"),),
+      (([3, 1], "valley"),),
+      (([2, 3], "valley"),),
+  )
+  def testJointUnimodality2OutOf4D(self, joint_unimodalities):
+    # Function is similar to 2dWshaped test. Data is generated identically for
+    # all combinations of unimodal pairs so loss should be same for any pair of
+    # dimensions constrained for unimodality.
+    if self.disable_all:
+      return
+
+    center = (2, 2)
+    center_indices = joint_unimodalities[0]
+
+    def WShaped2dFunction(x):
+      distance = lambda x1, y1, x2, y2: ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+      d = distance(x[center_indices[0]], x[center_indices[1]],
+                   center[0], center[1])
+      t = (d - 0.6*center[0])**2
+      return min(t, 4.5 - t)
+
+    def _DistributeXUniformly(num_points, lattice_sizes):
+      del num_points
+      points_per_vertex = 2
+      result = []
+      for i in range(0, lattice_sizes[0] * points_per_vertex + 1):
+        for j in range(0, lattice_sizes[1] * points_per_vertex + 1):
+          for k in range(0, lattice_sizes[2] * points_per_vertex + 1):
+            for l in range(0, lattice_sizes[3] * points_per_vertex + 1):
+              p = [i / float(points_per_vertex), j / float(points_per_vertex),
+                   k / float(points_per_vertex), l / float(points_per_vertex)]
+              result.append(p)
+      return result
+
+    lattice_sizes = [2] * 4
+    for i, center_value in zip(center_indices, center):
+      lattice_sizes[i] = center_value * 2 + 1
+
+    config = {
+        "lattice_sizes": lattice_sizes,
+        "num_training_records": 1,  # Not used by x_generator for this test.
+        "num_training_epoch": 10,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 10.0,
+        "x_generator": _DistributeXUniformly,
+        "y_function": WShaped2dFunction,
+        "monotonicities": None,
+        "joint_unimodalities": [joint_unimodalities],
+        "output_min": 0.0,
+        "output_max": 3.0,
+        "target_monotonicity_diff": -1e-6,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.845696, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  def testJointUnimodality3D(self):
+    if self.disable_all:
+      return
+    config = {
+        "lattice_sizes": [3, 3, 3, 3],
+        "num_training_records": 100,
+        "num_training_epoch": 30,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 10.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._SinOfSum,
+        "monotonicities": [0, 0, 0, 0],
+        "joint_unimodalities": ([0, 1, 3], "valley"),
+        "output_min": -1.0,
+        "output_max": 1.0,
+        "target_monotonicity_diff": -1e-6,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.026094, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  @parameterized.parameters(
       (None, 0.16301),
       ([(0, 1)], 0.86386),
       ([(1, 0)], 0.86413),
@@ -1088,7 +1266,6 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, 1.082982, delta=self.loss_eps)
     self._TestEnsemble(config)
-
 
   def testRandomMonotonicInitializer(self):
     if self.disable_all:
