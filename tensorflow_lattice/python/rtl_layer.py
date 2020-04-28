@@ -48,10 +48,10 @@ class RTL(keras.layers.Layer):
   takes in a collection of monotonic and unconstrained features and randomly
   arranges them into lattices of a given rank. The input is taken as "groups",
   and inputs from the same group will not be used in the same lattice. E.g. the
-  input can be the ouput of a calibration layer with multiple units applied to
+  input can be the output of a calibration layer with multiple units applied to
   the same input feature. If there are more slots in the RTL than the number of
   inputs, inputs will be repeatedly used. Repeats will be approximately uniform
-  accross all inputs.
+  across all inputs.
 
   Input shape:
   A dict with keys in `['unconstrained', 'increasing']`, and the values either
@@ -325,13 +325,13 @@ class RTL(keras.layers.Layer):
     """Asserts that weights satisfy all constraints.
 
     In graph mode builds and returns a list of assertion ops.
-    In eager mode directly executes assetions.
+    In eager mode directly executes assertions.
 
     Args:
       eps: allowed constraints violation.
 
     Returns:
-      List of assertion ops in graph mode or immideately asserts in eager mode.
+      List of assertion ops in graph mode or immediately asserts in eager mode.
     """
     assertions = []
     for layer in self._lattice_layers.values():
