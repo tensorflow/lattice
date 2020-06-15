@@ -248,13 +248,13 @@ class CategoricalCalibration(keras.layers.Layer):
 
     In graph mode builds and returns list of assertion ops. Note that ops will
     be created at the moment when this function is being called.
-    In eager mode directly executes assetions.
+    In eager mode directly executes assertions.
 
     Args:
       eps: Allowed constraints violation.
 
     Returns:
-      List of assertion ops in graph mode or immideately asserts in eager mode.
+      List of assertion ops in graph mode or immediately asserts in eager mode.
     """
     return categorical_calibration_lib.assert_constraints(
         weights=self.kernel,

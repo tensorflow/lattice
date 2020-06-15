@@ -1393,9 +1393,10 @@ def get_model_graph(saved_model_path, tag='serve'):
           g.get_operation_by_name(linear_kernel_op).outputs[0]).flatten()
 
       # Bias term.
-      # {LINEAR_LAYER_NAME}/{LINEAR_LAYER_BIAS_NAME}
-      bias_op = '{}/{}/Read/ReadVariableOp'.format(
+      # {LINEAR_LAYER_NAME}_{submodel_idx}/{LINEAR_LAYER_BIAS_NAME}
+      bias_op = '{}_{}/{}/Read/ReadVariableOp'.format(
           premade_lib.LINEAR_LAYER_NAME,
+          submodel_idx,
           linear_layer.LINEAR_LAYER_BIAS_NAME,
       )
       if bias_op in ops:
@@ -1448,9 +1449,9 @@ def get_model_graph(saved_model_path, tag='serve'):
       submodel_output_nodes[submodel_idx] = lattice_node
       nodes.append(lattice_node)
 
-    ###################
-    # Create mean node.
-    ###################
+    #####################################################
+    # Create output linear combination or averaging node.
+    #####################################################
 
     # Mean node is only added for ensemble models.
     if len(submodel_output_nodes) > 1:
@@ -1458,9 +1459,37 @@ def get_model_graph(saved_model_path, tag='serve'):
           submodel_output_nodes[idx]
           for idx in sorted(submodel_output_nodes.keys(), key=int)
       ]
-      average_node = model_info.MeanNode(input_nodes=input_nodes)
-      nodes.append(average_node)
-      model_output_node = average_node
+
+      # Linear coefficients.
+      # {LINEAR_LAYER_COMBINATION_NAME}/{LINEAR_LAYER_KERNEL_NAME}
+      linear_combination_kernel_op = '{}/{}/Read/ReadVariableOp'.format(
+          premade_lib.OUTPUT_LINEAR_COMBINATION_LAYER_NAME,
+          linear_layer.LINEAR_LAYER_KERNEL_NAME,
+      )
+      if linear_combination_kernel_op in ops:
+        coefficients = sess.run(
+            g.get_operation_by_name(
+                linear_combination_kernel_op).outputs[0]).flatten()
+
+        # Bias term.
+        # {OUTPUT_LINEAR_COMBINATION_LAYER_NAME}/{LINEAR_LAYER_BIAS_NAME}
+        bias_op = '{}/{}/Read/ReadVariableOp'.format(
+            premade_lib.OUTPUT_LINEAR_COMBINATION_LAYER_NAME,
+            linear_layer.LINEAR_LAYER_BIAS_NAME,
+        )
+        if bias_op in ops:
+          bias = sess.run(g.get_operation_by_name(bias_op).outputs[0])
+        else:
+          bias = 0.0
+
+        linear_combination_node = model_info.LinearNode(
+            input_nodes=input_nodes, coefficients=coefficients, bias=bias)
+        nodes.append(linear_combination_node)
+        model_output_node = linear_combination_node
+      else:
+        average_node = model_info.MeanNode(input_nodes=input_nodes)
+        nodes.append(average_node)
+        model_output_node = average_node
     else:
       model_output_node = list(submodel_output_nodes.values())[0]
 

@@ -24,12 +24,167 @@ import math
 from absl import logging
 import numpy as np
 import six
-
 import tensorflow as tf
 
 
+def evaluate_with_simplex_interpolation(inputs, kernel, units, lattice_sizes,
+                                        clip_inputs):
+  """Evaluates a lattice using simplex interpolation.
+
+  Within each cell of the lattice, we partition the hypercube into d! simplices,
+  where each simplex has d+1 vertices. Each simplex (relative to the lower
+  corner of the hypercube) includes the all-zeros vertex, a vertex with a
+  single one, a vertex with two ones, ... and the all-ones vertex.
+  For example, for a three-dimensional unit hypercube the 3! = 6 simplices are:
+
+  [0,0,0], [0,0,1], [0,1,1], [1,1,1]
+  [0,0,0], [0,0,1], [1,0,1], [1,1,1]
+  [0,0,0], [0,1,0], [0,1,1], [1,1,1]
+  [0,0,0], [0,1,0], [1,1,0], [1,1,1]
+  [0,0,0], [1,0,0], [1,1,0], [1,1,1]
+  [0,0,0], [1,0,0], [1,0,1], [1,1,1]
+
+  A point x in the hypercube is contained in the simplex corresponding to the
+  order of x's components. For example, x = [0.4,0.2,0.8] is contained in the
+  simplex specified by [2,0,1] (second in the above list). The weight associated
+  with each vertex in the simplex is the difference between the decreasingly
+  sorted cooredinates of the input. For details, see e.g. "Dissection of the
+  hypercube into simplices", D.G. Mead, Proceedings of the AMS, 76:2, Sep. 1979.
+
+  Args:
+    inputs: Tensor of shape: `(batch_size, ..., len(lattice_sizes))` or list of
+      `len(lattice_sizes)` tensors of same shape `(batch_size, ..., 1)` which
+      represents points to apply lattice interpolation to. A typical shape is
+      `(batch_size, len(lattice_sizes))`.
+    kernel: Lattice kernel of shape (num_params_per_lattice, units).
+    units: Output dimension of the lattice.
+    lattice_sizes: List or tuple of integers which represents lattice sizes of
+      layer for which interpolation is being computed.
+    clip_inputs: Whether inputs should be clipped to the input range of the
+      lattice.
+  """
+  if isinstance(inputs, list):
+    inputs = tf.concat(inputs, axis=-1)
+
+  if clip_inputs:
+    inputs = _clip_onto_lattice_range(
+        inputs=inputs, lattice_sizes=lattice_sizes)
+
+  lattice_rank = len(lattice_sizes)
+  input_dim = len(inputs.shape)
+  all_size_2 = all(size == 2 for size in lattice_sizes)
+
+  if input_dim == 2:
+    units = 1
+  else:
+    units = int(inputs.shape[-2])
+
+  # Strides are the changes in the global index (index into the flattened
+  # parameters) when moving across each dimension.
+  # E.g. for 2x2x2, strides are [4, 2, 1].
+  strides = tf.constant(
+      np.cumprod([1] + lattice_sizes[::-1][:-1])[::-1], tf.int32)
+
+  if not all_size_2:
+    # Find offset (into flattened parameters) for the lower corner of the
+    # hypercube where input lands in.
+    lower_corner_coordinates = tf.cast(inputs, tf.int32)
+    # Avoid the corner case of landing on the outermost edge.
+    lower_corner_coordinates = tf.minimum(lower_corner_coordinates,
+                                          np.array(lattice_sizes) - 2)
+
+    # Multiplying coordinates by strides and summing up gives out the index into
+    # the flattened parameter tensor.
+    # Note: Alternative method using tf.tensordot + tf.expand_dims is slower.
+    lower_corner_offset = tf.reduce_sum(
+        lower_corner_coordinates * strides, axis=-1, keepdims=True)
+
+    # Continue simplex interpolation with the residuals
+    inputs = inputs - tf.cast(lower_corner_coordinates, inputs.dtype)
+
+  # Get sorted values and indicies.
+  # TODO: investigate if there is a way to avoid sorting twice.
+  sorted_indices = tf.argsort(inputs, direction="DESCENDING")
+  sorted_inputs = tf.sort(inputs, direction="DESCENDING")
+
+  # Simplex interpolation weights are the deltas between residuals.
+  no_padding_dims = [[0, 0]] * (input_dim - 1)
+  sorted_inputs_padded_left = tf.pad(
+      sorted_inputs, no_padding_dims + [[1, 0]], constant_values=1.)
+  sorted_inputs_padded_right = tf.pad(
+      sorted_inputs, no_padding_dims + [[0, 1]], constant_values=0.)
+  weights = sorted_inputs_padded_left - sorted_inputs_padded_right
+
+  # Calculate cumsum over the strides of sorted dimensions to get index of
+  # simplex vertices into the flattened lattice parameters.
+  sorted_strides = tf.gather(strides, sorted_indices)
+  if all_size_2:
+    # Lower corner offset is 0 for 2^d lattices.
+    corner_offset_and_sorted_strides = tf.pad(sorted_strides,
+                                              no_padding_dims + [[1, 0]])
+  else:
+    corner_offset_and_sorted_strides = tf.concat(
+        [lower_corner_offset, sorted_strides], axis=-1)
+  indices = tf.cumsum(corner_offset_and_sorted_strides, axis=-1)
+
+  # Get parameters values of simplex indicies.
+  if units == 1:
+    gathered_params = tf.gather(tf.reshape(kernel, [-1]), indices)
+  else:
+    # We now have two tensors 'indices' and 'weights' of shape (batch, units).
+    # The kernel is of shape (num_params_per_lattice, units).
+    # In order to use tf.gather, we need to convert 'indices' so that they are
+    # indices into the flattened parameter tensor.
+    # Note: Alternative method that uses a transpose on the parameters instead
+    # of a multiply on the indices is slower with typical batch sizes.
+    unit_offset = tf.constant([[i] * (lattice_rank + 1) for i in range(units)])
+    flat_indices = indices * units + unit_offset
+    gathered_params = tf.gather(tf.reshape(kernel, [-1]), flat_indices)
+
+  # Dot product with interpolation weights.
+  # Note: Alternative method using tf.einsum is slightly slower on CPU.
+  return tf.reduce_sum(
+      tf.multiply(gathered_params, weights), axis=-1, keepdims=(units == 1))
+
+
+def evaluate_with_hypercube_interpolation(inputs, kernel, units, lattice_sizes,
+                                          clip_inputs):
+  """Evaluates a lattice using hypercube interpolation.
+
+  Lattice function is multi-linearly interpolated between the 2^d vertices of a
+  hypercube. This interpolation method is typically slower than simplex
+  interpolation, since each value is interpolated from 2^d hypercube corners,
+  rather than d+1 simplex corners. For details, see e.g. "Dissection of the
+  hypercube into simplices", D.G. Mead, Proceedings of the AMS, 76:2, Sep. 1979.
+
+  Args:
+    inputs: Tensor of shape: `(batch_size, ..., len(lattice_sizes))` or list of
+      `len(lattice_sizes)` tensors of same shape `(batch_size, ..., 1)` which
+      represents points to apply lattice interpolation to. A typical shape is
+      `(batch_size, len(lattice_sizes))`.
+    kernel: Lattice kernel of shape (num_params_per_lattice, units).
+    units: Output dimension of the lattice.
+    lattice_sizes: List or tuple of integers which represents lattice sizes of
+      layer for which interpolation is being computed.
+    clip_inputs: Whether inputs should be clipped to the input range of the
+      lattice.
+  """
+  interpolation_weights = compute_interpolation_weights(
+      inputs=inputs, lattice_sizes=lattice_sizes, clip_inputs=clip_inputs)
+
+  if units == 1:
+    # Weights shape: (batch-size, ..., prod(lattice_sizes))
+    # Kernel shape:  (prod(lattice_sizes), 1)
+    return tf.matmul(interpolation_weights, kernel)
+  else:
+    # Weights shape: (batch-size, ..., units, prod(lattice_sizes))
+    # Kernel shape:  (prod(lattice_sizes), units)
+    return tf.reduce_sum(interpolation_weights * tf.transpose(kernel), axis=-1)
+
+
+# TODO: Rename and update usage.
 def compute_interpolation_weights(inputs, lattice_sizes, clip_inputs=True):
-  """Computes weights for lattice interpolation.
+  """Computes weights for hypercube lattice interpolation.
 
   Running time: `O(batch_size * prod(lattice_sizes))`
 
@@ -62,6 +217,14 @@ def compute_interpolation_weights(inputs, lattice_sizes, clip_inputs=True):
     input_shape = inputs.shape
     input_dtype = inputs.dtype
   verify_hyperparameters(lattice_sizes=lattice_sizes, input_shape=input_shape)
+
+  # Special case: 2^d lattice with input passed in as a single tensor
+  if all(size == 2 for size in lattice_sizes) and not isinstance(inputs, list):
+    w = tf.stack([(1.0 - inputs), inputs], axis=-1)
+    if clip_inputs:
+      w = tf.clip_by_value(w, clip_value_min=0, clip_value_max=1)
+    one_d_interpolation_weights = tf.unstack(w, axis=-2)
+    return batch_outer_operation(one_d_interpolation_weights, operation="auto")
 
   if clip_inputs:
     inputs = _clip_onto_lattice_range(
@@ -116,6 +279,19 @@ def batch_outer_operation(list_of_tensors, operation="auto"):
   Returns:
     Tensor of shape: `(batch_size, ..., mul_i(k[i]))`.
   """
+  # Alternative implementation using tf.einsum creates fewer graph nodes.
+  # This is slightly slower on CPU as of 2020/5, but the timing results might
+  # change with different setup/platform/hardware.
+  # Create a formula for outer product. e.g. '...a,...b,...c->...abc'
+  # if operation == "auto":
+  #   n = len(list_of_tensors)
+  #   chars = string.ascii_lowercase[:n]
+  #   eqn = ",".join(["..." + c for c in chars]) + "->..." + "".join(chars)
+  #   result = tf.einsum(eqn, *list_of_tensors)
+  #   result_shape = [-1] + [int(size) for size in result.shape[1:]]
+  #   output_shape = result_shape[:-n] + [np.prod(result_shape[-n:])]
+  #   return tf.reshape(result, shape=output_shape)
+
   if len(list_of_tensors) == 1:
     return list_of_tensors[0]
 
@@ -2073,7 +2249,8 @@ def verify_hyperparameters(lattice_sizes,
                            output_min=None,
                            output_max=None,
                            regularization_amount=None,
-                           regularization_info=""):
+                           regularization_info="",
+                           interpolation="hypercube"):
   """Verifies that all given hyperparameters are consistent.
 
   This function does not inspect weights themselves. Only their shape. Use
@@ -2102,6 +2279,7 @@ def verify_hyperparameters(lattice_sizes,
     output_max: Maximum output of `Lattice` layer.
     regularization_amount: Regularization amount for regularizers.
     regularization_info: String which describes `regularization_amount`.
+    interpolation: One of 'simplex' or 'hypercube' interpolation.
 
   Raises:
     ValueError: If something is inconsistent.
@@ -2282,6 +2460,10 @@ def verify_hyperparameters(lattice_sizes,
           "match number of dimensions defined by lattice sizes. "
           "l1: %s, lattice sizes: %s" %
           (regularization_info, regularization_amount, lattice_sizes))
+
+  if interpolation not in ["hypercube", "simplex"]:
+    raise ValueError("Lattice interpolation type should be either 'simplex' "
+                     "or 'hypercube': %s" % interpolation)
 
 
 # TODO: investigate whether eps should be bigger.

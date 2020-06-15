@@ -48,17 +48,22 @@ class RTL(keras.layers.Layer):
   takes in a collection of monotonic and unconstrained features and randomly
   arranges them into lattices of a given rank. The input is taken as "groups",
   and inputs from the same group will not be used in the same lattice. E.g. the
-  input can be the ouput of a calibration layer with multiple units applied to
+  input can be the output of a calibration layer with multiple units applied to
   the same input feature. If there are more slots in the RTL than the number of
   inputs, inputs will be repeatedly used. Repeats will be approximately uniform
-  accross all inputs.
+  across all inputs.
 
   Input shape:
-  A dict with keys in `['unconstrained', 'increasing']`, and the values either
-  a list of tensors of shape (batch_size, D_i), or a single tensor of shape
-  (batch_size, D) that will be split into a list of D tensors of size
-  (batch_size, 1). Each tensor in the list is considered a "group" of features
-  that the RTL layer should try not to use in the same lattice.
+  One of:
+    - A dict with keys in `['unconstrained', 'increasing']`, and the values
+      either a list of tensors of shape (batch_size, D_i), or a single tensor
+      of shape (batch_size, D) that will be conceptually split into a list of D
+      tensors of size (batch_size, 1). Each tensor in the list is considered a
+      "group" of features that the RTL layer should try not to use in the same
+      lattice.
+    - A single tensor of shape (batch_size, D), which is considered to be
+      unconstrained and will be conceptually split into a list of D tensors of
+      size (batch_size, 1).
 
   Output shape:
   If `separate_outputs == True`, the output will be in the same format as the
@@ -119,6 +124,8 @@ class RTL(keras.layers.Layer):
                num_projection_iterations=10,
                monotonic_at_every_step=True,
                clip_inputs=True,
+               interpolation='hypercube',
+               avoid_intragroup_interaction=True,
                kernel_initializer='random_monotonic_initializer',
                kernel_regularizer=None,
                **kwargs):
@@ -151,6 +158,13 @@ class RTL(keras.layers.Layer):
         num_projection_iterations parameter is likely to hurt convergence.
       clip_inputs: If inputs should be clipped to the input range of the
         lattice.
+      interpolation: One of 'hypercube' or 'simplex' interpolation. For a
+        d-dimensional lattice, 'hypercube' interpolates 2^d parameters, whereas
+        'simplex' uses d+1 parameters and thus scales better. For details see
+        `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
+        `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
+      avoid_intragroup_interaction: If set to true, the RTL algorithm will try
+        to avoid having inputs from the same group in the same lattice.
       kernel_initializer: One of:
         - `'linear_initializer'`: initialize parameters to form a linear
           function with positive and equal coefficients for monotonic dimensions
@@ -190,6 +204,8 @@ class RTL(keras.layers.Layer):
     self.num_projection_iterations = num_projection_iterations
     self.monotonic_at_every_step = monotonic_at_every_step
     self.clip_inputs = clip_inputs
+    self.interpolation = interpolation
+    self.avoid_intragroup_interaction = avoid_intragroup_interaction
     self.kernel_initializer = kernel_initializer
     self.kernel_regularizer = kernel_regularizer
 
@@ -200,7 +216,7 @@ class RTL(keras.layers.Layer):
     self._lattice_layers = {}
     for monotonicities, inputs_for_units in self._rtl_structure:
       units = len(inputs_for_units)
-      self._lattice_layers[monotonicities] = lattice_layer.Lattice(
+      self._lattice_layers[str(monotonicities)] = lattice_layer.Lattice(
           lattice_sizes=[self.lattice_size] * self.lattice_rank,
           units=units,
           monotonicities=monotonicities,
@@ -209,6 +225,7 @@ class RTL(keras.layers.Layer):
           num_projection_iterations=self.num_projection_iterations,
           monotonic_at_every_step=self.monotonic_at_every_step,
           clip_inputs=self.clip_inputs,
+          interpolation=self.interpolation,
           kernel_initializer=self.kernel_initializer,
           kernel_regularizer=self.kernel_regularizer,
       )
@@ -217,40 +234,33 @@ class RTL(keras.layers.Layer):
   def call(self, x, **kwargs):
     """Standard Keras call() method."""
     if not isinstance(x, dict):
-      raise ValueError('Input to the RTL layer must be dict')
+      x = {'unconstrained': x}
+
     # Flatten the input.
     # The order for flattening should match the order in _get_rtl_structure.
     input_tensors = []
     for input_key in sorted(x.keys()):
       items = x[input_key]
-      if not isinstance(items, list):
-        items = [items]
-      for tensor in items:
-        dim = tensor.shape.as_list()[1]
-        if dim == 1:
-          input_tensors.append(tensor)
-        else:
-          input_tensors.extend(tf.split(tensor, dim, axis=1))
+      if isinstance(items, list):
+        input_tensors.extend(items)
+      else:
+        input_tensors.append(items)
+    if len(input_tensors) == 1:
+      flattened_input = input_tensors[0]
+    else:
+      flattened_input = tf.concat(input_tensors, axis=1)
 
     # outputs_for_monotonicity[0] are non-monotonic outputs
     # outputs_for_monotonicity[1] are monotonic outputs
     outputs_for_monotonicity = [[], []]
     for monotonicities, inputs_for_units in self._rtl_structure:
-      # Create inputs to lattice layer by concatenating all the inputs.
-      lattice_inputs = []
-      for inputs_for_unit in inputs_for_units:
-        # Concat into (-1, lattice_rank) for a single lattice
-        lattice_inputs.append(
-            tf.concat([input_tensors[i] for i in inputs_for_unit], axis=1))
-      if len(lattice_inputs) > 1:
-        # Stack into (-1, units, lattice_rank) for multi-unit lattice layer
-        lattice_inputs = tf.stack(lattice_inputs, axis=1)
-      else:
-        lattice_inputs = lattice_inputs[0]
+      if len(inputs_for_units) == 1:
+        inputs_for_units = inputs_for_units[0]
+      lattice_inputs = tf.gather(flattened_input, inputs_for_units, axis=1)
       output_monotonicity = max(monotonicities)
       # Call each lattice layer and store based on output monotonicy.
       outputs_for_monotonicity[output_monotonicity].append(
-          self._lattice_layers[monotonicities](lattice_inputs))
+          self._lattice_layers[str(monotonicities)](lattice_inputs))
 
     if self.separate_outputs:
       separate_outputs = {}
@@ -302,6 +312,8 @@ class RTL(keras.layers.Layer):
         'num_projection_iterations': self.num_projection_iterations,
         'monotonic_at_every_step': self.monotonic_at_every_step,
         'clip_inputs': self.clip_inputs,
+        'interpolation': self.interpolation,
+        'avoid_intragroup_interaction': self.avoid_intragroup_interaction,
         'kernel_initializer': self.kernel_initializer,
         'kernel_regularizer': self.kernel_regularizer,
     })
@@ -325,13 +337,13 @@ class RTL(keras.layers.Layer):
     """Asserts that weights satisfy all constraints.
 
     In graph mode builds and returns a list of assertion ops.
-    In eager mode directly executes assetions.
+    In eager mode directly executes assertions.
 
     Args:
       eps: allowed constraints violation.
 
     Returns:
-      List of assertion ops in graph mode or immideately asserts in eager mode.
+      List of assertion ops in graph mode or immediately asserts in eager mode.
     """
     assertions = []
     for layer in self._lattice_layers.values():
@@ -354,7 +366,7 @@ class RTL(keras.layers.Layer):
       indices into the flattened input to the layer.
     """
     if not isinstance(input_shape, dict):
-      raise ValueError('Input to the RTL layer must be dict')
+      input_shape = {'unconstrained': input_shape}
 
     # Calculate the flattened input to the RTL layer. rtl_inputs will be a list
     # of _RTLInput items, each including information about the monotonicity,
@@ -411,7 +423,7 @@ class RTL(keras.layers.Layer):
     # group is used in each lattice.
     changed = True
     iteration = 0
-    while changed:
+    while changed and self.avoid_intragroup_interaction:
       if iteration > _MAX_RTL_SWAPS:
         logging.info('Some lattices in the RTL layer might use features from '
                      'the same input group')

@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import collections
 import copy
+import enum
 import itertools
 
 from . import aggregation_layer
@@ -31,7 +32,6 @@ from . import pwl_calibration_layer
 from . import pwl_calibration_lib
 
 from absl import logging
-import enum
 import numpy as np
 import six
 
@@ -43,6 +43,7 @@ CALIB_LAYER_NAME = 'tfl_calib'
 INPUT_LAYER_NAME = 'tfl_input'
 LATTICE_LAYER_NAME = 'tfl_lattice'
 LINEAR_LAYER_NAME = 'tfl_linear'
+OUTPUT_LINEAR_COMBINATION_LAYER_NAME = 'tfl_output_linear_combination'
 OUTPUT_CALIB_LAYER_NAME = 'tfl_output_calib'
 
 # Prefix for passthrough (identity) nodes for shared calibration.
@@ -296,7 +297,9 @@ def build_aggregation_layer(aggregation_input_layer, model_config,
   """Creates an aggregation layer using the given calibrated lattice models.
 
   Args:
-    aggregation_input_layer: A mapping from feature name to `tf.keras.Input`.
+    aggregation_input_layer: A list or a mapping from feature name to
+      `tf.keras.Input`, in the order or format expected by
+      `calibrated_lattice_models`.
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
     calibrated_lattice_models: A list of calibrated lattice models of size
@@ -359,6 +362,7 @@ def build_aggregation_layer(aggregation_input_layer, model_config,
       output_min=output_min,
       output_max=output_max,
       clip_inputs=False,
+      interpolation=model_config.middle_lattice_interpolation,
       kernel_initializer=kernel_initializer,
       dtype=dtype,
       name=lattice_layer_name,
@@ -527,11 +531,56 @@ def build_lattice_layer(lattice_input, feature_configs, model_config,
       output_min=output_min,
       output_max=output_max,
       clip_inputs=False,
+      interpolation=model_config.interpolation,
       kernel_regularizer=lattice_regularizers,
       kernel_initializer=kernel_initializer,
       dtype=dtype,
       name=layer_name)(
           lattice_input)
+
+
+def build_linear_combination_layer(ensemble_outputs, model_config, dtype):
+  """Creates a `tfl.layers.Linear` layer initialized to be an average.
+
+  Args:
+    ensemble_outputs: Ensemble outputs to be linearly combined.
+    model_config: Model configuration object describing model architecture.
+      Should be one of the model configs in `tfl.configs`.
+    dtype: dtype
+
+  Returns:
+    A `tfl.layers.Linear` instance.
+  """
+  if isinstance(ensemble_outputs, list):
+    num_input_dims = len(ensemble_outputs)
+    linear_input = tf.keras.layers.Concatenate(axis=1)(ensemble_outputs)
+  else:
+    num_input_dims = int(ensemble_outputs.shape[1])
+    linear_input = ensemble_outputs
+  kernel_initializer = tf.keras.initializers.Constant(1.0 / num_input_dims)
+  bias_initializer = tf.keras.initializers.Constant(0)
+
+  if (not model_config.output_calibration and
+      model_config.output_min is None and model_config.output_max is None):
+    normalization_order = None
+  else:
+    # We need to use weighted average to keep the output range.
+    normalization_order = 1
+    # Bias term cannot be used when this layer should have bounded output.
+    if model_config.use_bias:
+      raise ValueError('Cannot use a bias term in linear combination with '
+                       'output bounds or output calibration')
+
+  return linear_layer.Linear(
+      num_input_dims=num_input_dims,
+      monotonicities=['increasing'] * num_input_dims,
+      normalization_order=normalization_order,
+      use_bias=model_config.use_bias,
+      kernel_initializer=kernel_initializer,
+      bias_initializer=bias_initializer,
+      dtype=dtype,
+      name=OUTPUT_LINEAR_COMBINATION_LAYER_NAME)(
+          linear_input)
 
 
 def build_output_calibration_layer(output_calibration_input, model_config,

@@ -20,6 +20,7 @@ This package provides functions and classes for lattice modeling.
 from __future__ import absolute_import
 
 import tensorflow_lattice.layers
+import tensorflow_lattice.sonnet_modules
 
 from tensorflow_lattice.python import aggregation_layer
 from tensorflow_lattice.python import categorical_calibration_layer
@@ -35,6 +36,7 @@ from tensorflow_lattice.python import parallel_combination_layer
 from tensorflow_lattice.python import premade
 from tensorflow_lattice.python import premade_lib
 from tensorflow_lattice.python import pwl_calibration_layer
+from tensorflow_lattice.python import pwl_calibration_sonnet_module
 from tensorflow_lattice.python import pwl_calibration_lib
 from tensorflow_lattice.python import test_utils
 from tensorflow_lattice.python import visualization

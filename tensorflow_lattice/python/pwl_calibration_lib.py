@@ -121,7 +121,7 @@ def linear_initializer(shape,
                        dtype=None):
   """Initializes PWL calibration layer to represent linear function.
 
-  PWL calibration layer weights have shape `(knum_keypoints, units)`. First row
+  PWL calibration layer weights have shape `(num_keypoints, units)`. First row
   represents bias. All remaining represent delta in y-value compare to previous
   point. Aka heights of segments.
 
@@ -469,7 +469,7 @@ def project_all_constraints(weights,
 
   For all combinations of constraints except the case where bounds constraints
   are specified without monotonicity constraints we properly project into
-  nearest point with respect to L2 norm. For later case we use a heuristic to
+  nearest point with respect to L2 norm. For latter case we use a heuristic to
   map input point into some feasible point with no guarantees on how close this
   point is to the true projection.
 

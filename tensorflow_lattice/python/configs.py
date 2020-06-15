@@ -249,7 +249,10 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
                lattices='random',
                num_lattices=None,
                lattice_rank=None,
+               interpolation='hypercube',
                separate_calibrators=True,
+               use_linear_combination=False,
+               use_bias=False,
                regularizer_configs=None,
                output_min=None,
                output_max=None,
@@ -276,8 +279,18 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
         lattices are not explicitly provided.
       lattice_rank: Number of features in each lattice. Must be provided if
         lattices are not explicitly provided.
+      interpolation: One of 'hypercube' or 'simplex' interpolation. For a
+        d-dimensional lattice, 'hypercube' interpolates 2^d parameters, whereas
+        'simplex' uses d+1 parameters and thus scales better. For details see
+        `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
+        `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
       separate_calibrators: If features should be separately calibrated for each
         lattice in the ensemble.
+      use_linear_combination: If set to true, a linear combination layer will be
+        used to combine ensemble outputs. Otherwise an averaging layer will be
+        used. If output is bounded or output calibration is used, then this
+        layer will be a weighted average.
+      use_bias: If a bias term should be used for the linear combination.
       regularizer_configs: A list of `tfl.configs.RegularizerConfig` instances
         that apply global regularization.
       output_min: Lower bound constraint on the output of the model.
@@ -340,6 +353,7 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
 
   def __init__(self,
                feature_configs=None,
+               interpolation='hypercube',
                regularizer_configs=None,
                output_min=None,
                output_max=None,
@@ -352,6 +366,11 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
       feature_configs: A list of `tfl.configs.FeatureConfig` instances that
         specify configurations for each feature. If a configuration is not
         provided for a feature, a default configuration will be used.
+      interpolation: One of 'hypercube' or 'simplex' interpolation. For a
+        d-dimensional lattice, 'hypercube' interpolates 2^d parameters, whereas
+        'simplex' uses d+1 parameters and thus scales better. For details see
+        `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
+        `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
       regularizer_configs: A list of `tfl.configs.RegularizerConfig` instances
         that apply global regularization.
       output_min: Lower bound constraint on the output of the model.
@@ -481,6 +500,8 @@ class AggregateFunctionConfig(_Config, _HasFeatureConfigs,
                middle_calibration=False,
                middle_calibration_num_keypoints=10,
                middle_monotonicity=None,
+               middle_lattice_interpolation='hypercube',
+               aggregation_lattice_interpolation='hypercube',
                output_min=None,
                output_max=None,
                output_calibration=False,
@@ -507,6 +528,16 @@ class AggregateFunctionConfig(_Config, _HasFeatureConfigs,
         monotonic, using 'increasing' or 1 to indicate increasing monotonicity,
         'decreasing' or -1 to indicate decreasing monotonicity, and 'none' or 0
         to indicate no monotonicity constraints.
+      middle_lattice_interpolation: One of 'hypercube' or 'simplex'. For a
+        d-dimensional lattice, 'hypercube' interpolates 2^d parameters, whereas
+        'simplex' uses d+1 parameters and thus scales better. For details see
+        `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
+        `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
+      aggregation_lattice_interpolation: One of 'hypercube' or 'simplex'. For a
+        d-dimensional lattice, 'hypercube' interpolates 2^d parameters, whereas
+        'simplex' uses d+1 parameters and thus scales better. For details see
+        `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
+        `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
       output_min: Lower bound constraint on the output of the model.
       output_max: Upper bound constraint on the output of the model.
       output_calibration: If a piecewise-linear calibration should be used on
