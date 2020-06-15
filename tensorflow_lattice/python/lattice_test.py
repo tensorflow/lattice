@@ -214,6 +214,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("kernel_regularizer", None)
     config.setdefault("units", 1)
     config.setdefault("lattice_index", 0)
+    config.setdefault("interpolation", "hypercube")
 
     return config
 
@@ -268,6 +269,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         output_max=config["output_max"],
         num_projection_iterations=config["num_projection_iterations"],
         monotonic_at_every_step=config["monotonic_at_every_step"],
+        interpolation=config["interpolation"],
         kernel_initializer=config["kernel_initializer"],
         kernel_regularizer=config["kernel_regularizer"],
         input_shape=input_shape,
@@ -1749,6 +1751,119 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAlmostEqual(loss, 0.004216, delta=self.loss_eps)
     self._TestEnsemble(config)
 
+    config = {
+        "lattice_sizes": [20],
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 200,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 0.15,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._Sin,
+        "kernel_initializer": keras.initializers.Zeros,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.000917, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+    config = {
+        "lattice_sizes": [2],
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 50,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 0.15,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._Square,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.004277, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+    config = {
+        "lattice_sizes": [2, 2],
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 100,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 0.15,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._Max,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 5e-06, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+    config = {
+        "lattice_sizes": [2] * 6,
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 300,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 30.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._PseudoLinear,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.08056, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+    config = {
+        "lattice_sizes": [2, 3, 4],
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 200,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 10.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._PseudoLinear,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.04316, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+    config = {
+        "lattice_sizes": [4, 5],
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 100,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 10.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._WeightedSum,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.0, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+    config = {
+        "lattice_sizes": [2, 3, 4, 5],
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 200,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 30.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._Max,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.000122, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+    config = {
+        "lattice_sizes": [2, 3, 4, 5],
+        "interpolation": "simplex",
+        "num_training_records": 100,
+        "num_training_epoch": 200,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 30.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._WeightedSum,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, 0.003793, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
   @parameterized.parameters(
       ([2, 3, 4], 6.429155),
       ([2, 3, 3], 13.390955),
@@ -1775,10 +1890,10 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
 
   @parameterized.parameters(
-      ([2, 2, 2, 2, 2, 2], 92),
+      ([2, 2, 2, 2, 2, 2], 81),
       ([2, 2, 3, 2, 3, 2], 117),
       ([2, 2, 2, 2, 3, 3], 102),
-      ([2, 2, 2, 2, 2, 2, 2, 2, 2], 125),
+      ([2, 2, 2, 2, 2, 2, 2, 2, 2], 114),
       ([2, 2, 2, 2, 2, 2, 3, 3, 3], 135),
   )
   def testGraphSize(self, lattice_sizes, expected_graph_size):
@@ -1797,6 +1912,139 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     graph_size = len(tf.compat.v1.get_default_graph().as_graph_def().node)
 
     self.assertLessEqual(graph_size, expected_graph_size)
+
+  @parameterized.parameters(
+      ("random_uniform_or_linear_initializer", [3, 3, 3],
+       [([0, 1, 2], "peak")],
+       tf.keras.initializers.RandomUniform),
+      ("random_uniform_or_linear_initializer", [3, 3, 3],
+       [([0, 1, 2], "valley")],
+       tf.keras.initializers.RandomUniform),
+      ("random_uniform_or_linear_initializer", [3, 3, 3],
+       [([0, 1], "valley")],
+       ll.LinearInitializer),
+      ("random_uniform_or_linear_initializer", [3, 3, 3],
+       [([0, 1], "valley"), ([2], "peak")],
+       ll.LinearInitializer),
+      ("random_uniform_or_linear_initializer", [3, 3, 3],
+       None,
+       ll.LinearInitializer),
+      ("linear_initializer", [3, 3, 3],
+       [([0, 1], "valley")],
+       ll.LinearInitializer),
+      ("random_monotonic_initializer", [3, 3, 3],
+       [([0, 1], "valley")],
+       ll.RandomMonotonicInitializer))
+  def testCreateKernelInitializer(
+      self,
+      kernel_initializer_id, lattice_sizes, joint_unimodalities, expected_type):
+    self.assertEqual(
+        expected_type,
+        type(ll.create_kernel_initializer(
+            kernel_initializer_id,
+            lattice_sizes,
+            monotonicities=None,
+            output_min=0.0,
+            output_max=1.0,
+            unimodalities=None,
+            joint_unimodalities=joint_unimodalities)))
+
+  @parameterized.parameters(
+      # Single Unit
+      (
+          [2, 2],
+          [[0.], [1.], [2.], [3.]],
+          [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]],
+          [[0.], [1.], [2.], [3.]],
+      ),
+      (
+          [3, 2],
+          [[-0.4], [0.9], [0.4], [-0.6], [-0.8], [0.6]],
+          [[0.8, 0.3], [0.3, 0.8], [2.0, 0.0], [2.0, 0.5], [2.0, 1.0]],
+          [[-0.06], [0.19], [-0.8], [-0.1], [0.6]],
+      ),
+      (
+          [2, 2, 2, 2, 2],
+          [[-0.2], [-0.7], [-0.8], [0.8], [-0.3], [-0.6], [0.4], [0.5], [-0.3],
+           [0.3], [0.9], [0.4], [0.3], [-0.7], [0.1], [0.8], [-0.7], [-0.6],
+           [0.9], [-0.2], [0.3], [0.2], [0.9], [-0.1], [-0.6], [0.8], [0.4],
+           [1], [0.5], [0.2], [0.8], [-0.8]],
+          [[0.1, 0.2, 0.3, 0.4, 0.5], [0.5, 0.4, 0.3, 0.2, 0.1]],
+          [[-0.04], [-0.18]],
+      ),
+      (
+          [3, 2, 2],
+          [[0], [1], [0.5], [0.1], [-0.5], [-0.9], [0.6], [-0.7], [-0.4], [0.2],
+           [0], [0.8]],
+          [[0.1, 0.2, 0.3], [0.3, 0.2, 0.1], [1.1, 0.2, 0.3], [1.7, 0.2, 0.1]],
+          [[0.04], [-0.06], [-0.43], [-0.27]],
+      ),
+      # Multi Unit
+      (
+          [2, 2],
+          [
+              [1., 11., 111.],
+              [2., 22., 222.],
+              [3., 33., 333.],
+              [4., 44., 444.],
+          ],
+          [
+              [[0.0, 0.0], [0.0, 0.0], [1.0, 1.0]],
+              [[0.0, 1.0], [0.0, 1.0], [1.0, 0.0]],
+              [[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+              [[1.0, 1.0], [1.0, 1.0], [0.0, 0.0]],
+          ],
+          [
+              [1., 11., 444.],
+              [2., 22., 333.],
+              [3., 33., 222.],
+              [4., 44., 111.],
+          ],
+      ),
+      (
+          [3, 2],
+          [
+              [-0.4, -4, -40, -400],
+              [0.9, 9, 90, 900],
+              [0.4, 4, 40, 400],
+              [-0.6, -6, -60, -600],
+              [-0.8, -8, -80, -800],
+              [0.6, 6, 60, 600],
+          ],
+          [
+              [[0.8, 0.3], [2.0, 1.0], [0.8, 0.3], [2.0, 1.0]],
+              [[0.3, 0.8], [2.0, 0.5], [0.3, 0.8], [2.0, 0.5]],
+              [[2.0, 0.0], [2.0, 0.0], [2.0, 0.0], [2.0, 0.0]],
+              [[2.0, 0.5], [0.3, 0.8], [2.0, 0.5], [0.3, 0.8]],
+              [[2.0, 1.0], [0.8, 0.3], [2.0, 1.0], [0.8, 0.3]],
+          ],
+          [
+              [-0.06, 6., -6., 600.],
+              [0.19, -1., 19., -100.],
+              [-0.8, -8., -80., -800.],
+              [-0.1, 1.9, -10., 190.],
+              [0.6, -0.6, 60., -60.],
+          ],
+      ),
+  )
+  def testSimplexInterpolation(self, lattice_sizes, kernel, inputs,
+                               expected_outputs):
+    if self.disable_all:
+      return
+
+    kernel = tf.constant(kernel, dtype=tf.float32)
+    inputs = tf.constant(inputs, dtype=tf.float32)
+    units = int(kernel.shape[1])
+    model = tf.keras.models.Sequential([
+        ll.Lattice(
+            lattice_sizes,
+            units=units,
+            interpolation="simplex",
+            kernel_initializer=tf.keras.initializers.Constant(kernel),
+        ),
+    ])
+    outputs = model.predict(inputs)
+    self.assertAllClose(outputs, expected_outputs)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,10 @@
 """Tests for PWL calibration layer.
 
 This test should be run with "-c opt" since otherwise it's slow.
+Also, to only run a subset of the tests (useful when developing a new test or
+set of tests), change the initialization of the _disable_all boolean to 'True'
+in the SetUp method, and comment out the check for this boolean in those tests
+that you want to run.
 """
 
 from __future__ import absolute_import
@@ -28,7 +32,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow_lattice.python import parallel_combination_layer as parallel_combination
-from tensorflow_lattice.python import pwl_calibration_layer as pwl_calibraion
+from tensorflow_lattice.python import pwl_calibration_layer as keras_layer
+from tensorflow_lattice.python import pwl_calibration_sonnet_module as sonnet_module
 from tensorflow_lattice.python import pwl_calibration_lib as pwl_lib
 from tensorflow_lattice.python import test_utils
 
@@ -145,10 +150,12 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("num_projection_iterations", 8)
     config.setdefault("constraint_assertion_eps", 1e-6)
     config.setdefault("model_dir", "/tmp/test_pwl_model_dir/")
+    config.setdefault("dtype", tf.float32)
 
     if "input_keypoints" not in config:
       # If "input_keypoints" are provided - other params referred by code below
-      # might be not available.
+      # might be not available, so we make sure it exists before executing
+      # this code.
       config.setdefault("input_keypoints",
                         np.linspace(start=config["input_min"],
                                     stop=config["input_max"],
@@ -203,7 +210,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     calibration_layers = []
     for _ in range(num_calibration_layers):
       calibration_layers.append(
-          pwl_calibraion.PWLCalibration(
+          keras_layer.PWLCalibration(
               units=pwl_calibration_units,
               dtype=tf.float32,
               input_keypoints=config["input_keypoints"],
@@ -277,6 +284,225 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         config["convexity"])
     inversed_loss = self._TrainModel(inversed_config)
     return inversed_loss
+
+  def _CreateTrainingData(self, config):
+    training_inputs = config["x_generator"](
+        units=config["units"],
+        num_points=config["num_training_records"],
+        input_min=config["input_keypoints"][0],
+        input_max=config["input_keypoints"][-1],
+        missing_probability=config["missing_probability"],
+        missing_input_value=config["missing_input_value"])
+    training_labels = [config["y_function"](x) for x in training_inputs]
+    training_inputs = tf.convert_to_tensor(training_inputs, dtype=tf.float32)
+    training_labels = tf.convert_to_tensor(training_labels, dtype=tf.float32)
+    return (training_inputs, training_labels)
+
+  def _CreateKerasLayer(self, config):
+    missing_input_value = config["missing_input_value"]
+    if config["use_separate_missing"]:
+      # We use 'config["missing_input_value"]' to create the is_missing tensor,
+      # and we want the model to use the is_missing tensor so we don't pass
+      # a missing_input_value to the model.
+      missing_input_value=None
+    return keras_layer.PWLCalibration(
+        input_keypoints=config["input_keypoints"],
+        units=config["units"],
+        output_min=config["output_min"],
+        output_max=config["output_max"],
+        clamp_min=config["clamp_min"],
+        clamp_max=config["clamp_max"],
+        monotonicity=config["monotonicity"],
+        convexity=config["convexity"],
+        is_cyclic=config["is_cyclic"],
+        kernel_initializer=config["initializer"],
+        kernel_regularizer=config["kernel_regularizer"],
+        impute_missing=config["impute_missing"],
+        missing_output_value=config["missing_output_value"],
+        missing_input_value=missing_input_value,
+        num_projection_iterations=config["num_projection_iterations"],
+        dtype=config["dtype"])
+
+  def _CreateSonnetModule(self, config):
+    missing_input_value = config["missing_input_value"]
+    if config["use_separate_missing"]:
+      # We use 'config["missing_input_value"]' to create the is_missing tensor,
+      # and we want the model to use the is_missing tensor so we don't pass
+      # a missing_input_value to the model.
+      missing_input_value=None
+    return sonnet_module.PWLCalibration(
+        input_keypoints=config["input_keypoints"],
+        units=config["units"],
+        output_min=config["output_min"],
+        output_max=config["output_max"],
+        clamp_min=config["clamp_min"],
+        clamp_max=config["clamp_max"],
+        monotonicity=config["monotonicity"],
+        convexity=config["convexity"],
+        is_cyclic=config["is_cyclic"],
+        kernel_init=config["initializer"],
+        impute_missing=config["impute_missing"],
+        missing_input_value=missing_input_value,
+        missing_output_value=config["missing_output_value"],
+        num_projection_iterations=config["num_projection_iterations"])
+
+  def _AssertSonnetEquivalentToKeras(self, config):
+    training_inputs, training_labels = self._CreateTrainingData(config)
+    keras_layer_ctor = lambda: self._CreateKerasLayer(config)
+    sonnet_module_ctor = lambda: self._CreateSonnetModule(config)
+    test_utils.assert_sonnet_equivalent_to_keras(
+        test=self,
+        sonnet_module_ctor=sonnet_module_ctor,
+        keras_layer_ctor=keras_layer_ctor,
+        training_inputs=training_inputs,
+        training_labels=training_labels,
+    )
+
+  def _createConfig(self, **kwargs):
+    config = dict(kwargs)
+    return self._SetDefaults(config)
+
+  def testSonnetDefaultValues(self):
+    """Compares the sonnet module with default values to the keras layer."""
+    if self._disable_all:
+      return
+    config = self._createConfig(
+        input_keypoints=[0, 0.25, 0.5, 1.0],
+        units=10,
+        x_generator=self._ScatterXUniformly,
+        y_function=self._SmallWaves,
+        num_training_records=100,
+    )
+    self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetOutputMinOutputMax(self):
+    if self._disable_all:
+      return
+    config = self._createConfig(
+        input_keypoints=[0, 0.25, 0.5, 1.0],
+        units=10,
+        x_generator=self._ScatterXUniformly,
+        y_function=self._SmallWaves,
+        num_training_records=100,
+        output_min=1.0,
+        output_max=10.0,
+    )
+    self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetClampMinClampMax(self):
+    if self._disable_all:
+      return
+    config = self._createConfig(
+        input_keypoints=[0, 0.25, 0.5, 1.0],
+        units=10,
+        x_generator=self._ScatterXUniformly,
+        y_function=self._SmallWaves,
+        num_training_records=100,
+        clamp_min=1.0,
+        output_max=10.0,
+    )
+    self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetMonotonicity(self):
+    if self._disable_all:
+      return
+    for monotonicity in ["increasing", 1, "decreasing", -1]:
+      config = self._createConfig(
+          input_keypoints=[0, 0.25, 0.5, 1.0],
+          units=10,
+          x_generator=self._ScatterXUniformly,
+          y_function=self._SmallWaves,
+          num_training_records=100,
+          monotonicity=monotonicity,
+      )
+      self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetConvexity(self):
+    if self._disable_all:
+      return
+    for convexity in ["convex", 1, "concave", -1]:
+      config = self._createConfig(
+          input_keypoints=[0, 0.25, 0.5, 1.0],
+          units=10,
+          x_generator=self._ScatterXUniformly,
+          y_function=self._SmallWaves,
+          num_training_records=100,
+          convexity=convexity,
+      )
+      self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetIsCyclic(self):
+    if self._disable_all:
+      return
+    config = self._createConfig(
+        input_keypoints=[0, 0.25, 0.5, 1.0],
+        units=10,
+        x_generator=self._ScatterXUniformly,
+        y_function=self._SmallWaves,
+        num_training_records=100,
+        is_cyclic=True,
+    )
+    self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetKernelInit(self):
+    if self._disable_all:
+      return
+    # kernel_init="equal_heights" is the default and is tested in
+    # testSonnetDefaultValues, so we don't test it here.
+    for kernel_init in [None, "equal_slopes"]:
+      config = self._createConfig(
+          input_keypoints=[0, 0.25, 0.5, 1.0],
+          units=10,
+          x_generator=self._ScatterXUniformly,
+          y_function=self._SmallWaves,
+          num_training_records=100,
+          kernel_init=kernel_init,
+      )
+      self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetMissingInputValue(self):
+    if self._disable_all:
+      return
+    config = self._createConfig(
+        input_keypoints=[0, 0.25, 0.5, 1.0],
+        units=10,
+        x_generator=self._ScatterXUniformly,
+        y_function=self._SmallWaves,
+        num_training_records=100,
+        impute_missing=True,
+        missing_input_value=3,
+        missing_probability=0.5,
+    )
+    self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetMissingOutputValue(self):
+    if self._disable_all:
+      return
+    config = self._createConfig(
+        input_keypoints=[0, 0.25, 0.5, 1.0],
+        units=10,
+        x_generator=self._ScatterXUniformly,
+        y_function=self._SmallWaves,
+        num_training_records=100,
+        impute_missing=True,
+        missing_input_value=3,
+        missing_probability=0.5,
+        missing_output_value=10,
+    )
+    self._AssertSonnetEquivalentToKeras(config)
+
+  def testSonnetNumProjectionIterations(self):
+    if self._disable_all:
+      return
+    config = self._createConfig(
+        input_keypoints=[0, 0.25, 0.5, 1.0],
+        units=10,
+        x_generator=self._ScatterXUniformly,
+        y_function=self._SmallWaves,
+        num_training_records=100,
+        num_projection_iterations=2,
+    )
+    self._AssertSonnetEquivalentToKeras(config)
 
   @parameterized.parameters(
       (1, False, 0.001022),
@@ -1075,7 +1301,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
   def testAssertMonotonicity(self):
     if self._disable_all:
       return
-    decreasing_initializer = pwl_calibraion.UniformOutputInitializer(
+    decreasing_initializer = keras_layer.UniformOutputInitializer(
         output_min=0.0, output_max=1.0, monotonicity=-1)
     # Specify decreasing initializer and do 0 training iterations so no
     # projections are being executed.

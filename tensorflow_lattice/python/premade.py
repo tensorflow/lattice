@@ -134,7 +134,13 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
               dtype=dtype))
 
     if len(lattice_outputs) > 1:
-      averaged_lattice_output = tf.keras.layers.Average()(lattice_outputs)
+      if model_config.use_linear_combination:
+        averaged_lattice_output = premade_lib.build_linear_combination_layer(
+            ensemble_outputs=lattice_outputs,
+            model_config=model_config,
+            dtype=dtype)
+      else:
+        averaged_lattice_output = tf.keras.layers.Average()(lattice_outputs)
     else:
       averaged_lattice_output = lattice_outputs[0]
     if model_config.output_calibration:
@@ -163,7 +169,6 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    custom_objects = _extend_custom_objects(custom_objects)
     model = super(CalibratedLatticeEnsemble, cls).from_config(
         config, custom_objects=custom_objects)
     try:
@@ -279,7 +284,6 @@ class CalibratedLattice(tf.keras.Model):
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    custom_objects = _extend_custom_objects(custom_objects)
     model = super(CalibratedLattice, cls).from_config(
         config, custom_objects=custom_objects)
     try:
@@ -363,8 +367,7 @@ class CalibratedLinear(tf.keras.Model):
 
     weighted_average = (
         model_config.output_min is not None or
-        model_config.output_max is not None or
-        model_config.output_calibration)
+        model_config.output_max is not None or model_config.output_calibration)
     linear_output = premade_lib.build_linear_layer(
         linear_input=submodels_inputs[0],
         feature_configs=model_config.feature_configs,
@@ -399,7 +402,6 @@ class CalibratedLinear(tf.keras.Model):
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    custom_objects = _extend_custom_objects(custom_objects)
     model = super(CalibratedLinear, cls).from_config(
         config, custom_objects=custom_objects)
     try:
@@ -463,9 +465,7 @@ class AggregateFunction(tf.keras.Model):
     premade_lib.verify_config(model_config)
     # Get feature configs and construct model.
     input_layer = premade_lib.build_input_layer(
-        feature_configs=model_config.feature_configs,
-        dtype=dtype,
-        ragged=True)
+        feature_configs=model_config.feature_configs, dtype=dtype, ragged=True)
 
     # We need to construct middle_dimension calibrated_lattices for the
     # aggregation layer. Note that we cannot do this in premade_lib because
@@ -475,6 +475,7 @@ class AggregateFunction(tf.keras.Model):
     # aggregation.
     calibrated_lattice_config = configs.CalibratedLatticeConfig(
         feature_configs=model_config.feature_configs,
+        interpolation=model_config.aggregation_lattice_interpolation,
         regularizer_configs=model_config.regularizer_configs,
         output_min=-1.0,
         output_max=1.0,
@@ -487,8 +488,14 @@ class AggregateFunction(tf.keras.Model):
         premade_lib.LayerOutputRange.INPUT_TO_FINAL_CALIBRATION
         if model_config.output_calibration else
         premade_lib.LayerOutputRange.MODEL_OUTPUT)
+    # Change input layer into a list based on model_config.feature_configs.
+    # This is the order of inputs expected by calibrated_lattice_models.
+    inputs = [
+        input_layer[feature_config.name]
+        for feature_config in model_config.feature_configs
+    ]
     aggregation_output = premade_lib.build_aggregation_layer(
-        aggregation_input_layer=input_layer,
+        aggregation_input_layer=inputs,
         model_config=model_config,
         calibrated_lattice_models=calibrated_lattice_models,
         layer_output_range=aggregation_layer_output_range,
@@ -504,12 +511,9 @@ class AggregateFunction(tf.keras.Model):
       model_output = aggregation_output
 
     # Define inputs and initialize model.
-    inputs = [
-        input_layer[feature_config.name]
-        for feature_config in model_config.feature_configs
-    ]
-    super(AggregateFunction, self).__init__(
-        inputs=inputs, outputs=model_output)
+    kwargs['inputs'] = inputs
+    kwargs['outputs'] = model_output
+    super(AggregateFunction, self).__init__(**kwargs)
 
   def get_config(self):
     """Returns a configuration dictionary."""
@@ -520,7 +524,6 @@ class AggregateFunction(tf.keras.Model):
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    custom_objects = _extend_custom_objects(custom_objects)
     model = super(AggregateFunction, cls).from_config(
         config, custom_objects=custom_objects)
     try:
@@ -535,8 +538,17 @@ class AggregateFunction(tf.keras.Model):
     return model
 
 
-def _extend_custom_objects(custom_objects):
-  """Extends the given custom_objects mapping with TFL objects."""
+def get_custom_objects(custom_objects=None):
+  """Creates and returns a dictionary mapping names to custom objects.
+
+  Args:
+    custom_objects: Optional dictionary mapping names (strings) to custom
+      classes or functions to be considered during deserialization. If provided,
+      the returned mapping will be extended to contain this one.
+
+  Returns:
+    A dictionary mapping names (strings) to tensorflow lattice custom objects.
+  """
   tfl_custom_objects = {
       'AggregateFunction':
           AggregateFunction,

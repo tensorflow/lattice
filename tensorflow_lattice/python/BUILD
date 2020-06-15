@@ -33,6 +33,18 @@ py_library(
 )
 
 py_library(
+    name = "pwl_calibration_sonnet_module",
+    srcs = ["pwl_calibration_sonnet_module.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":pwl_calibration_lib",
+        # absl/logging dep,
+        # sonnet dep,
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_library(
     name = "pwl_calibration_lib",
     srcs = ["pwl_calibration_lib.py"],
     srcs_version = "PY2AND3",
@@ -52,10 +64,12 @@ py_test(
     deps = [
         ":parallel_combination_layer",
         ":pwl_calibration_layer",
+        ":pwl_calibration_sonnet_module",
         ":test_utils",
         # absl/logging dep,
         # absl/testing:parameterized dep,
         # numpy dep,
+        # sonnet dep,
         # tensorflow dep,
     ],
 )
@@ -287,6 +301,8 @@ py_library(
         ":visualization",
         # absl/logging dep,
         # numpy dep,
+        # sonnet dep,
+        # tensorflow dep,
     ],
 )
 
@@ -377,7 +393,7 @@ py_library(
 
 py_test(
     name = "premade_test",
-    size = "enormous",
+    size = "large",
     srcs = ["premade_test.py"],
     python_version = "PY3",
     # shard_count = 10,

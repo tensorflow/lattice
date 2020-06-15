@@ -20,6 +20,7 @@ from __future__ import print_function
 import copy
 import json
 
+import tempfile
 from absl import logging
 import numpy as np
 import pandas as pd
@@ -27,6 +28,13 @@ import tensorflow as tf
 from tensorflow_lattice.python import configs
 from tensorflow_lattice.python import premade
 from tensorflow_lattice.python import premade_lib
+
+
+fake_data = {
+    'train_xs': [np.array([1]), np.array([3]), np.array([0])],
+    'train_ys': np.array([1]),
+    'eval_xs': [np.array([2]), np.array([30]), np.array([-3])]
+}
 
 unspecified_feature_configs = [
     configs.FeatureConfig(
@@ -403,7 +411,7 @@ class PremadeTest(tf.test.TestCase):
         output_initialization=[-1.0, 1.0])
     model = premade.CalibratedLatticeEnsemble(model_config)
     loaded_model = premade.CalibratedLatticeEnsemble.from_config(
-        model.get_config())
+        model.get_config(), custom_objects=premade.get_custom_objects())
     self.assertEqual(
         json.dumps(model.get_config(), sort_keys=True, cls=self.Encoder),
         json.dumps(loaded_model.get_config(), sort_keys=True, cls=self.Encoder))
@@ -421,7 +429,28 @@ class PremadeTest(tf.test.TestCase):
         output_calibration_num_keypoints=6,
         output_initialization=[0.0, 1.0])
     model = premade.CalibratedLattice(model_config)
-    loaded_model = premade.CalibratedLattice.from_config(model.get_config())
+    loaded_model = premade.CalibratedLattice.from_config(
+        model.get_config(), custom_objects=premade.get_custom_objects())
+    self.assertEqual(
+        json.dumps(model.get_config(), sort_keys=True, cls=self.Encoder),
+        json.dumps(loaded_model.get_config(), sort_keys=True, cls=self.Encoder))
+
+  def testLatticeSimplexFromConfig(self):
+    model_config = configs.CalibratedLatticeConfig(
+        feature_configs=copy.deepcopy(feature_configs),
+        regularizer_configs=[
+            configs.RegularizerConfig('calib_wrinkle', l2=1e-3),
+            configs.RegularizerConfig('torsion', l2=1e-3),
+        ],
+        output_min=0.0,
+        output_max=1.0,
+        interpolation='simplex',
+        output_calibration=True,
+        output_calibration_num_keypoints=6,
+        output_initialization=[0.0, 1.0])
+    model = premade.CalibratedLattice(model_config)
+    loaded_model = premade.CalibratedLattice.from_config(
+        model.get_config(), custom_objects=premade.get_custom_objects())
     self.assertEqual(
         json.dumps(model.get_config(), sort_keys=True, cls=self.Encoder),
         json.dumps(loaded_model.get_config(), sort_keys=True, cls=self.Encoder))
@@ -440,7 +469,8 @@ class PremadeTest(tf.test.TestCase):
         output_calibration_num_keypoints=6,
         output_initialization=[0.0, 1.0])
     model = premade.CalibratedLinear(model_config)
-    loaded_model = premade.CalibratedLinear.from_config(model.get_config())
+    loaded_model = premade.CalibratedLinear.from_config(
+        model.get_config(), custom_objects=premade.get_custom_objects())
     self.assertEqual(
         json.dumps(model.get_config(), sort_keys=True, cls=self.Encoder),
         json.dumps(loaded_model.get_config(), sort_keys=True, cls=self.Encoder))
@@ -460,7 +490,8 @@ class PremadeTest(tf.test.TestCase):
         output_calibration_num_keypoints=8,
         output_initialization=[0.0, 1.0])
     model = premade.AggregateFunction(model_config)
-    loaded_model = premade.AggregateFunction.from_config(model.get_config())
+    loaded_model = premade.AggregateFunction.from_config(
+        model.get_config(), custom_objects=premade.get_custom_objects())
     self.assertEqual(
         json.dumps(model.get_config(), sort_keys=True, cls=self.Encoder),
         json.dumps(loaded_model.get_config(), sort_keys=True, cls=self.Encoder))
@@ -517,6 +548,118 @@ class PremadeTest(tf.test.TestCase):
     logging.info('Calibrated lattice ensemble classifier results:')
     logging.info(results)
     self.assertGreater(results[1], 0.85)
+
+  def testLatticeEnsembleH5FormatSaveLoad(self):
+    model_config = configs.CalibratedLatticeEnsembleConfig(
+        feature_configs=copy.deepcopy(feature_configs),
+        lattices=[['numerical_1', 'categorical'],
+                  ['numerical_2', 'categorical']],
+        num_lattices=2,
+        lattice_rank=2,
+        separate_calibrators=True,
+        regularizer_configs=[
+            configs.RegularizerConfig('calib_hessian', l2=1e-3),
+            configs.RegularizerConfig('torsion', l2=1e-4),
+        ],
+        output_min=-1.0,
+        output_max=1.0,
+        output_calibration=True,
+        output_calibration_num_keypoints=5,
+        output_initialization=[-1.0, 1.0])
+    model = premade.CalibratedLatticeEnsemble(model_config)
+    # Compile and fit model.
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.fit(fake_data['train_xs'], fake_data['train_ys'])
+    # Save model using H5 format.
+    with tempfile.NamedTemporaryFile(suffix='.h5') as f:
+      tf.keras.models.save_model(model, f.name)
+      loaded_model = tf.keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects())
+      self.assertAllClose(
+          model.predict(fake_data['eval_xs']),
+          loaded_model.predict(fake_data['eval_xs']))
+
+  def testLatticeH5FormatSaveLoad(self):
+    model_config = configs.CalibratedLatticeConfig(
+        feature_configs=copy.deepcopy(feature_configs),
+        regularizer_configs=[
+            configs.RegularizerConfig('calib_wrinkle', l2=1e-3),
+            configs.RegularizerConfig('torsion', l2=1e-3),
+        ],
+        output_min=0.0,
+        output_max=1.0,
+        output_calibration=True,
+        output_calibration_num_keypoints=6,
+        output_initialization=[0.0, 1.0])
+    model = premade.CalibratedLattice(model_config)
+    # Compile and fit model.
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.fit(fake_data['train_xs'], fake_data['train_ys'])
+    # Save model using H5 format.
+    with tempfile.NamedTemporaryFile(suffix='.h5') as f:
+      tf.keras.models.save_model(model, f.name)
+      loaded_model = tf.keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects())
+      self.assertAllClose(
+          model.predict(fake_data['eval_xs']),
+          loaded_model.predict(fake_data['eval_xs']))
+
+  def testLinearH5FormatSaveLoad(self):
+    model_config = configs.CalibratedLinearConfig(
+        feature_configs=copy.deepcopy(feature_configs),
+        regularizer_configs=[
+            configs.RegularizerConfig('calib_hessian', l2=1e-4),
+            configs.RegularizerConfig('torsion', l2=1e-3),
+        ],
+        use_bias=True,
+        output_min=0.0,
+        output_max=1.0,
+        output_calibration=True,
+        output_calibration_num_keypoints=6,
+        output_initialization=[0.0, 1.0])
+    model = premade.CalibratedLinear(model_config)
+    # Compile and fit model.
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.fit(fake_data['train_xs'], fake_data['train_ys'])
+    # Save model using H5 format.
+    with tempfile.NamedTemporaryFile(suffix='.h5') as f:
+      tf.keras.models.save_model(model, f.name)
+      loaded_model = tf.keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects())
+      self.assertAllClose(
+          model.predict(fake_data['eval_xs']),
+          loaded_model.predict(fake_data['eval_xs']))
+
+  def testAggregateH5FormatSaveLoad(self):
+    model_config = configs.AggregateFunctionConfig(
+        feature_configs=feature_configs,
+        regularizer_configs=[
+            configs.RegularizerConfig('calib_hessian', l2=1e-4),
+            configs.RegularizerConfig('torsion', l2=1e-3),
+        ],
+        middle_calibration=True,
+        middle_monotonicity='increasing',
+        output_min=0.0,
+        output_max=1.0,
+        output_calibration=True,
+        output_calibration_num_keypoints=8,
+        output_initialization=[0.0, 1.0])
+    model = premade.AggregateFunction(model_config)
+    # Compile and fit model.
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.fit(fake_data['train_xs'], fake_data['train_ys'])
+    # Save model using H5 format.
+    with tempfile.NamedTemporaryFile(suffix='.h5') as f:
+      # Note: because of naming clashes in the optimizer, we cannot include it
+      # when saving in HDF5. The keras team has informed us that we should not
+      # push to support this since SavedModel format is the new default and no
+      # new HDF5 functionality is desired.
+      tf.keras.models.save_model(model, f.name, include_optimizer=False)
+      loaded_model = tf.keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects())
+      self.assertAllClose(
+          model.predict(fake_data['eval_xs']),
+          loaded_model.predict(fake_data['eval_xs']))
 
 
 if __name__ == '__main__':

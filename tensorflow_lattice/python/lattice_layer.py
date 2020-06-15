@@ -164,7 +164,8 @@ class Lattice(keras.layers.Layer):
                num_projection_iterations=10,
                monotonic_at_every_step=True,
                clip_inputs=True,
-               kernel_initializer="linear_initializer",
+               interpolation="hypercube",
+               kernel_initializer="random_uniform_or_linear_initializer",
                kernel_regularizer=None,
                **kwargs):
     # pyformat: disable
@@ -230,6 +231,11 @@ class Lattice(keras.layers.Layer):
         num_projection_iterations parameter is likely to hurt convergence.
       clip_inputs: If inputs should be clipped to the input range of the
         lattice.
+      interpolation: One of 'hypercube' or 'simplex' interpolation. For a
+        d-dimensional lattice, 'hypercube' interpolates 2^d parameters, whereas
+        'simplex' uses d+1 parameters and thus scales better. For details see
+        `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
+        `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
       kernel_initializer: None or one of:
         - `'linear_initializer'`: initialize parameters to form a linear
           function with positive and equal coefficients for monotonic dimensions
@@ -244,6 +250,10 @@ class Lattice(keras.layers.Layer):
           `[output_min, output_max]`. See
           `tfl.lattice_layer.RandomMonotonicInitializer` class docstring for
           more details.
+        - `random_uniform_or_linear_initializer`: if the lattice has a single
+          joint unimodality constraint group encompassing all features then use
+          the Keras 'random_uniform' initializer; otherwise, use TFL's
+          'linear_initializer'.
         - Any Keras initializer object.
       kernel_regularizer: None or a single element or a list of following:
         - Tuple `('torsion', l1, l2)` where l1 and l2 represent corresponding
@@ -264,7 +274,8 @@ class Lattice(keras.layers.Layer):
     lattice_lib.verify_hyperparameters(
         lattice_sizes=lattice_sizes,
         monotonicities=monotonicities,
-        unimodalities=unimodalities)
+        unimodalities=unimodalities,
+        interpolation=interpolation)
     super(Lattice, self).__init__(**kwargs)
 
     self.lattice_sizes = lattice_sizes
@@ -308,61 +319,16 @@ class Lattice(keras.layers.Layer):
     self.num_projection_iterations = num_projection_iterations
     self.monotonic_at_every_step = monotonic_at_every_step
     self.clip_inputs = clip_inputs
+    self.interpolation = interpolation
 
-    def default_params(output_min, output_max):
-      """Return reasonable default parameters if not defined explicitly."""
-      if output_min is not None:
-        output_init_min = output_min
-      elif output_max is not None:
-        output_init_min = min(0.0, output_max)
-      else:
-        output_init_min = 0.0
-      if output_max is not None:
-        output_init_max = output_max
-      elif output_min is not None:
-        output_init_max = max(1.0, output_min)
-      else:
-        output_init_max = 1.0
-      # Return our min and max.
-      return output_init_min, output_init_max
-
-    # Initialize joint unimodalities identical to regular ones.
-    all_unimodalities = [0] * len(lattice_sizes)
-    if self.unimodalities:
-      for i, value in enumerate(self.unimodalities):
-        if value:
-          all_unimodalities[i] = value
-    if self.joint_unimodalities:
-      for dimensions, direction in self.joint_unimodalities:
-        for dim in dimensions:
-          all_unimodalities[dim] = direction
-
-    if kernel_initializer in ["linear_initializer", "LinearInitializer"]:
-      output_init_min, output_init_max = default_params(output_min, output_max)
-
-      self.kernel_initializer = LinearInitializer(
-          lattice_sizes=lattice_sizes,
-          monotonicities=monotonicities,
-          output_min=output_init_min,
-          output_max=output_init_max,
-          unimodalities=all_unimodalities)
-    elif kernel_initializer in ["random_monotonic_initializer",
-                                "RandomMonotonicInitializer"]:
-      output_init_min, output_init_max = default_params(output_min, output_max)
-
-      self.kernel_initializer = RandomMonotonicInitializer(
-          lattice_sizes=lattice_sizes,
-          output_min=output_init_min,
-          output_max=output_init_max,
-          unimodalities=all_unimodalities)
-    else:
-      # This is needed for Keras deserialization logic to be aware of our custom
-      # objects.
-      with keras.utils.custom_object_scope({
-          "LinearInitializer": LinearInitializer,
-          "RandomMonotonicInitializer": RandomMonotonicInitializer,
-      }):
-        self.kernel_initializer = keras.initializers.get(kernel_initializer)
+    self.kernel_initializer = create_kernel_initializer(
+        kernel_initializer,
+        self.lattice_sizes,
+        self.monotonicities,
+        self.output_min,
+        self.output_max,
+        self.unimodalities,
+        self.joint_unimodalities)
 
     self.kernel_regularizer = []
     if kernel_regularizer:
@@ -468,25 +434,27 @@ class Lattice(keras.layers.Layer):
 
   def call(self, inputs):
     """Standard Keras call() method."""
-    interpolation_weights = lattice_lib.compute_interpolation_weights(
-        inputs=inputs,
-        lattice_sizes=self.lattice_sizes,
-        clip_inputs=self.clip_inputs)
-
     # Use control dependencies to save lattice sizes as graph constant for
     # visualisation toolbox to be able to recove it from saved graph.
     # Wrap this constant into pure op since in TF 2.0 there are issues passing
     # tensors into control_dependencies.
     with tf.control_dependencies([tf.identity(self.lattice_sizes_tensor)]):
-      if self.units == 1:
-        # Weights shape: (batch-size, ..., prod(lattice_sizes))
-        # Kernel shape:  (prod(lattice_sizes), 1)
-        return tf.matmul(interpolation_weights, self.kernel)
+      if self.interpolation == "simplex":
+        return lattice_lib.evaluate_with_simplex_interpolation(
+            inputs=inputs,
+            kernel=self.kernel,
+            units=self.units,
+            lattice_sizes=self.lattice_sizes,
+            clip_inputs=self.clip_inputs)
+      elif self.interpolation == "hypercube":
+        return lattice_lib.evaluate_with_hypercube_interpolation(
+            inputs=inputs,
+            kernel=self.kernel,
+            units=self.units,
+            lattice_sizes=self.lattice_sizes,
+            clip_inputs=self.clip_inputs)
       else:
-        # Weights shape: (batch-size, ..., units, prod(lattice_sizes))
-        # Kernel shape:  (prod(lattice_sizes), units)
-        return tf.reduce_sum(
-            interpolation_weights * tf.transpose(self.kernel), axis=-1)
+        raise ValueError("Unknown interpolation type: %s" % self.interpolation)
 
   def compute_output_shape(self, input_shape):
     """Standard Keras compute_output_shape() method."""
@@ -516,6 +484,7 @@ class Lattice(keras.layers.Layer):
         "num_projection_iterations": self.num_projection_iterations,
         "monotonic_at_every_step": self.monotonic_at_every_step,
         "clip_inputs": self.clip_inputs,
+        "interpolation": self.interpolation,
         "kernel_initializer":
             keras.initializers.serialize(self.kernel_initializer),
         "kernel_regularizer":
@@ -542,13 +511,13 @@ class Lattice(keras.layers.Layer):
     """Asserts that weights satisfy all constraints.
 
     In graph mode builds and returns list of assertion ops.
-    In eager mode directly executes assetions.
+    In eager mode directly executes assertions.
 
     Args:
       eps: allowed constraints violation.
 
     Returns:
-      List of assertion ops in graph mode or immideately asserts in eager mode.
+      List of assertion ops in graph mode or immediately asserts in eager mode.
     """
     return lattice_lib.assert_constraints(
         weights=self.kernel,
@@ -564,6 +533,118 @@ class Lattice(keras.layers.Layer):
         output_min=self.output_min,
         output_max=self.output_max,
         eps=eps)
+
+
+def create_kernel_initializer(
+    kernel_initializer_id,
+    lattice_sizes,
+    monotonicities,
+    output_min,
+    output_max,
+    unimodalities,
+    joint_unimodalities):
+  """Returns a kernel Keras initializer object from its id.
+
+  This function is used to convert the 'kernel_initializer' parameter in the
+  constructor of tfl.Lattice into the corresponding initializer object.
+
+  Args:
+    kernel_initializer_id: See the documentation of the 'kernel_initializer'
+        parameter in the constructor of tfl.Lattice.
+    lattice_sizes: See the documentation of the same parameter in the
+        constructor of tfl.Lattice.
+    monotonicities: See the documentation of the same parameter in the
+        constructor of tfl.Lattice.
+    output_min: See the documentation of the same parameter in the
+        constructor of tfl.Lattice.
+    output_max: See the documentation of the same parameter in the
+        constructor of tfl.Lattice.
+    unimodalities: See the documentation of the same parameter in the
+        constructor of tfl.Lattice.
+    joint_unimodalities: See the documentation of the same parameter in the
+        constructor of tfl.Lattice.
+  Returns:
+    The Keras initializer object for the tfl.Lattice kernel variable.
+  """
+  def default_params(output_min, output_max):
+    """Return reasonable default parameters if not defined explicitly."""
+    if output_min is not None:
+      output_init_min = output_min
+    elif output_max is not None:
+      output_init_min = min(0.0, output_max)
+    else:
+      output_init_min = 0.0
+
+    if output_max is not None:
+      output_init_max = output_max
+    elif output_min is not None:
+      output_init_max = max(1.0, output_min)
+    else:
+      output_init_max = 1.0
+
+    # Return our min and max.
+    return output_init_min, output_init_max
+
+  def do_joint_unimodalities_contain_all_features(joint_unimodalities):
+    if (joint_unimodalities is None) or (len(joint_unimodalities) != 1):
+      return False
+    [joint_unimodalities] = joint_unimodalities
+    return set(joint_unimodalities[0]) == set(range(len(lattice_sizes)))
+
+  # Initialize joint unimodalities identical to regular ones.
+  all_unimodalities = [0] * len(lattice_sizes)
+  if unimodalities:
+    for i, value in enumerate(unimodalities):
+      if value:
+        all_unimodalities[i] = value
+  if joint_unimodalities:
+    for dimensions, direction in joint_unimodalities:
+      for dim in dimensions:
+        all_unimodalities[dim] = direction
+
+  if kernel_initializer_id in ["linear_initializer", "LinearInitializer"]:
+    output_init_min, output_init_max = default_params(output_min, output_max)
+
+    return LinearInitializer(
+        lattice_sizes=lattice_sizes,
+        monotonicities=monotonicities,
+        output_min=output_init_min,
+        output_max=output_init_max,
+        unimodalities=all_unimodalities)
+  elif kernel_initializer_id in ["random_monotonic_initializer",
+                                 "RandomMonotonicInitializer"]:
+    output_init_min, output_init_max = default_params(output_min, output_max)
+
+    return RandomMonotonicInitializer(
+        lattice_sizes=lattice_sizes,
+        output_min=output_init_min,
+        output_max=output_init_max,
+        unimodalities=all_unimodalities)
+  elif kernel_initializer_id in ["random_uniform_or_linear_initializer",
+                                 "RandomUniformOrLinearInitializer"]:
+    if do_joint_unimodalities_contain_all_features(joint_unimodalities):
+      return create_kernel_initializer("random_uniform",
+                                       lattice_sizes,
+                                       monotonicities,
+                                       output_min,
+                                       output_max,
+                                       unimodalities,
+                                       joint_unimodalities)
+    return create_kernel_initializer("linear_initializer",
+                                     lattice_sizes,
+                                     monotonicities,
+                                     output_min,
+                                     output_max,
+                                     unimodalities,
+                                     joint_unimodalities)
+  else:
+    # This is needed for Keras deserialization logic to be aware of our custom
+    # objects.
+    with keras.utils.custom_object_scope({
+        "LinearInitializer": LinearInitializer,
+        "RandomMonotonicInitializer": RandomMonotonicInitializer,
+    }):
+      return keras.initializers.get(kernel_initializer_id)
 
 
 class LinearInitializer(keras.initializers.Initializer):

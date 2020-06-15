@@ -305,13 +305,13 @@ class Linear(keras.layers.Layer):
     """Asserts that weights satisfy all constraints.
 
     In graph mode builds and returns list of assertion ops.
-    In eager mode directly executes assetions.
+    In eager mode directly executes assertions.
 
     Args:
       eps: Allowed constraints violation.
 
     Returns:
-      List of assertion ops in graph mode or immideately asserts in eager mode.
+      List of assertion ops in graph mode or immediately asserts in eager mode.
     """
     return linear_lib.assert_constraints(
         weights=self.kernel,

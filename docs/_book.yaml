@@ -18,18 +18,20 @@ upper_tabs:
       - title: Install
         path: /lattice/install
       - heading: Tutorials
-      - title: Shape constraints
+      - title: Shape Constraints
         path: /lattice/tutorials/shape_constraints
-      - title: Ethical constraints for ML fairness
+      - title: Ethical Constraints for ML Fairness
         path: /lattice/tutorials/shape_constraints_for_ethics
-      - title: Keras layers
+      - title: Keras Layers and Custom Models
         path: /lattice/tutorials/keras_layers
-      - title: Keras premade models
+      - title: Keras Premade Models
         path: /lattice/tutorials/premade_models
       - title: Canned Estimators
         path: /lattice/tutorials/canned_estimators
       - title: Custom Estimators
         path: /lattice/tutorials/custom_estimators
+      - title: Aggregate Function Models
+        path: /lattice/tutorials/aggregate_function_models
 
     - name: API
       skip_translation: true
