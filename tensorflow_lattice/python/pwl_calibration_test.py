@@ -33,9 +33,10 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow_lattice.python import parallel_combination_layer as parallel_combination
 from tensorflow_lattice.python import pwl_calibration_layer as keras_layer
-from tensorflow_lattice.python import pwl_calibration_sonnet_module as sonnet_module
 from tensorflow_lattice.python import pwl_calibration_lib as pwl_lib
+from tensorflow_lattice.python import pwl_calibration_sonnet_module as sonnet_module
 from tensorflow_lattice.python import test_utils
+from tensorflow_lattice.python import utils
 
 
 class CalibrateWithSeparateMissing(tf.keras.layers.Layer):
@@ -51,8 +52,8 @@ class CalibrateWithSeparateMissing(tf.keras.layers.Layer):
     self.missing_input_value = missing_input_value
 
   def call(self, x):
-    is_missing = tf.cast(tf.equal(x, self.missing_input_value),
-                         dtype=tf.float32)
+    is_missing = tf.cast(
+        tf.equal(x, self.missing_input_value), dtype=tf.float32)
     return self.calibration_layer([x, is_missing])
 
 
@@ -156,10 +157,12 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       # If "input_keypoints" are provided - other params referred by code below
       # might be not available, so we make sure it exists before executing
       # this code.
-      config.setdefault("input_keypoints",
-                        np.linspace(start=config["input_min"],
-                                    stop=config["input_max"],
-                                    num=config["num_keypoints"]))
+      config.setdefault(
+          "input_keypoints",
+          np.linspace(
+              start=config["input_min"],
+              stop=config["input_max"],
+              num=config["num_keypoints"]))
     return config
 
   def _TrainModel(self, config, plot_path=None):
@@ -229,17 +232,19 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
               num_projection_iterations=config["num_projection_iterations"]))
     if len(calibration_layers) == 1:
       if config["use_separate_missing"]:
-        model.add(CalibrateWithSeparateMissing(
-            calibration_layer=calibration_layers[0],
-            missing_input_value=config["missing_input_value"]))
+        model.add(
+            CalibrateWithSeparateMissing(
+                calibration_layer=calibration_layers[0],
+                missing_input_value=config["missing_input_value"]))
       else:
         model.add(calibration_layers[0])
     else:
       model.add(parallel_combination.ParallelCombination(calibration_layers))
 
     if config["units"] > 1:
-      model.add(keras.layers.Lambda(
-          lambda x: tf.reduce_mean(x, axis=1, keepdims=True)))
+      model.add(
+          keras.layers.Lambda(
+              lambda x: tf.reduce_mean(x, axis=1, keepdims=True)))
 
     model.compile(
         loss=keras.losses.mean_squared_error,
@@ -278,9 +283,9 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
 
     inversed_config["clamp_min"] = config["clamp_max"]
     inversed_config["clamp_max"] = config["clamp_min"]
-    inversed_config["monotonicity"] = -pwl_lib.canonicalize_monotonicity(
+    inversed_config["monotonicity"] = -utils.canonicalize_monotonicity(
         config["monotonicity"])
-    inversed_config["convexity"] = -pwl_lib.canonicalize_convexity(
+    inversed_config["convexity"] = -utils.canonicalize_convexity(
         config["convexity"])
     inversed_loss = self._TrainModel(inversed_config)
     return inversed_loss
@@ -304,7 +309,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       # We use 'config["missing_input_value"]' to create the is_missing tensor,
       # and we want the model to use the is_missing tensor so we don't pass
       # a missing_input_value to the model.
-      missing_input_value=None
+      missing_input_value = None
     return keras_layer.PWLCalibration(
         input_keypoints=config["input_keypoints"],
         units=config["units"],
@@ -329,7 +334,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       # We use 'config["missing_input_value"]' to create the is_missing tensor,
       # and we want the model to use the is_missing tensor so we don't pass
       # a missing_input_value to the model.
-      missing_input_value=None
+      missing_input_value = None
     return sonnet_module.PWLCalibration(
         input_keypoints=config["input_keypoints"],
         units=config["units"],
@@ -1111,14 +1116,14 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.parameters(
       (1, "increasing", None, 0.055837),
       (1, "decreasing", None, 0.046657),
-      (1, "none",       0.0,  0.027777),
-      (1, "increasing", 0.0,  0.065516),
-      (1, "decreasing", 0.0,  0.057453),
+      (1, "none", 0.0, 0.027777),
+      (1, "increasing", 0.0, 0.065516),
+      (1, "decreasing", 0.0, 0.057453),
       (3, "increasing", None, 0.022467),
       (3, "decreasing", None, 0.019012),
-      (3, "none",       0.0,  0.014693),
-      (3, "increasing", 0.0,  0.026284),
-      (3, "decreasing", 0.0,  0.025498),
+      (3, "none", 0.0, 0.014693),
+      (3, "increasing", 0.0, 0.026284),
+      (3, "decreasing", 0.0, 0.025498),
   )
   def testConvexityWithMonotonicityAndBounds(self, units, monotonicity,
                                              output_max, expected_loss):

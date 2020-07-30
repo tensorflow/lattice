@@ -29,15 +29,20 @@ import collections
 import itertools
 
 from . import lattice_layer
+from . import rtl_lib
 
 from absl import logging
 import numpy as np
+import six
 import tensorflow as tf
 from tensorflow import keras
 
 _MAX_RTL_SWAPS = 10000
 _RTLInput = collections.namedtuple('_RTLInput',
                                    ['monotonicity', 'group', 'input_index'])
+RTL_LATTICE_NAME = 'rtl_lattice'
+INPUTS_FOR_UNITS_PREFIX = 'inputs_for_lattice'
+RTL_CONCAT_NAME = 'rtl_concat'
 
 
 class RTL(keras.layers.Layer):
@@ -180,19 +185,28 @@ class RTL(keras.layers.Layer):
           `tfl.lattice_layer.RandomMonotonicInitializer` class docstring for
           more details.
       kernel_regularizer: None or a single element or a list of following:
-        - Tuple `('torsion', l1, l2)` where l1 and l2 represent corresponding
-          regularization amount for graph Torsion regularizer. l1 and l2 can
-          either be single floats or lists of floats to specify different
-          regularization amount for every dimension.
-        - Tuple `('laplacian', l1, l2)` where l1 and l2 represent corresponding
-          regularization amount for graph Laplacian regularizer. l1 and l2 can
-          either be single floats or lists of floats to specify different
-          regularization amount for every dimension.
+        - Tuple `('torsion', l1, l2)` or List `['torsion', l1, l2]` where l1 and
+          l2 represent corresponding regularization amount for graph Torsion
+          regularizer. l1 and l2 must be single floats. Lists of floats to
+          specify different regularization amount for every dimension is not
+          currently supported.
+        - Tuple `('laplacian', l1, l2)` or List `['laplacian', l1, l2]` where l1
+          and l2 represent corresponding regularization amount for graph
+          Laplacian regularizer. l1 and l2 must be single floats. Lists of
+          floats to specify different regularization amount for every dimension
+          is not currently supported.
       **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
 
     Raises:
       ValueError: If layer hyperparameters are invalid.
     """
+    # pyformat: enable
+    rtl_lib.verify_hyperparameters(
+        lattice_size=lattice_size,
+        output_min=output_min,
+        output_max=output_max,
+        kernel_regularizer=kernel_regularizer,
+        interpolation=interpolation)
     super(RTL, self).__init__(**kwargs)
     self.num_lattices = num_lattices
     self.lattice_rank = lattice_rank
@@ -211,24 +225,48 @@ class RTL(keras.layers.Layer):
 
   def build(self, input_shape):
     """Standard Keras build() method."""
+    rtl_lib.verify_hyperparameters(
+        lattice_size=self.lattice_size, input_shape=input_shape)
+    # Convert kernel regularizers to proper form (tuples).
+    kernel_regularizer = self.kernel_regularizer
+    if isinstance(self.kernel_regularizer, list):
+      if isinstance(self.kernel_regularizer[0], six.string_types):
+        kernel_regularizer = tuple(self.kernel_regularizer)
+      else:
+        kernel_regularizer = [tuple(r) for r in self.kernel_regularizer]
     self._rtl_structure = self._get_rtl_structure(input_shape)
     # dict from monotonicities to the lattice layers with those monotonicities.
     self._lattice_layers = {}
     for monotonicities, inputs_for_units in self._rtl_structure:
-      units = len(inputs_for_units)
-      self._lattice_layers[str(monotonicities)] = lattice_layer.Lattice(
-          lattice_sizes=[self.lattice_size] * self.lattice_rank,
-          units=units,
-          monotonicities=monotonicities,
-          output_min=self.output_min,
-          output_max=self.output_max,
-          num_projection_iterations=self.num_projection_iterations,
-          monotonic_at_every_step=self.monotonic_at_every_step,
-          clip_inputs=self.clip_inputs,
-          interpolation=self.interpolation,
-          kernel_initializer=self.kernel_initializer,
-          kernel_regularizer=self.kernel_regularizer,
-      )
+      monotonicities_str = ''.join(
+          [str(monotonicity) for monotonicity in monotonicities])
+      # Passthrough names for reconstructing model graph.
+      inputs_for_units_name = '{}_{}'.format(INPUTS_FOR_UNITS_PREFIX,
+                                             monotonicities_str)
+      # Use control dependencies to save inputs_for_units as graph constant for
+      # visualisation toolbox to be able to recover it from saved graph.
+      # Wrap this constant into pure op since in TF 2.0 there are issues passing
+      # tensors into control_dependencies.
+      with tf.control_dependencies([
+          tf.constant(
+              inputs_for_units, dtype=tf.int32, name=inputs_for_units_name)
+      ]):
+        units = len(inputs_for_units)
+        layer_name = '{}_{}'.format(RTL_LATTICE_NAME, monotonicities_str)
+        self._lattice_layers[str(monotonicities)] = lattice_layer.Lattice(
+            lattice_sizes=[self.lattice_size] * self.lattice_rank,
+            units=units,
+            monotonicities=monotonicities,
+            output_min=self.output_min,
+            output_max=self.output_max,
+            num_projection_iterations=self.num_projection_iterations,
+            monotonic_at_every_step=self.monotonic_at_every_step,
+            clip_inputs=self.clip_inputs,
+            interpolation=self.interpolation,
+            kernel_initializer=self.kernel_initializer,
+            kernel_regularizer=kernel_regularizer,
+            name=layer_name,
+        )
     super(RTL, self).build(input_shape)
 
   def call(self, x, **kwargs):
@@ -248,7 +286,7 @@ class RTL(keras.layers.Layer):
     if len(input_tensors) == 1:
       flattened_input = input_tensors[0]
     else:
-      flattened_input = tf.concat(input_tensors, axis=1)
+      flattened_input = tf.concat(input_tensors, axis=1, name=RTL_CONCAT_NAME)
 
     # outputs_for_monotonicity[0] are non-monotonic outputs
     # outputs_for_monotonicity[1] are monotonic outputs
@@ -393,8 +431,11 @@ class RTL(keras.layers.Layer):
 
       for shape in shapes:
         for _ in range(shape[1]):
-          rtl_inputs.append(_RTLInput(
-              monotonicity=monotonicity, group=group, input_index=input_index))
+          rtl_inputs.append(
+              _RTLInput(
+                  monotonicity=monotonicity,
+                  group=group,
+                  input_index=input_index))
           input_index += 1
         group += 1
 

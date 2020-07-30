@@ -37,6 +37,8 @@ py_library(
         "//tensorflow_lattice/python:categorical_calibration_lib",
         "//tensorflow_lattice/python:configs",
         "//tensorflow_lattice/python:estimators",
+        "//tensorflow_lattice/python:kronecker_factored_lattice_layer",
+        "//tensorflow_lattice/python:kronecker_factored_lattice_lib",
         "//tensorflow_lattice/python:lattice_layer",
         "//tensorflow_lattice/python:lattice_lib",
         "//tensorflow_lattice/python:linear_layer",
@@ -50,6 +52,7 @@ py_library(
         "//tensorflow_lattice/python:pwl_calibration_sonnet_module",
         "//tensorflow_lattice/python:rtl_layer",
         "//tensorflow_lattice/python:test_utils",
+        "//tensorflow_lattice/python:utils",
         "//tensorflow_lattice/python:visualization",
     ],
 )

@@ -265,7 +265,7 @@ def main(_):
       estimator.export_saved_model(estimator.model_dir, serving_input_fn)))
 
   # This is random lattice ensemble model with separate calibration:
-  # model output is the average output of separatly calibrated lattices.
+  # model output is the average output of separately calibrated lattices.
   model_config = configs.CalibratedLatticeEnsembleConfig(
       feature_configs=feature_configs,
       num_lattices=6,
@@ -290,7 +290,7 @@ def main(_):
       estimator.export_saved_model(estimator.model_dir, serving_input_fn)))
 
   # This is Crystals ensemble model with separate calibration: model output is
-  # the average output of separatly calibrated lattices.
+  # the average output of separately calibrated lattices.
   # Crystals algorithm first trains a prefitting model and uses the interactions
   # between features to form the final lattice ensemble.
   model_config = configs.CalibratedLatticeEnsembleConfig(

@@ -23,6 +23,7 @@ from __future__ import division
 from __future__ import print_function
 
 from . import lattice_lib
+from . import utils
 import six
 import tensorflow as tf
 from tensorflow import keras
@@ -35,7 +36,7 @@ class Lattice(keras.layers.Layer):
   # pyformat: disable
   """Lattice layer.
 
-  Layer performs interpolation using one of `units` d-dimension lattices with
+  Layer performs interpolation using one of `units` d-dimensional lattices with
   arbitrary number of keypoints per dimension. There are trainable weights
   associated with lattice vertices. Input to this layer is considered to be a
   d-dimensional point within the lattice. If point coincides with one of the
@@ -322,12 +323,8 @@ class Lattice(keras.layers.Layer):
     self.interpolation = interpolation
 
     self.kernel_initializer = create_kernel_initializer(
-        kernel_initializer,
-        self.lattice_sizes,
-        self.monotonicities,
-        self.output_min,
-        self.output_max,
-        self.unimodalities,
+        kernel_initializer, self.lattice_sizes, self.monotonicities,
+        self.output_min, self.output_max, self.unimodalities,
         self.joint_unimodalities)
 
     self.kernel_regularizer = []
@@ -435,7 +432,7 @@ class Lattice(keras.layers.Layer):
   def call(self, inputs):
     """Standard Keras call() method."""
     # Use control dependencies to save lattice sizes as graph constant for
-    # visualisation toolbox to be able to recove it from saved graph.
+    # visualisation toolbox to be able to recover it from saved graph.
     # Wrap this constant into pure op since in TF 2.0 there are issues passing
     # tensors into control_dependencies.
     with tf.control_dependencies([tf.identity(self.lattice_sizes_tensor)]):
@@ -522,10 +519,10 @@ class Lattice(keras.layers.Layer):
     return lattice_lib.assert_constraints(
         weights=self.kernel,
         lattice_sizes=self.lattice_sizes,
-        monotonicities=lattice_lib.canonicalize_monotonicities(
-            self.monotonicities),
-        edgeworth_trusts=lattice_lib.canonicalize_trust(self.edgeworth_trusts),
-        trapezoid_trusts=lattice_lib.canonicalize_trust(self.trapezoid_trusts),
+        monotonicities=utils.canonicalize_monotonicities(
+            self.monotonicities, allow_decreasing=False),
+        edgeworth_trusts=utils.canonicalize_trust(self.edgeworth_trusts),
+        trapezoid_trusts=utils.canonicalize_trust(self.trapezoid_trusts),
         monotonic_dominances=self.monotonic_dominances,
         range_dominances=self.range_dominances,
         joint_monotonicities=self.joint_monotonicities,
@@ -535,14 +532,9 @@ class Lattice(keras.layers.Layer):
         eps=eps)
 
 
-def create_kernel_initializer(
-    kernel_initializer_id,
-    lattice_sizes,
-    monotonicities,
-    output_min,
-    output_max,
-    unimodalities,
-    joint_unimodalities):
+def create_kernel_initializer(kernel_initializer_id, lattice_sizes,
+                              monotonicities, output_min, output_max,
+                              unimodalities, joint_unimodalities):
   """Returns a kernel Keras initializer object from its id.
 
   This function is used to convert the 'kernel_initializer' parameter in the
@@ -550,22 +542,24 @@ def create_kernel_initializer(
 
   Args:
     kernel_initializer_id: See the documentation of the 'kernel_initializer'
-        parameter in the constructor of tfl.Lattice.
+      parameter in the constructor of tfl.Lattice.
     lattice_sizes: See the documentation of the same parameter in the
-        constructor of tfl.Lattice.
+      constructor of tfl.Lattice.
     monotonicities: See the documentation of the same parameter in the
-        constructor of tfl.Lattice.
-    output_min: See the documentation of the same parameter in the
-        constructor of tfl.Lattice.
-    output_max: See the documentation of the same parameter in the
-        constructor of tfl.Lattice.
+      constructor of tfl.Lattice.
+    output_min: See the documentation of the same parameter in the constructor
+      of tfl.Lattice.
+    output_max: See the documentation of the same parameter in the constructor
+      of tfl.Lattice.
     unimodalities: See the documentation of the same parameter in the
-        constructor of tfl.Lattice.
+      constructor of tfl.Lattice.
     joint_unimodalities: See the documentation of the same parameter in the
-        constructor of tfl.Lattice.
+      constructor of tfl.Lattice.
+
   Returns:
     The Keras initializer object for the tfl.Lattice kernel variable.
   """
+
   def default_params(output_min, output_max):
     """Return reasonable default parameters if not defined explicitly."""
     if output_min is not None:
@@ -611,8 +605,9 @@ def create_kernel_initializer(
         output_min=output_init_min,
         output_max=output_init_max,
         unimodalities=all_unimodalities)
-  elif kernel_initializer_id in ["random_monotonic_initializer",
-                                 "RandomMonotonicInitializer"]:
+  elif kernel_initializer_id in [
+      "random_monotonic_initializer", "RandomMonotonicInitializer"
+  ]:
     output_init_min, output_init_max = default_params(output_min, output_max)
 
     return RandomMonotonicInitializer(
@@ -620,23 +615,16 @@ def create_kernel_initializer(
         output_min=output_init_min,
         output_max=output_init_max,
         unimodalities=all_unimodalities)
-  elif kernel_initializer_id in ["random_uniform_or_linear_initializer",
-                                 "RandomUniformOrLinearInitializer"]:
+  elif kernel_initializer_id in [
+      "random_uniform_or_linear_initializer", "RandomUniformOrLinearInitializer"
+  ]:
     if do_joint_unimodalities_contain_all_features(joint_unimodalities):
-      return create_kernel_initializer("random_uniform",
-                                       lattice_sizes,
-                                       monotonicities,
-                                       output_min,
-                                       output_max,
-                                       unimodalities,
-                                       joint_unimodalities)
-    return create_kernel_initializer("linear_initializer",
-                                     lattice_sizes,
-                                     monotonicities,
-                                     output_min,
-                                     output_max,
-                                     unimodalities,
-                                     joint_unimodalities)
+      return create_kernel_initializer("random_uniform", lattice_sizes,
+                                       monotonicities, output_min, output_max,
+                                       unimodalities, joint_unimodalities)
+    return create_kernel_initializer("linear_initializer", lattice_sizes,
+                                     monotonicities, output_min, output_max,
+                                     unimodalities, joint_unimodalities)
   else:
     # This is needed for Keras deserialization logic to be aware of our custom
     # objects.
@@ -714,10 +702,9 @@ class LinearInitializer(keras.initializers.Initializer):
     del partition_info
     return lattice_lib.linear_initializer(
         lattice_sizes=self.lattice_sizes,
-        monotonicities=lattice_lib.canonicalize_monotonicities(
-            self.monotonicities),
-        unimodalities=lattice_lib.canonicalize_unimodalities(
-            self.unimodalities),
+        monotonicities=utils.canonicalize_monotonicities(
+            self.monotonicities, allow_decreasing=False),
+        unimodalities=utils.canonicalize_unimodalities(self.unimodalities),
         output_min=self.output_min,
         output_max=self.output_max,
         units=shape[1],
@@ -749,11 +736,7 @@ class RandomMonotonicInitializer(keras.initializers.Initializer):
   """
   # pyformat: enable
 
-  def __init__(self,
-               lattice_sizes,
-               output_min,
-               output_max,
-               unimodalities=None):
+  def __init__(self, lattice_sizes, output_min, output_max, unimodalities=None):
     """Initializes an instance of `RandomMonotonicInitializer`.
 
     Args:
@@ -843,8 +826,7 @@ class LatticeConstraints(keras.constraints.Constraint):
       range_dominances: Same meaning as corresponding parameter of `Lattice`.
       joint_monotonicities: Same meaning as corresponding parameter of
         `Lattice`.
-      joint_unimodalities: Same meaning as corresponding parameter of
-        `Lattice`.
+      joint_unimodalities: Same meaning as corresponding parameter of `Lattice`.
       output_min: Minimum possible output.
       output_max: Maximum possible output.
       num_projection_iterations: Same meaning as corresponding parameter of
@@ -867,10 +849,11 @@ class LatticeConstraints(keras.constraints.Constraint):
         joint_unimodalities=joint_unimodalities)
 
     self.lattice_sizes = lattice_sizes
-    self.monotonicities = monotonicities
-    self.unimodalities = unimodalities
-    self.edgeworth_trusts = edgeworth_trusts
-    self.trapezoid_trusts = trapezoid_trusts
+    self.monotonicities = utils.canonicalize_monotonicities(
+        monotonicities, allow_decreasing=False)
+    self.unimodalities = utils.canonicalize_unimodalities(unimodalities)
+    self.edgeworth_trusts = utils.canonicalize_trust(edgeworth_trusts)
+    self.trapezoid_trusts = utils.canonicalize_trust(trapezoid_trusts)
     self.monotonic_dominances = monotonic_dominances
     self.range_dominances = range_dominances
     self.joint_monotonicities = joint_monotonicities
@@ -879,31 +862,23 @@ class LatticeConstraints(keras.constraints.Constraint):
     self.output_max = output_max
     self.num_projection_iterations = num_projection_iterations
     self.enforce_strict_monotonicity = enforce_strict_monotonicity
+    self.num_constraint_dims = utils.count_non_zeros(self.monotonicities,
+                                                     self.unimodalities)
 
   def __call__(self, w):
     """Applies constraints to `w`."""
-    canonical_monotonicities = lattice_lib.canonicalize_monotonicities(
-        self.monotonicities)
-    canonical_unimodalities = lattice_lib.canonicalize_unimodalities(
-        self.unimodalities)
-    canonical_edgeworth_trusts = lattice_lib.canonicalize_trust(
-        self.edgeworth_trusts)
-    canonical_trapezoid_trusts = lattice_lib.canonicalize_trust(
-        self.trapezoid_trusts)
-    num_constraint_dims = lattice_lib.count_non_zeros(canonical_monotonicities,
-                                                      canonical_unimodalities)
     # No need to separately check for trust constraints and monotonic dominance,
     # since monotonicity is required to impose them. The only exception is joint
     # monotonicity.
-    if (num_constraint_dims > 0 or self.joint_monotonicities or
+    if (self.num_constraint_dims > 0 or self.joint_monotonicities or
         self.joint_unimodalities):
       w = lattice_lib.project_by_dykstra(
           w,
           lattice_sizes=self.lattice_sizes,
-          monotonicities=canonical_monotonicities,
-          unimodalities=canonical_unimodalities,
-          edgeworth_trusts=canonical_edgeworth_trusts,
-          trapezoid_trusts=canonical_trapezoid_trusts,
+          monotonicities=self.monotonicities,
+          unimodalities=self.unimodalities,
+          edgeworth_trusts=self.edgeworth_trusts,
+          trapezoid_trusts=self.trapezoid_trusts,
           monotonic_dominances=self.monotonic_dominances,
           range_dominances=self.range_dominances,
           joint_monotonicities=self.joint_monotonicities,
@@ -913,9 +888,9 @@ class LatticeConstraints(keras.constraints.Constraint):
         w = lattice_lib.finalize_constraints(
             w,
             lattice_sizes=self.lattice_sizes,
-            monotonicities=canonical_monotonicities,
-            edgeworth_trusts=canonical_edgeworth_trusts,
-            trapezoid_trusts=canonical_trapezoid_trusts,
+            monotonicities=self.monotonicities,
+            edgeworth_trusts=self.edgeworth_trusts,
+            trapezoid_trusts=self.trapezoid_trusts,
             output_min=self.output_min,
             output_max=self.output_max)
     # TODO: come up with a better solution than separately applying

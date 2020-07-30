@@ -114,7 +114,7 @@ def main(_):
   lattice_sizes = [3, 2, 2, 2, 2, 2, 2]
 
   # Use ParallelCombination helper layer to group togehter calibration layers
-  # which have to be executed in paralel in order to be able to use Sequential
+  # which have to be executed in parallel in order to be able to use Sequential
   # model. Alternatively you can use functional API.
   combined_calibrators = tfl.layers.ParallelCombination()
 
@@ -131,7 +131,7 @@ def main(_):
                                   num=5),
       # You need to ensure that input keypoints have same dtype as layer input.
       # You can do it by setting dtype here or by providing keypoints in such
-      # format which will be converted to deisred tf.dtype by default.
+      # format which will be converted to desired tf.dtype by default.
       dtype=tf.float32,
       # Output range must correspond to expected lattice input range.
       output_min=0.0,
@@ -196,7 +196,7 @@ def main(_):
       # Monotonicity of calibrator can be 'decreasing'. Note that corresponding
       # lattice dimension must have 'increasing' monotonicity regardless of
       # monotonicity direction of calibrator.
-      # Its not some weird configuration hack. Its just how math works :)
+      # It's not some weird configuration hack. It's just how math works :)
       monotonicity='decreasing',
       # Convexity together with decreasing monotonicity result in diminishing
       # return constraint.

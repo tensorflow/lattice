@@ -19,12 +19,13 @@ from __future__ import print_function
 
 import collections
 import copy
-from enum import Enum
+import enum
+from . import utils
 import six
 import tensorflow as tf
 
 
-class BoundConstraintsType(Enum):
+class BoundConstraintsType(enum.Enum):
   """Type of bound constraints for PWL calibration.
 
   - NONE: no constraints.
@@ -918,8 +919,8 @@ def verify_hyperparameters(input_keypoints=None,
                        "They are: ({}, {})".format(output_min, output_max))
 
   # It also raises errors if monotonicities specified incorrectly.
-  monotonicity = canonicalize_monotonicity(monotonicity)
-  convexity = canonicalize_convexity(convexity)
+  monotonicity = utils.canonicalize_monotonicity(monotonicity)
+  convexity = utils.canonicalize_convexity(convexity)
 
   if is_cyclic and (monotonicity or convexity):
     raise ValueError("'is_cyclic' can not be specified together with "
@@ -940,59 +941,3 @@ def verify_hyperparameters(input_keypoints=None,
       raise ValueError("Number of lengths must be equal to number of weights "
                        "minus one. Lengths: %s, weights_shape: %s" %
                        (lengths, weights_shape))
-
-
-def canonicalize_monotonicity(monotonicity):
-  """Converts string constants representing monotonicity into integers.
-
-  Args:
-    monotonicity: monotonicity hyperparameter of `PWLCalibration` layer.
-
-  Raises:
-    ValueError if monotonicity is invalid.
-
-  Returns:
-    monotonicity represented as -1, 0 or 1.
-  """
-  if monotonicity is None:
-    return None
-
-  if monotonicity in [-1, 0, 1]:
-    return monotonicity
-  elif isinstance(monotonicity, six.string_types):
-    if monotonicity.lower() == "decreasing":
-      return -1
-    if monotonicity.lower() == "none":
-      return 0
-    if monotonicity.lower() == "increasing":
-      return 1
-  raise ValueError("'monotonicities' must be from: [-1, 0, 1, 'decreasing', "
-                   "'none', 'increasing']. Given: %s" % monotonicity)
-
-
-def canonicalize_convexity(convexity):
-  """Converts string constants representing convexity into integers.
-
-  Args:
-    convexity: convexity hyperparameter of `PWLCalibration` layer.
-
-  Raises:
-    ValueError if convexity is invalid.
-
-  Returns:
-    convexity represented as -1, 0 or 1.
-  """
-  if convexity is None:
-    return None
-
-  if convexity in [-1, 0, 1]:
-    return convexity
-  elif isinstance(convexity, six.string_types):
-    if convexity.lower() == "concave":
-      return -1
-    if convexity.lower() == "none":
-      return 0
-    if convexity.lower() == "convex":
-      return 1
-  raise ValueError("'convexity' must be from: [-1, 0, 1, 'concave', "
-                   "'none', 'convex']. Given: %s" % convexity)

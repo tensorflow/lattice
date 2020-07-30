@@ -23,6 +23,7 @@ from __future__ import division
 from __future__ import print_function
 
 from . import linear_lib
+from . import utils
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -239,8 +240,8 @@ class Linear(keras.layers.Layer):
           constraint=None,
           dtype=self.dtype)
 
-    input_min = linear_lib.canonicalize_input_bounds(self.input_min)
-    input_max = linear_lib.canonicalize_input_bounds(self.input_max)
+    input_min = utils.canonicalize_input_bounds(self.input_min)
+    input_max = utils.canonicalize_input_bounds(self.input_max)
     if ((input_min and input_min.count(None) < len(input_min)) or
         (input_max and input_max.count(None) < len(input_max))):
       lower_bounds = [val if val is not None else -np.inf
@@ -315,12 +316,11 @@ class Linear(keras.layers.Layer):
     """
     return linear_lib.assert_constraints(
         weights=self.kernel,
-        monotonicities=linear_lib.canonicalize_monotonicities(
-            self.monotonicities),
+        monotonicities=utils.canonicalize_monotonicities(self.monotonicities),
         monotonic_dominances=self.monotonic_dominances,
         range_dominances=self.range_dominances,
-        input_min=linear_lib.canonicalize_input_bounds(self.input_min),
-        input_max=linear_lib.canonicalize_input_bounds(self.input_max),
+        input_min=utils.canonicalize_input_bounds(self.input_min),
+        input_max=utils.canonicalize_input_bounds(self.input_max),
         normalization_order=self.normalization_order,
         eps=eps)
 
@@ -393,12 +393,11 @@ class LinearConstraints(keras.constraints.Constraint):
     """
     return linear_lib.project(
         weights=w,
-        monotonicities=linear_lib.canonicalize_monotonicities(
-            self.monotonicities),
+        monotonicities=utils.canonicalize_monotonicities(self.monotonicities),
         monotonic_dominances=self.monotonic_dominances,
         range_dominances=self.range_dominances,
-        input_min=linear_lib.canonicalize_input_bounds(self.input_min),
-        input_max=linear_lib.canonicalize_input_bounds(self.input_max),
+        input_min=utils.canonicalize_input_bounds(self.input_min),
+        input_max=utils.canonicalize_input_bounds(self.input_max),
         normalization_order=self.normalization_order)
 
   def get_config(self):

@@ -545,7 +545,50 @@ class PremadeTest(tf.test.TestCase):
         verbose=False)
     results = model.evaluate(
         self.heart_test_x, self.heart_test_y, verbose=False)
-    logging.info('Calibrated lattice ensemble classifier results:')
+    logging.info('Calibrated lattice ensemble crystals classifier results:')
+    logging.info(results)
+    self.assertGreater(results[1], 0.85)
+
+  def testCalibratedLatticeEnsembleRTL(self):
+    # Construct model.
+    self._ResetAllBackends()
+    rtl_feature_configs = copy.deepcopy(self.heart_feature_configs)
+    for feature_config in rtl_feature_configs:
+      feature_config.lattice_size = 2
+      feature_config.unimodality = 'none'
+      feature_config.reflects_trust_in = None
+      feature_config.dominates = None
+      feature_config.regularizer_configs = None
+    model_config = configs.CalibratedLatticeEnsembleConfig(
+        regularizer_configs=[
+            configs.RegularizerConfig(name='torsion', l2=1e-4),
+            configs.RegularizerConfig(name='output_calib_hessian', l2=1e-4),
+        ],
+        feature_configs=rtl_feature_configs,
+        lattices='rtl_layer',
+        num_lattices=6,
+        lattice_rank=5,
+        separate_calibrators=True,
+        output_calibration=False,
+        output_min=self.heart_min_label,
+        output_max=self.heart_max_label - self.numerical_error_epsilon,
+        output_initialization=[self.heart_min_label, self.heart_max_label],
+    )
+    # Construct and train final model
+    model = premade.CalibratedLatticeEnsemble(model_config)
+    model.compile(
+        loss=tf.keras.losses.BinaryCrossentropy(),
+        metrics=tf.keras.metrics.AUC(),
+        optimizer=tf.keras.optimizers.Adam(0.01))
+    model.fit(
+        self.heart_train_x,
+        self.heart_train_y,
+        batch_size=100,
+        epochs=200,
+        verbose=False)
+    results = model.evaluate(
+        self.heart_test_x, self.heart_test_y, verbose=False)
+    logging.info('Calibrated lattice ensemble rtl classifier results:')
     logging.info(results)
     self.assertGreater(results[1], 0.85)
 
@@ -554,6 +597,42 @@ class PremadeTest(tf.test.TestCase):
         feature_configs=copy.deepcopy(feature_configs),
         lattices=[['numerical_1', 'categorical'],
                   ['numerical_2', 'categorical']],
+        num_lattices=2,
+        lattice_rank=2,
+        separate_calibrators=True,
+        regularizer_configs=[
+            configs.RegularizerConfig('calib_hessian', l2=1e-3),
+            configs.RegularizerConfig('torsion', l2=1e-4),
+        ],
+        output_min=-1.0,
+        output_max=1.0,
+        output_calibration=True,
+        output_calibration_num_keypoints=5,
+        output_initialization=[-1.0, 1.0])
+    model = premade.CalibratedLatticeEnsemble(model_config)
+    # Compile and fit model.
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.fit(fake_data['train_xs'], fake_data['train_ys'])
+    # Save model using H5 format.
+    with tempfile.NamedTemporaryFile(suffix='.h5') as f:
+      tf.keras.models.save_model(model, f.name)
+      loaded_model = tf.keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects())
+      self.assertAllClose(
+          model.predict(fake_data['eval_xs']),
+          loaded_model.predict(fake_data['eval_xs']))
+
+  def testLatticeEnsembleRTLH5FormatSaveLoad(self):
+    rtl_feature_configs = copy.deepcopy(feature_configs)
+    for feature_config in rtl_feature_configs:
+      feature_config.lattice_size = 2
+      feature_config.unimodality = 'none'
+      feature_config.reflects_trust_in = None
+      feature_config.dominates = None
+      feature_config.regularizer_configs = None
+    model_config = configs.CalibratedLatticeEnsembleConfig(
+        feature_configs=copy.deepcopy(rtl_feature_configs),
+        lattices='rtl_layer',
         num_lattices=2,
         lattice_rank=2,
         separate_calibrators=True,

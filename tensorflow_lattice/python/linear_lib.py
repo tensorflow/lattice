@@ -11,22 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Implementation of algorithms required for Linear layer."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import internal_utils as iu
+from . import internal_utils
+from . import utils
 import six
 import tensorflow as tf
 
 _NORMALIZATION_EPS = 1e-8
 
 
-def project(weights, monotonicities, monotonic_dominances=None,
-            range_dominances=None, input_min=None, input_max=None,
+def project(weights,
+            monotonicities,
+            monotonic_dominances=None,
+            range_dominances=None,
+            input_min=None,
+            input_max=None,
             normalization_order=None):
   """Applies constraints to weights.
 
@@ -56,12 +60,13 @@ def project(weights, monotonicities, monotonic_dominances=None,
   Returns:
     'weights' with monotonicity constraints and normalization applied to it.
   """
-  verify_hyperparameters(weights_shape=weights.shape,
-                         monotonicities=monotonicities,
-                         monotonic_dominances=monotonic_dominances,
-                         range_dominances=range_dominances,
-                         input_min=input_min,
-                         input_max=input_max)
+  verify_hyperparameters(
+      weights_shape=weights.shape,
+      monotonicities=monotonicities,
+      monotonic_dominances=monotonic_dominances,
+      range_dominances=range_dominances,
+      input_min=input_min,
+      input_max=input_max)
   if any(monotonicities):
     if 1 in monotonicities:
       inverted_increasing_mask = tf.constant(
@@ -82,7 +87,8 @@ def project(weights, monotonicities, monotonic_dominances=None,
 
   if monotonic_dominances:
     monotonic_dominances = [(j, i) for i, j in monotonic_dominances]
-    weights = iu.approximately_project_categorical_partial_monotonicities(weights, monotonic_dominances)
+    weights = internal_utils.approximately_project_categorical_partial_monotonicities(
+        weights, monotonic_dominances)
 
   if range_dominances:
     range_dominances = [(j, i) for i, j in range_dominances]
@@ -92,22 +98,28 @@ def project(weights, monotonicities, monotonic_dominances=None,
         scalings[dim] *= upper - lower
     scalings = tf.constant(scalings, dtype=weights.dtype, shape=weights.shape)
     weights *= scalings
-    weights = iu.approximately_project_categorical_partial_monotonicities(
+    weights = internal_utils.approximately_project_categorical_partial_monotonicities(
         weights, range_dominances)
     weights /= scalings
 
   if normalization_order:
     norm = tf.norm(weights, ord=normalization_order)
-    weights = tf.cond(norm < _NORMALIZATION_EPS,
-                      true_fn=lambda: weights,
-                      false_fn=lambda: weights / norm)
+    weights = tf.cond(
+        norm < _NORMALIZATION_EPS,
+        true_fn=lambda: weights,
+        false_fn=lambda: weights / norm)
 
   return weights
 
 
-def assert_constraints(weights, monotonicities, monotonic_dominances,
-                       range_dominances, input_min, input_max,
-                       normalization_order, eps=1e-4):
+def assert_constraints(weights,
+                       monotonicities,
+                       monotonic_dominances,
+                       range_dominances,
+                       input_min,
+                       input_max,
+                       normalization_order,
+                       eps=1e-4):
   """Asserts that weights satisfy constraints.
 
   Args:
@@ -138,29 +150,29 @@ def assert_constraints(weights, monotonicities, monotonic_dominances,
   if any(monotonicities):
     # Create constant specifying shape explicitly because otherwise due to
     # weights shape ending with dimesion of size 1 broadcasting will hurt us.
-    monotonicities_constant = tf.constant(monotonicities,
-                                          shape=weights.shape,
-                                          dtype=weights.dtype)
+    monotonicities_constant = tf.constant(
+        monotonicities, shape=weights.shape, dtype=weights.dtype)
     diff = tf.reduce_min(weights * monotonicities_constant)
     asserts.append(
-        tf.Assert(diff >= -eps,
-                  data=["Monotonicity violation",
-                        "Monotonicities:", monotonicities,
-                        "Min monotonicity diff:", diff,
-                        "Epsilon:", eps,
-                        "Weights:", weights],
-                  summarize=weights.shape[0]))
+        tf.Assert(
+            diff >= -eps,
+            data=[
+                "Monotonicity violation", "Monotonicities:", monotonicities,
+                "Min monotonicity diff:", diff, "Epsilon:", eps, "Weights:",
+                weights
+            ],
+            summarize=weights.shape[0]))
 
   for dominant_dim, weak_dim in monotonic_dominances or []:
     diff = tf.reduce_min(weights[dominant_dim] - weights[weak_dim])
     asserts.append(
-        tf.Assert(diff >= -eps,
-                  data=["Monotonic dominance violation",
-                        "Dominant dim:", dominant_dim,
-                        "Weak dim:", weak_dim,
-                        "Epsilon:", eps,
-                        "Weights:", weights],
-                  summarize=weights.shape[0]))
+        tf.Assert(
+            diff >= -eps,
+            data=[
+                "Monotonic dominance violation", "Dominant dim:", dominant_dim,
+                "Weak dim:", weak_dim, "Epsilon:", eps, "Weights:", weights
+            ],
+            summarize=weights.shape[0]))
 
   if range_dominances:
     scalings = [-1.0 if m == -1 else 1.0 for m in monotonicities]
@@ -171,27 +183,29 @@ def assert_constraints(weights, monotonicities, monotonic_dominances,
       diff = tf.reduce_min(scalings[dominant_dim] * weights[dominant_dim] -
                            scalings[weak_dim] * weights[weak_dim])
       asserts.append(
-          tf.Assert(diff >= -eps,
-                    data=["Range dominance violation",
-                          "Dominant dim:", dominant_dim,
-                          "Weak dim:", weak_dim,
-                          "Epsilon:", eps,
-                          "Weights:", weights,
-                          "Scalings:", scalings],
-                    summarize=weights.shape[0]))
+          tf.Assert(
+              diff >= -eps,
+              data=[
+                  "Range dominance violation", "Dominant dim:", dominant_dim,
+                  "Weak dim:", weak_dim, "Epsilon:", eps, "Weights:", weights,
+                  "Scalings:", scalings
+              ],
+              summarize=weights.shape[0]))
 
   if normalization_order:
     norm = tf.norm(weights, ord=normalization_order)
     asserts.append(
         # Norm can be either 0.0 or 1.0, because if all weights are close to 0.0
         # we can't scale them to get norm 1.0.
-        tf.Assert(tf.logical_or(tf.abs(norm - 1.0) < eps,
-                                tf.abs(norm) < _NORMALIZATION_EPS),
-                  data=["Normalization order violation",
-                        "Norm:", norm,
-                        "Epsilon:", eps,
-                        "Weights:", weights],
-                  summarize=weights.shape[0]))
+        tf.Assert(
+            tf.logical_or(
+                tf.abs(norm - 1.0) < eps,
+                tf.abs(norm) < _NORMALIZATION_EPS),
+            data=[
+                "Normalization order violation", "Norm:", norm, "Epsilon:", eps,
+                "Weights:", weights
+            ],
+            summarize=weights.shape[0]))
   return asserts
 
 
@@ -237,16 +251,16 @@ def verify_hyperparameters(num_input_dims=None,
     ValueError: If something is inconsistent.
   """
   # It also raises errors if monotonicities specified incorrectly.
-  monotonicities = canonicalize_monotonicities(monotonicities)
-  input_min = canonicalize_input_bounds(input_min)
-  input_max = canonicalize_input_bounds(input_max)
+  monotonicities = utils.canonicalize_monotonicities(monotonicities)
+  input_min = utils.canonicalize_input_bounds(input_min)
+  input_max = utils.canonicalize_input_bounds(input_max)
 
   if monotonicities is not None and num_input_dims is not None:
     if len(monotonicities) != num_input_dims:
       raise ValueError("Number of elements in 'monotonicities' must be equal to"
                        " num_input_dims. monotoniticites: %s, "
-                       "len(monotonicities): %d, num_input_dims: %d"
-                       % (monotonicities, len(monotonicities), num_input_dims))
+                       "len(monotonicities): %d, num_input_dims: %d" %
+                       (monotonicities, len(monotonicities), num_input_dims))
 
   if weights_shape is not None:
     if len(weights_shape) != 2 or weights_shape[1] != 1:
@@ -257,13 +271,15 @@ def verify_hyperparameters(num_input_dims=None,
                        "correspond to number of weights. Weights shape: %s, "
                        "monotonicities: %s" % (weights_shape, monotonicities))
     if input_min is not None and weights_shape[0] != len(input_min):
-      raise ValueError("Number of elements in 'input_min' does not correspond "
-                       "to number of weights. Weights shape: %s, input_min: %s"
-                       % (weights_shape, input_min))
+      raise ValueError(
+          "Number of elements in 'input_min' does not correspond "
+          "to number of weights. Weights shape: %s, input_min: %s" %
+          (weights_shape, input_min))
     if input_max is not None and weights_shape[0] != len(input_max):
-      raise ValueError("Number of elements in 'input_max' does not correspond "
-                       "to number of weights. Weights shape: %s, input_max: %s"
-                       % (weights_shape, input_max))
+      raise ValueError(
+          "Number of elements in 'input_max' does not correspond "
+          "to number of weights. Weights shape: %s, input_max: %s" %
+          (weights_shape, input_max))
 
   for dim, (lower, upper) in enumerate(zip(input_min or [], input_max or [])):
     if lower is not None and upper is not None and lower > upper:
@@ -353,60 +369,3 @@ def verify_hyperparameters(num_input_dims=None,
           raise ValueError("Cannot have both monotonic and range dominance "
                            "constraints specified on the same dimension. "
                            "Dimension %d is set by both." % (dim))
-
-
-def canonicalize_monotonicities(monotonicities):
-  """Converts string constants representing monotonicities into integers.
-
-  Args:
-    monotonicities: monotonicities hyperparameter of `Lattice` layer.
-
-  Raises:
-    ValueError if one of monotonicities is invalid.
-
-  Returns:
-    monotonicities represented as 0 or 1.
-  """
-  if monotonicities:
-    canonicalized = []
-    for item in monotonicities:
-      if item in [-1, 0, 1]:
-        canonicalized.append(item)
-      elif isinstance(item, six.string_types) and item.lower() == "decreasing":
-        canonicalized.append(-1)
-      elif isinstance(item, six.string_types) and item.lower() == "none":
-        canonicalized.append(0)
-      elif isinstance(item, six.string_types) and item.lower() == "increasing":
-        canonicalized.append(1)
-      else:
-        raise ValueError("'monotonicities' elements must be from: [-1, 0, 1, "
-                         "'decreasing', 'none', 'increasing']. "
-                         "Given: %s" % monotonicities)
-    return canonicalized
-  return None
-
-
-def canonicalize_input_bounds(input_bounds):
-  """Converts string constant 'none' representing unspecified bound into None.
-
-  Args:
-    input_bounds: input_min or input_max hyperparameter of `Linear` layer.
-
-  Raises:
-    ValueError if one of elements in input_bounds is invalid.
-
-  Returns:
-    input_bounds represented as float or None.
-  """
-  if input_bounds:
-    canonicalized = []
-    for item in input_bounds:
-      if isinstance(item, float) or item is None:
-        canonicalized.append(item)
-      elif isinstance(item, six.string_types) and item.lower() == "none":
-        canonicalized.append(None)
-      else:
-        raise ValueError("Both 'input_min' and 'input_max' elements must be "
-                         "either float or 'none'. Given: %s" % input_bounds)
-    return canonicalized
-  return None

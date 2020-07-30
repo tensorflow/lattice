@@ -28,6 +28,7 @@ from tensorflow import keras
 from tensorflow_lattice.python import linear_layer as linl
 from tensorflow_lattice.python import linear_lib
 from tensorflow_lattice.python import test_utils
+from tensorflow_lattice.python import utils
 
 _DISABLE_ALL = False
 _LOSS_EPS = 0.0001
@@ -196,7 +197,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
     if isinstance(config["monotonicities"], list):
       negated_config["monotonicities"] = [
           -monotonicity for monotonicity in
-          linear_lib.canonicalize_monotonicities(config["monotonicities"])
+          utils.canonicalize_monotonicities(config["monotonicities"])
       ]
     else:
       negated_config["monotonicities"] = -config["monotonicities"]

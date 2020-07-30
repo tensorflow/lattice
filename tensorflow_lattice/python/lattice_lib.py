@@ -21,6 +21,8 @@ import collections
 import copy
 import itertools
 import math
+
+from . import utils
 from absl import logging
 import numpy as np
 import six
@@ -62,6 +64,9 @@ def evaluate_with_simplex_interpolation(inputs, kernel, units, lattice_sizes,
       layer for which interpolation is being computed.
     clip_inputs: Whether inputs should be clipped to the input range of the
       lattice.
+
+  Returns:
+    Tensor of shape: `(batch_size, ..., units)`.
   """
   if isinstance(inputs, list):
     inputs = tf.concat(inputs, axis=-1)
@@ -73,11 +78,6 @@ def evaluate_with_simplex_interpolation(inputs, kernel, units, lattice_sizes,
   lattice_rank = len(lattice_sizes)
   input_dim = len(inputs.shape)
   all_size_2 = all(size == 2 for size in lattice_sizes)
-
-  if input_dim == 2:
-    units = 1
-  else:
-    units = int(inputs.shape[-2])
 
   # Strides are the changes in the global index (index into the flattened
   # parameters) when moving across each dimension.
@@ -158,16 +158,23 @@ def evaluate_with_hypercube_interpolation(inputs, kernel, units, lattice_sizes,
   hypercube into simplices", D.G. Mead, Proceedings of the AMS, 76:2, Sep. 1979.
 
   Args:
-    inputs: Tensor of shape: `(batch_size, ..., len(lattice_sizes))` or list of
-      `len(lattice_sizes)` tensors of same shape `(batch_size, ..., 1)` which
-      represents points to apply lattice interpolation to. A typical shape is
-      `(batch_size, len(lattice_sizes))`.
+    inputs: Tensor representing points to apply lattice interpolation to. If
+      units = 1, tensor should be of shape: `(batch_size, ...,
+        len(lattice_sizes))` or list of `len(lattice_sizes)` tensors of same
+        shape `(batch_size, ..., 1)`.
+      If units > 1, tensor should be of shape: `(batch_size, ..., units,
+        len(lattice_sizes))` or list of `len(lattice_sizes)` tensors of same
+        shape `(batch_size, ..., units, 1)`. A typical shape is `(batch_size,
+        len(lattice_sizes))`.
     kernel: Lattice kernel of shape (num_params_per_lattice, units).
     units: Output dimension of the lattice.
     lattice_sizes: List or tuple of integers which represents lattice sizes of
       layer for which interpolation is being computed.
     clip_inputs: Whether inputs should be clipped to the input range of the
       lattice.
+
+  Returns:
+    Tensor of shape: `(batch_size, ..., units)`.
   """
   interpolation_weights = compute_interpolation_weights(
       inputs=inputs, lattice_sizes=lattice_sizes, clip_inputs=clip_inputs)
@@ -271,10 +278,9 @@ def batch_outer_operation(list_of_tensors, operation="auto"):
   Args:
     list_of_tensors: List of tensors of same shape `(batch_size, ..., k[i])`
       where everything expect `k_i` matches.
-    operation:
-      - binary TF operation which supports broadcasting to be applied.
+    operation: - binary TF operation which supports broadcasting to be applied.
       - string "auto" in order to apply tf.multiply for first several tensors
-        and tf.matmul for remaining.
+      and tf.matmul for remaining.
 
   Returns:
     Tensor of shape: `(batch_size, ..., mul_i(k[i]))`.
@@ -455,7 +461,7 @@ def linear_initializer(lattice_sizes,
   if unimodalities is None:
     unimodalities = [0] * len(lattice_sizes)
 
-  num_constraint_dims = count_non_zeros(monotonicities, unimodalities)
+  num_constraint_dims = utils.count_non_zeros(monotonicities, unimodalities)
   if num_constraint_dims == 0:
     monotonicities = [1] * len(lattice_sizes)
     num_constraint_dims = len(lattice_sizes)
@@ -1026,7 +1032,7 @@ def finalize_constraints(weights,
   Returns:
     Projected weights tensor of same shape as `weights`.
   """
-  if count_non_zeros(monotonicities) == 0:
+  if utils.count_non_zeros(monotonicities) == 0:
     return weights
   units = weights.shape[1]
   if units > 1:
@@ -1709,8 +1715,8 @@ def _project_partial_joint_unimodality(weights, lattice_sizes,
       vertices=all_vertices)
 
 
-def _project_onto_hyperplane(weights, joint_unimodalities,
-                             hyperplane, vertices):
+def _project_onto_hyperplane(weights, joint_unimodalities, hyperplane,
+                             vertices):
   """Projects onto hyperplane.
 
   Args:
@@ -1749,8 +1755,9 @@ def _project_onto_hyperplane(weights, joint_unimodalities,
   # 4) Come up with better option.
   dimensions, direction = joint_unimodalities
   layers = _unstack_nd(weights, dims=dimensions)
-  affected_weights = [_get_element(lists=layers, indices=position)
-                      for position in vertices]
+  affected_weights = [
+      _get_element(lists=layers, indices=position) for position in vertices
+  ]
 
   affected_weights = tf.stack(affected_weights, axis=-1)
   violation = tf.reduce_sum(affected_weights * hyperplane, axis=-1)
@@ -1838,7 +1845,7 @@ def project_by_dykstra(weights,
   """
   if num_iterations == 0:
     return weights
-  if (count_non_zeros(monotonicities, unimodalities) == 0 and
+  if (utils.count_non_zeros(monotonicities, unimodalities) == 0 and
       not joint_monotonicities and not joint_unimodalities and
       not range_dominances):
     return weights
@@ -1955,8 +1962,7 @@ def project_by_dykstra(weights,
         rolled_back_weights = weights - last_change[
             ("RANGE_DOMINANCE", constraint, constraint_group)]
         weights = _project_partial_range_dominance(rolled_back_weights,
-                                                   lattice_sizes,
-                                                   constraint,
+                                                   lattice_sizes, constraint,
                                                    constraint_group)
         last_change[("RANGE_DOMINANCE", constraint,
                      constraint_group)] = weights - rolled_back_weights
@@ -2273,8 +2279,7 @@ def verify_hyperparameters(lattice_sizes,
     range_dominances: Range dominances hyperparameter of `Lattice` layer.
     joint_monotonicities: Joint monotonicities hyperparameter of `Lattice`
       layer.
-    joint_unimodalities: Joint unimodalities hyperparameter of `Lattice`
-      layer.
+    joint_unimodalities: Joint unimodalities hyperparameter of `Lattice` layer.
     output_min: Minimum output of `Lattice` layer.
     output_max: Maximum output of `Lattice` layer.
     regularization_amount: Regularization amount for regularizers.
@@ -2290,14 +2295,15 @@ def verify_hyperparameters(lattice_sizes,
                        lattice_sizes)
 
   # It also raises errors if monotonicities specified incorrectly.
-  monotonicities = canonicalize_monotonicities(monotonicities)
+  monotonicities = utils.canonicalize_monotonicities(
+      monotonicities, allow_decreasing=False)
   if monotonicities is not None:
     if len(monotonicities) != len(lattice_sizes):
       raise ValueError("If provided 'monotonicities' should have same number "
                        "of elements as 'lattice_sizes'. 'monotonicities': %s,"
                        "'lattice_sizes: %s" % (monotonicities, lattice_sizes))
 
-  unimodalities = canonicalize_unimodalities(unimodalities)
+  unimodalities = utils.canonicalize_unimodalities(unimodalities)
   if unimodalities is not None:
     if len(unimodalities) != len(lattice_sizes):
       raise ValueError("If provided 'unimodalities' should have same number "
@@ -2318,8 +2324,8 @@ def verify_hyperparameters(lattice_sizes,
                          "'monotonicities': %s, 'unimodalities': %s" %
                          (i, monotonicities, unimodalities))
 
-  all_trusts = canonicalize_trust((edgeworth_trusts or []) +
-                                  (trapezoid_trusts or [])) or []
+  all_trusts = utils.canonicalize_trust((edgeworth_trusts or []) +
+                                        (trapezoid_trusts or [])) or []
   main_dims, cond_dims, trapezoid_cond_dims = set(), set(), set()
   dim_pairs_direction = {}
   for i, constraint in enumerate(all_trusts):
@@ -2667,108 +2673,6 @@ def assert_constraints(weights,
                 weights
             ]))
   return asserts
-
-
-def count_non_zeros(*iterables):
-  """Returns total number of non 0 elements in given iterables."""
-  result = 0
-  for iterable in iterables:
-    if iterable is not None:
-      result += [element != 0 for element in iterable].count(True)
-  return result
-
-
-def canonicalize_monotonicities(monotonicities):
-  """Converts string constants representing monotonicities into integers.
-
-  Args:
-    monotonicities: monotonicities hyperparameter of `Lattice` layer.
-
-  Raises:
-    ValueError if one of monotonicities is invalid.
-
-  Returns:
-    monotonicities represented as 0 or 1.
-  """
-  if monotonicities:
-    canonicalized = []
-    for item in monotonicities:
-      if item in [0, 1]:
-        canonicalized.append(item)
-      elif isinstance(item, six.string_types) and item.lower() == "increasing":
-        canonicalized.append(1)
-      elif isinstance(item, six.string_types) and item.lower() == "none":
-        canonicalized.append(0)
-      else:
-        raise ValueError("'monotonicities' elements must be from: [0, 1, "
-                         "'increasing', 'none']. Given: %s" % monotonicities)
-    return canonicalized
-  return None
-
-
-def canonicalize_unimodalities(unimodalities):
-  """Converts string constants representing unimodalities into integers.
-
-  Args:
-    unimodalities: unimodalities hyperparameter of `Lattice` layer.
-
-  Raises:
-    ValueError if one of unimodalities is invalid.
-
-  Returns:
-    unimodalities represented as -1, 0 or 1.
-  """
-  if not unimodalities:
-    return None
-  canonicalized = []
-  for item in unimodalities:
-    if item in [-1, 0, 1]:
-      canonicalized.append(item)
-    elif isinstance(item, six.string_types) and item.lower() == "valley":
-      canonicalized.append(1)
-    elif isinstance(item, six.string_types) and item.lower() == "peak":
-      canonicalized.append(-1)
-    elif isinstance(item, six.string_types) and item.lower() == "none":
-      canonicalized.append(0)
-    else:
-      raise ValueError("'unimodalities' elements must be from: [-1, 0, 1, "
-                       "'peak', 'none', 'valley']. Given: %s" % unimodalities)
-  return canonicalized
-
-
-def canonicalize_trust(trusts):
-  """Converts string constants representing trust direction into integers.
-
-  Args:
-    trusts: edgeworth_trusts or trapezoid_trusts hyperparameter of `Lattice`
-      layer.
-
-  Raises:
-    ValueError if one of trust constraints is invalid.
-
-  Returns:
-    Trust constraints with direction represented as 0 or 1.
-  """
-  if trusts:
-    canonicalized = []
-    for item in trusts:
-      if len(item) != 3:
-        raise ValueError("Trust constraints must consist of 3 elements. Seeing "
-                         "constraint tuple %s" % item)
-      direction = item[2]
-      if direction in [-1, 1]:
-        canonicalized.append(item)
-      elif (isinstance(direction, six.string_types) and
-            direction.lower() == "positive"):
-        canonicalized.append((item[0], item[1], 1))
-      elif (isinstance(direction, six.string_types) and
-            direction.lower() == "negative"):
-        canonicalized.append((item[0], item[1], -1))
-      else:
-        raise ValueError("trust constraint direction must be from: [-1, 1, "
-                         "'negative', 'positive']. Given: %s" % direction)
-    return canonicalized
-  return None
 
 
 def _unstack_nested_lists(tensor_or_list, axis):

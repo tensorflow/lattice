@@ -26,6 +26,7 @@ from __future__ import division
 from __future__ import print_function
 
 from . import pwl_calibration_lib
+from . import utils
 
 from absl import logging
 import numpy as np
@@ -312,8 +313,8 @@ class PWLCalibration(snt.Module):
     if len(inputs.shape) != 2 or (inputs.shape[1] != self.units and
                                   inputs.shape[1] != 1):
       raise ValueError("Shape of input tensor for PWLCalibration module must"
-                       " be [-1, units] or [-1, 1]. It is: "
-                       + str(inputs.shape))
+                       " be [-1, units] or [-1, 1]. It is: " +
+                       str(inputs.shape))
 
     if self._interpolation_keypoints.dtype != inputs.dtype:
       raise ValueError("dtype(%s) of input to PWLCalibration module does not "
@@ -335,8 +336,7 @@ class PWLCalibration(snt.Module):
       # Need to add such last height to make all heights to sum up to 0.0 in
       # order to make calibrator cyclic.
       bias_and_heights = tf.concat(
-          [self.kernel, -tf.reduce_sum(self.kernel[1:],
-                                        axis=0, keepdims=True)],
+          [self.kernel, -tf.reduce_sum(self.kernel[1:], axis=0, keepdims=True)],
           axis=0)
     else:
       bias_and_heights = self.kernel
@@ -424,8 +424,7 @@ class _UniformOutputInitializer(snt.initializers.Initializer):
         shape=shape,
         output_min=self.output_min,
         output_max=self.output_max,
-        monotonicity=pwl_calibration_lib.canonicalize_monotonicity(
-            self.monotonicity),
+        monotonicity=utils.canonicalize_monotonicity(self.monotonicity),
         keypoints=self.keypoints,
         dtype=dtype)
 
@@ -483,10 +482,8 @@ class _PWLCalibrationConstraints(object):
     self.output_max_constraints = output_max_constraints
     self.num_projection_iterations = num_projection_iterations
 
-    canonical_convexity = pwl_calibration_lib.canonicalize_convexity(
-        self.convexity)
-    canonical_monotonicity = pwl_calibration_lib.canonicalize_monotonicity(
-        self.monotonicity)
+    canonical_convexity = utils.canonicalize_convexity(self.convexity)
+    canonical_monotonicity = utils.canonicalize_monotonicity(self.monotonicity)
     if (canonical_convexity != 0 and canonical_monotonicity == 0 and
         (output_min_constraints != pwl_calibration_lib.BoundConstraintsType.NONE
          or output_max_constraints !=
@@ -501,14 +498,12 @@ class _PWLCalibrationConstraints(object):
     """Applies constraints to w."""
     return pwl_calibration_lib.project_all_constraints(
         weights=w,
-        monotonicity=pwl_calibration_lib.canonicalize_monotonicity(
-            self.monotonicity),
+        monotonicity=utils.canonicalize_monotonicity(self.monotonicity),
         output_min=self.output_min,
         output_max=self.output_max,
         output_min_constraints=self.output_min_constraints,
         output_max_constraints=self.output_max_constraints,
-        convexity=pwl_calibration_lib.canonicalize_convexity(
-            self.convexity),
+        convexity=utils.canonicalize_convexity(self.convexity),
         lengths=self.lengths,
         num_projection_iterations=self.num_projection_iterations)
 

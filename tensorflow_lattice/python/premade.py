@@ -44,6 +44,7 @@ from . import linear_layer
 from . import parallel_combination_layer
 from . import premade_lib
 from . import pwl_calibration_layer
+from . import rtl_layer
 
 from absl import logging
 import tensorflow as tf
@@ -102,47 +103,23 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
     input_layer = premade_lib.build_input_layer(
         feature_configs=model_config.feature_configs, dtype=dtype)
 
-    submodels_inputs = premade_lib.build_calibration_layers(
+    lattice_outputs = premade_lib.build_calibrated_lattice_ensemble_layer(
         calibration_input_layer=input_layer,
-        feature_configs=model_config.feature_configs,
         model_config=model_config,
-        layer_output_range=premade_lib.LayerOutputRange.INPUT_TO_LATTICE,
-        submodels=model_config.lattices,
-        separate_calibrators=model_config.separate_calibrators,
         dtype=dtype)
 
-    lattice_outputs = []
-    for submodel_index, (lattice_feature_names, lattice_input) in enumerate(
-        zip(model_config.lattices, submodels_inputs)):
-      lattice_feature_configs = [
-          model_config.feature_config_by_name(feature_name)
-          for feature_name in lattice_feature_names
-      ]
-
-      lattice_layer_output_range = (
-          premade_lib.LayerOutputRange.INPUT_TO_FINAL_CALIBRATION
-          if model_config.output_calibration else
-          premade_lib.LayerOutputRange.MODEL_OUTPUT)
-      lattice_outputs.append(
-          premade_lib.build_lattice_layer(
-              lattice_input=lattice_input,
-              feature_configs=lattice_feature_configs,
-              model_config=model_config,
-              layer_output_range=lattice_layer_output_range,
-              submodel_index=submodel_index,
-              is_inside_ensemble=True,
-              dtype=dtype))
-
-    if len(lattice_outputs) > 1:
-      if model_config.use_linear_combination:
-        averaged_lattice_output = premade_lib.build_linear_combination_layer(
-            ensemble_outputs=lattice_outputs,
-            model_config=model_config,
-            dtype=dtype)
-      else:
-        averaged_lattice_output = tf.keras.layers.Average()(lattice_outputs)
+    if model_config.use_linear_combination:
+      averaged_lattice_output = premade_lib.build_linear_combination_layer(
+          ensemble_outputs=lattice_outputs,
+          model_config=model_config,
+          dtype=dtype)
     else:
-      averaged_lattice_output = lattice_outputs[0]
+      if isinstance(lattice_outputs, list):
+        averaged_lattice_output = tf.keras.layers.Average()(lattice_outputs)
+      else:
+        averaged_lattice_output = tf.reduce_mean(
+            lattice_outputs, axis=-1, keepdims=True)
+
     if model_config.output_calibration:
       model_output = premade_lib.build_output_calibration_layer(
           output_calibration_input=averaged_lattice_output,
@@ -235,7 +212,6 @@ class CalibratedLattice(tf.keras.Model):
         feature_configs=model_config.feature_configs, dtype=dtype)
     submodels_inputs = premade_lib.build_calibration_layers(
         calibration_input_layer=input_layer,
-        feature_configs=model_config.feature_configs,
         model_config=model_config,
         layer_output_range=premade_lib.LayerOutputRange.INPUT_TO_LATTICE,
         submodels=[[
@@ -355,7 +331,6 @@ class CalibratedLinear(tf.keras.Model):
         premade_lib.LayerOutputRange.MODEL_OUTPUT)
     submodels_inputs = premade_lib.build_calibration_layers(
         calibration_input_layer=input_layer,
-        feature_configs=model_config.feature_configs,
         model_config=model_config,
         layer_output_range=calibration_layer_output_range,
         submodels=[[
@@ -552,34 +527,32 @@ def get_custom_objects(custom_objects=None):
   tfl_custom_objects = {
       'AggregateFunction':
           AggregateFunction,
-      'CalibratedLatticeEnsemble':
-          CalibratedLatticeEnsemble,
-      'CalibratedLattice':
-          CalibratedLattice,
-      'CalibratedLinear':
-          CalibratedLinear,
-      'CategoricalCalibration':
-          categorical_calibration_layer.CategoricalCalibration,
-      'CategoricalCalibrationConstraints':
-          categorical_calibration_layer.CategoricalCalibrationConstraints,
-      'FeatureConfig':
-          configs.FeatureConfig,
-      'RegularizerConfig':
-          configs.RegularizerConfig,
-      'TrustConfig':
-          configs.TrustConfig,
-      'DominanceConfig':
-          configs.DominanceConfig,
-      'CalibratedLatticeEnsembleConfig':
-          configs.CalibratedLatticeEnsembleConfig,
-      'CalibratedLatticeConfig':
-          configs.CalibratedLatticeConfig,
-      'CalibratedLinearConfig':
-          configs.CalibratedLinearConfig,
       'AggregateFunctionConfig':
           configs.AggregateFunctionConfig,
       'Aggregation':
           aggregation_layer.Aggregation,
+      'CalibratedLatticeEnsemble':
+          CalibratedLatticeEnsemble,
+      'CalibratedLattice':
+          CalibratedLattice,
+      'CalibratedLatticeConfig':
+          configs.CalibratedLatticeConfig,
+      'CalibratedLatticeEnsembleConfig':
+          configs.CalibratedLatticeEnsembleConfig,
+      'CalibratedLinear':
+          CalibratedLinear,
+      'CalibratedLinearConfig':
+          configs.CalibratedLinearConfig,
+      'CategoricalCalibration':
+          categorical_calibration_layer.CategoricalCalibration,
+      'CategoricalCalibrationConstraints':
+          categorical_calibration_layer.CategoricalCalibrationConstraints,
+      'DominanceConfig':
+          configs.DominanceConfig,
+      'FeatureConfig':
+          configs.FeatureConfig,
+      'LaplacianRegularizer':
+          lattice_layer.LaplacianRegularizer,
       'Lattice':
           lattice_layer.Lattice,
       'LatticeConstraints':
@@ -588,14 +561,26 @@ def get_custom_objects(custom_objects=None):
           linear_layer.Linear,
       'LinearConstraints':
           linear_layer.LinearConstraints,
+      'LinearInitializer':
+          lattice_layer.LinearInitializer,
+      'NaiveBoundsConstraints':
+          pwl_calibration_layer.NaiveBoundsConstraints,
       'ParallelCombination':
           parallel_combination_layer.ParallelCombination,
       'PWLCalibration':
           pwl_calibration_layer.PWLCalibration,
       'PWLCalibrationConstraints':
           pwl_calibration_layer.PWLCalibrationConstraints,
-      'NaiveBoundsConstraints':
-          pwl_calibration_layer.NaiveBoundsConstraints,
+      'RandomMonotonicInitializer':
+          lattice_layer.RandomMonotonicInitializer,
+      'RegularizerConfig':
+          configs.RegularizerConfig,
+      'RTL':
+          rtl_layer.RTL,
+      'TorsionRegularizer':
+          lattice_layer.TorsionRegularizer,
+      'TrustConfig':
+          configs.TrustConfig,
   }
   if custom_objects is not None:
     tfl_custom_objects.update(custom_objects)
