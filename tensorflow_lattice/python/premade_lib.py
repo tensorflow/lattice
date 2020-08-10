@@ -29,7 +29,8 @@ from . import lattice_layer
 from . import lattice_lib
 from . import linear_layer
 from . import pwl_calibration_layer
-from . import pwl_calibration_lib
+from . import rtl_layer
+from . import utils
 
 from absl import logging
 import numpy as np
@@ -45,6 +46,8 @@ LATTICE_LAYER_NAME = 'tfl_lattice'
 LINEAR_LAYER_NAME = 'tfl_linear'
 OUTPUT_LINEAR_COMBINATION_LAYER_NAME = 'tfl_output_linear_combination'
 OUTPUT_CALIB_LAYER_NAME = 'tfl_output_calib'
+RTL_LAYER_NAME = 'tfl_rtl'
+RTL_INPUT_NAME = 'tfl_rtl_input'
 
 # Prefix for passthrough (identity) nodes for shared calibration.
 # These nodes pass shared calibrated values to submodels in an ensemble.
@@ -174,44 +177,31 @@ def build_input_layer(feature_configs, dtype, ragged=False):
   return input_layer
 
 
-def build_calibration_layers(calibration_input_layer, feature_configs,
-                             model_config, layer_output_range, submodels,
-                             separate_calibrators, dtype):
-  """Creates a calibration layer for `submodels` as list of list of features.
+def build_multi_unit_calibration_layers(calibration_input_layer,
+                                        calibration_output_units, model_config,
+                                        layer_output_range,
+                                        output_single_tensor, dtype):
+  """Creates a mapping from feature names to calibration outputs.
 
   Args:
     calibration_input_layer: A mapping from feature name to `tf.keras.Input`.
-    feature_configs: A list of `tfl.configs.FeatureConfig` instances that
-      specify configurations for each feature.
+    calibration_output_units: A mapping from feature name to units.
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
     layer_output_range: A `tfl.premade_lib.LayerOutputRange` enum.
-    submodels: A list of list of feature names.
-    separate_calibrators: If features should be separately calibrated for each
-      lattice in an ensemble.
+    output_single_tensor: If output for each feature should be a single tensor.
     dtype: dtype
 
   Returns:
-    A list of list of Tensors representing a calibration layer for `submodels`.
+    A mapping from feature name to calibration output Tensors.
   """
-  # Create a list of (feature_name, calibration_output_idx) pairs for each
-  # submodel. When using shared calibration, all submodels will have
-  # calibration_output_idx = 0.
-  submodels_input_features = []
-  calibration_last_index = collections.defaultdict(int)
-  for submodel in submodels:
-    submodel_input_features = []
-    submodels_input_features.append(submodel_input_features)
-    for feature_name in submodel:
-      submodel_input_features.append(
-          (feature_name, calibration_last_index[feature_name]))
-      if separate_calibrators:
-        calibration_last_index[feature_name] += 1
-
   calibration_output = {}
-  for feature_config in feature_configs:
-    feature_name = feature_config.name
-    units = max(calibration_last_index[feature_name], 1)
+  for feature_name, units in calibration_output_units.items():
+    if units == 0:
+      raise ValueError(
+          'Feature {} is not used. Calibration output units is 0.'.format(
+              feature_name))
+    feature_config = model_config.feature_config_by_name(feature_name)
     calibration_input = calibration_input_layer[feature_name]
     layer_name = '{}_{}'.format(CALIB_LAYER_NAME, feature_name)
 
@@ -238,13 +228,14 @@ def build_calibration_layers(calibration_input_layer, feature_configs,
       kernel_regularizer = _input_calibration_regularizers(
           model_config, feature_config)
       monotonicity = feature_config.monotonicity
-      if (pwl_calibration_lib.canonicalize_monotonicity(monotonicity) == 0 and
+      if (utils.canonicalize_monotonicity(monotonicity) == 0 and
           feature_config.pwl_calibration_always_monotonic):
         monotonicity = 1
       kernel_initializer = pwl_calibration_layer.UniformOutputInitializer(
           output_min=output_init_min,
           output_max=output_init_max,
-          monotonicity=monotonicity)
+          monotonicity=monotonicity,
+          keypoints=feature_config.pwl_calibration_input_keypoints)
       calibrated = (
           pwl_calibration_layer.PWLCalibration(
               units=units,
@@ -261,10 +252,58 @@ def build_calibration_layers(calibration_input_layer, feature_configs,
               convexity=feature_config.pwl_calibration_convexity,
               dtype=dtype,
               name=layer_name)(calibration_input))
-    if units == 1:
+    if output_single_tensor:
+      calibration_output[feature_name] = calibrated
+    elif units == 1:
       calibration_output[feature_name] = [calibrated]
     else:
       calibration_output[feature_name] = tf.split(calibrated, units, axis=1)
+  return calibration_output
+
+
+def build_calibration_layers(calibration_input_layer, model_config,
+                             layer_output_range, submodels,
+                             separate_calibrators, dtype):
+  """Creates a calibration layer for `submodels` as list of list of features.
+
+  Args:
+    calibration_input_layer: A mapping from feature name to `tf.keras.Input`.
+    model_config: Model configuration object describing model architecture.
+      Should be one of the model configs in `tfl.configs`.
+    layer_output_range: A `tfl.premade_lib.LayerOutputRange` enum.
+    submodels: A list of list of feature names.
+    separate_calibrators: If features should be separately calibrated for each
+      lattice in an ensemble.
+    dtype: dtype
+
+  Returns:
+    A list of list of Tensors representing a calibration layer for `submodels`.
+  """
+  # Create a list of (feature_name, calibration_output_idx) pairs for each
+  # submodel. When using shared calibration, all submodels will have
+  # calibration_output_idx = 0.
+  submodels_input_features = []
+  calibration_last_index = collections.defaultdict(int)
+  for submodel in submodels:
+    submodel_input_features = []
+    submodels_input_features.append(submodel_input_features)
+    for feature_name in submodel:
+      submodel_input_features.append(
+          (feature_name, calibration_last_index[feature_name]))
+      if separate_calibrators:
+        calibration_last_index[feature_name] += 1
+
+  # This is to account for shared calibration.
+  calibration_output_units = {
+      name: max(index, 1) for name, index in calibration_last_index.items()
+  }
+  calibration_output = build_multi_unit_calibration_layers(
+      calibration_input_layer=calibration_input_layer,
+      calibration_output_units=calibration_output_units,
+      model_config=model_config,
+      layer_output_range=layer_output_range,
+      output_single_tensor=False,
+      dtype=dtype)
 
   # Create passthrough nodes for each submodel input so that we can recover
   # the model structure for plotting and analysis.
@@ -336,7 +375,7 @@ def build_aggregation_layer(aggregation_input_layer, model_config,
               dtype=np.float32),
           output_min=0.0,
           output_max=lattice_sizes[i] - 1.0,
-          monotonicity=pwl_calibration_lib.canonicalize_monotonicity(
+          monotonicity=utils.canonicalize_monotonicity(
               model_config.middle_monotonicity),
           kernel_regularizer=_middle_calibration_regularizers(model_config),
           dtype=dtype,
@@ -485,7 +524,8 @@ def build_lattice_layer(lattice_input, feature_configs, model_config,
   lattice_unimodalities = [
       feature_config.unimodality for feature_config in feature_configs
   ]
-  lattice_regularizers = _lattice_regularizers(model_config, feature_configs)
+  lattice_regularizers = _lattice_regularizers(model_config,
+                                               feature_configs) or None
 
   # Construct trust constraints within this lattice.
   edgeworth_trusts = []
@@ -537,6 +577,156 @@ def build_lattice_layer(lattice_input, feature_configs, model_config,
       dtype=dtype,
       name=layer_name)(
           lattice_input)
+
+
+def build_lattice_ensemble_layer(submodels_inputs, model_config, dtype):
+  """Creates an ensemble of `tfl.layers.Lattice` layers.
+
+  Args:
+    submodels_inputs: List of inputs to each of the lattice layers in the
+      ensemble. The order corresponds to the elements of model_config.lattices.
+    model_config: Model configuration object describing model architecture.
+      Should be one of the model configs in `tfl.configs`.
+    dtype: dtype
+
+  Returns:
+    A list of `tfl.layers.Lattice` instances.
+  """
+  lattice_outputs = []
+  for submodel_index, (lattice_feature_names, lattice_input) in enumerate(
+      zip(model_config.lattices, submodels_inputs)):
+    lattice_feature_configs = [
+        model_config.feature_config_by_name(feature_name)
+        for feature_name in lattice_feature_names
+    ]
+    lattice_layer_output_range = (
+        LayerOutputRange.INPUT_TO_FINAL_CALIBRATION
+        if model_config.output_calibration else LayerOutputRange.MODEL_OUTPUT)
+    lattice_outputs.append(
+        build_lattice_layer(
+            lattice_input=lattice_input,
+            feature_configs=lattice_feature_configs,
+            model_config=model_config,
+            layer_output_range=lattice_layer_output_range,
+            submodel_index=submodel_index,
+            is_inside_ensemble=True,
+            dtype=dtype))
+  return lattice_outputs
+
+
+def build_rtl_layer(calibration_outputs, model_config, submodel_index, dtype):
+  """Creates a `tfl.layers.RTL` layer.
+
+  This function expects that all features defined in
+  model_config.feature_configs are used and present in calibration_outputs.
+
+  Args:
+    calibration_outputs: A mapping from feature name to calibration output.
+    model_config: Model configuration object describing model architecture.
+      Should be one of the model configs in `tfl.configs`.
+    submodel_index: Corresponding index into submodels.
+    dtype: dtype
+
+  Returns:
+    A `tfl.layers.RTL` instance.
+  """
+  layer_name = '{}_{}'.format(RTL_LAYER_NAME, submodel_index)
+
+  rtl_layer_output_range = (
+      LayerOutputRange.INPUT_TO_FINAL_CALIBRATION
+      if model_config.output_calibration else LayerOutputRange.MODEL_OUTPUT)
+
+  (output_min, output_max, output_init_min,
+   output_init_max) = _output_range(rtl_layer_output_range, model_config)
+
+  lattice_regularizers = _lattice_regularizers(
+      model_config, model_config.feature_configs) or None
+
+  rtl_inputs = collections.defaultdict(list)
+  for feature_config in model_config.feature_configs:
+    passthrough_name = '{}_{}'.format(RTL_INPUT_NAME, feature_config.name)
+    calibration_output = tf.identity(
+        calibration_outputs[feature_config.name], name=passthrough_name)
+    if feature_config.monotonicity in [1, -1, 'increasing', 'decreasing']:
+      rtl_inputs['increasing'].append(calibration_output)
+    else:
+      rtl_inputs['unconstrained'].append(calibration_output)
+
+  lattice_size = model_config.feature_configs[0].lattice_size
+  kernel_initializer = lattice_layer.RandomMonotonicInitializer(
+      lattice_sizes=[lattice_size] * model_config.lattice_rank,
+      output_min=output_init_min,
+      output_max=output_init_max)
+  return rtl_layer.RTL(
+      num_lattices=model_config.num_lattices,
+      lattice_rank=model_config.lattice_rank,
+      lattice_size=lattice_size,
+      output_min=output_min,
+      output_max=output_max,
+      clip_inputs=False,
+      interpolation=model_config.interpolation,
+      kernel_regularizer=lattice_regularizers,
+      kernel_initializer=kernel_initializer,
+      dtype=dtype,
+      name=layer_name)(
+          rtl_inputs)
+
+
+def build_calibrated_lattice_ensemble_layer(calibration_input_layer,
+                                            model_config, dtype):
+  """Creates a calibration layer followed by a lattice ensemble layer.
+
+  Args:
+    calibration_input_layer: A mapping from feature name to `tf.keras.Input`.
+    model_config: Model configuration object describing model architecture.
+      Should be one of the model configs in `tfl.configs`.
+    dtype: dtype
+
+  Returns:
+    A `tfl.layers.RTL` instance if model_config.lattices is 'rtl_layer.
+    Otherwise a list of `tfl.layers.Lattice` instances.
+  """
+  if model_config.lattices == 'rtl_layer':
+    num_features = len(model_config.feature_configs)
+    units = [1] * num_features
+    if model_config.separate_calibrators:
+      num_inputs = model_config.num_lattices * model_config.lattice_rank
+      # We divide the number of inputs semi-evenly by the number of features.
+      for i in range(num_features):
+        units[i] = ((i + 1) * num_inputs // num_features -
+                    i * num_inputs // num_features)
+    calibration_output_units = {
+        feature_config.name: units[i]
+        for i, feature_config in enumerate(model_config.feature_configs)
+    }
+    calibration_outputs = build_multi_unit_calibration_layers(
+        calibration_input_layer=calibration_input_layer,
+        calibration_output_units=calibration_output_units,
+        model_config=model_config,
+        layer_output_range=LayerOutputRange.INPUT_TO_LATTICE,
+        output_single_tensor=True,
+        dtype=dtype)
+
+    lattice_outputs = build_rtl_layer(
+        calibration_outputs=calibration_outputs,
+        model_config=model_config,
+        submodel_index=0,
+        dtype=dtype)
+  else:
+    submodels_inputs = build_calibration_layers(
+        calibration_input_layer=calibration_input_layer,
+        model_config=model_config,
+        layer_output_range=LayerOutputRange.INPUT_TO_LATTICE,
+        submodels=model_config.lattices,
+        separate_calibrators=model_config.separate_calibrators,
+        dtype=dtype)
+
+    lattice_outputs = build_lattice_ensemble_layer(
+        submodels_inputs=submodels_inputs,
+        model_config=model_config,
+        dtype=dtype)
+
+  return lattice_outputs
 
 
 def build_linear_combination_layer(ensemble_outputs, model_config, dtype):
@@ -1090,13 +1280,58 @@ def verify_config(model_config):
       Should be one of the model configs in `tfl.configs`.
   """
   if isinstance(model_config, configs.CalibratedLatticeEnsembleConfig):
-    if not isinstance(model_config.lattices, list):
-      raise ValueError('Lattices are not fully specified for ensemble config.')
-    for lattice in model_config.lattices:
-      if (not np.iterable(lattice) or
-          any(not isinstance(x, str) for x in lattice)):
+    # Make sure there are more than one lattice. If not, tell user to use
+    # CalibratedLattice instead.
+    if model_config.lattices == 'rtl_layer':
+      # RTL must have num_lattices specified and >= 2.
+      if model_config.num_lattices is None:
+        raise ValueError('model_config.num_lattices must be specified when '
+                         'model_config.lattices is set to \'rtl_layer\'.')
+      if model_config.num_lattices < 2:
         raise ValueError(
-            'Lattices are not fully specified for ensemble config.')
+            'CalibratedLatticeEnsemble must have >= 2 lattices. For single '
+            'lattice models, use CalibratedLattice instead.')
+      # Check that all lattices sizes for all features are the same.
+      if any(feature_config.lattice_size !=
+             model_config.feature_configs[0].lattice_size
+             for feature_config in model_config.feature_configs):
+        raise ValueError('Lattice sizes must be the same for all features.')
+      # Check that there are only monotonicity and bound constraints.
+      if any(feature_config.unimodality != 'none'
+             for feature_config in model_config.feature_configs):
+        raise ValueError(
+            'RTL Layer does not currently support unimodality constraints.')
+      if any(feature_config.reflects_trust_in is not None
+             for feature_config in model_config.feature_configs):
+        raise ValueError(
+            'RTL Layer does not currently support trust constraints.')
+      if any(feature_config.dominates is not None
+             for feature_config in model_config.feature_configs):
+        raise ValueError(
+            'RTL Layer does not currently support dominance constraints.')
+      # Check that there are no per-feature lattice regularizers.
+      for feature_config in model_config.feature_configs:
+        for regularizer_config in feature_config.regularizer_configs or []:
+          if not regularizer_config.name.startswith(
+              _INPUT_CALIB_REGULARIZER_PREFIX):
+            raise ValueError(
+                'RTL Layer does not currently support per-feature lattice '
+                'regularizers.')
+    elif isinstance(model_config.lattices, list):
+      if len(model_config.lattices) < 2:
+        raise ValueError(
+            'CalibratedLatticeEnsemble must have >= 2 lattices. For single '
+            'lattice models, use CalibratedLattice instead.')
+      for lattice in model_config.lattices:
+        if (not np.iterable(lattice) or
+            any(not isinstance(x, str) for x in lattice)):
+          raise ValueError(
+              'Lattices are not fully specified for ensemble config.')
+    else:
+      raise ValueError(
+          'Lattices are not fully specified for ensemble config. Lattices must '
+          'be set to \'rtl_layer\' or be fully specified as a list of lists of '
+          'feature names.')
   if isinstance(model_config, configs.AggregateFunctionConfig):
     if model_config.middle_dimension < 1:
       raise ValueError('Middle dimension must be at least 1: {}'.format(

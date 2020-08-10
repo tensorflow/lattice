@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Internal helpers shared by multiple modules in TFL.
 
 Note that this module is not expected to be used by TFL users, and that it is
@@ -72,8 +71,8 @@ def _min_projection(weights, sorted_indices, key_less_than_values, step):
     sorted_indices: Topologically sorted list of indices based on the
       monotonicity constraints.
     key_less_than_values: A defaultdict from index to a list of indices, such
-      that for `j` in `key_less_than_values[i]` we must have
-      `weight[i] <= weight[j]`.
+      that for `j` in `key_less_than_values[i]` we must have `weight[i] <=
+      weight[j]`.
     step: A value defining if we should apply a full projection (`step == 1`) or
       a partial projection (`step < 1`).
 
@@ -125,8 +124,8 @@ def _max_projection(weights, sorted_indices, key_greater_than_values, step):
   return projected_weights
 
 
-def approximately_project_categorical_partial_monotonicities(weights,
-                                                             monotonicities):
+def approximately_project_categorical_partial_monotonicities(
+    weights, monotonicities):
   """Returns an approximation L2 projection for categorical monotonicities.
 
   Categorical monotonocities are monotonicity constraints applied to the real
@@ -151,8 +150,7 @@ def approximately_project_categorical_partial_monotonicities(weights,
   projected_weights = tf.unstack(weights)
 
   # A 0.5 min projection followed by a full max projection.
-  projected_weights_min_max = _min_projection(projected_weights,
-                                              sorted_indices,
+  projected_weights_min_max = _min_projection(projected_weights, sorted_indices,
                                               key_less_than_values, 0.5)
   projected_weights_min_max = _max_projection(projected_weights_min_max,
                                               sorted_indices,
@@ -160,8 +158,7 @@ def approximately_project_categorical_partial_monotonicities(weights,
   projected_weights_min_max = tf.stack(projected_weights_min_max)
 
   # A 0.5 max projection followed by a full min projection.
-  projected_weights_max_min = _max_projection(projected_weights,
-                                              sorted_indices,
+  projected_weights_max_min = _max_projection(projected_weights, sorted_indices,
                                               key_greater_than_values, 0.5)
   projected_weights_max_min = _min_projection(projected_weights_max_min,
                                               sorted_indices,

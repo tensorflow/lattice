@@ -220,6 +220,8 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
 
   def _TestEnsemble(self, config):
     """Verifies that 'units > 1' lattice produces same output as 'units==1'."""
+    # Note that the initialization of the lattice must be the same across the
+    # units dimension (otherwise the loss will be different).
     if self.disable_ensembles:
       return
     config = dict(config)
@@ -277,6 +279,8 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     model = keras.models.Sequential()
     model.add(keras_layer)
 
+    # When we use multi-unit lattices, we only extract a single lattice for
+    # testing.
     if units > 1:
       lattice_index = config["lattice_index"]
       model.add(
@@ -904,6 +908,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
   def testJointUnimodality1D(self, joint_unimodalities, expected_loss):
     if self.disable_all:
       return
+
     def _Sin(x):
       result = math.sin(x[0])
       # Make test exactly symmetric for both unimodality directions.
@@ -964,10 +969,11 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
       return
 
     center = (3, 3)
+
     def WShaped2dFunction(x):
       distance = lambda x1, y1, x2, y2: ((x2 - x1)**2 + (y2 - y1)**2)**0.5
       d = distance(x[0], x[1], center[0], center[1])
-      t = (d - 0.6*center[0])**2
+      t = (d - 0.6 * center[0])**2
       return min(t, 6.0 - t)
 
     config = {
@@ -1011,9 +1017,9 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
 
     def WShaped2dFunction(x):
       distance = lambda x1, y1, x2, y2: ((x2 - x1)**2 + (y2 - y1)**2)**0.5
-      d = distance(x[center_indices[0]], x[center_indices[1]],
-                   center[0], center[1])
-      t = (d - 0.6*center[0])**2
+      d = distance(x[center_indices[0]], x[center_indices[1]], center[0],
+                   center[1])
+      t = (d - 0.6 * center[0])**2
       return min(t, 4.5 - t)
 
     def _DistributeXUniformly(num_points, lattice_sizes):
@@ -1024,8 +1030,10 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         for j in range(0, lattice_sizes[1] * points_per_vertex + 1):
           for k in range(0, lattice_sizes[2] * points_per_vertex + 1):
             for l in range(0, lattice_sizes[3] * points_per_vertex + 1):
-              p = [i / float(points_per_vertex), j / float(points_per_vertex),
-                   k / float(points_per_vertex), l / float(points_per_vertex)]
+              p = [
+                  i / float(points_per_vertex), j / float(points_per_vertex),
+                  k / float(points_per_vertex), l / float(points_per_vertex)
+              ]
               result.append(p)
       return result
 
@@ -1914,40 +1922,37 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.assertLessEqual(graph_size, expected_graph_size)
 
   @parameterized.parameters(
-      ("random_uniform_or_linear_initializer", [3, 3, 3],
-       [([0, 1, 2], "peak")],
-       tf.keras.initializers.RandomUniform),
-      ("random_uniform_or_linear_initializer", [3, 3, 3],
-       [([0, 1, 2], "valley")],
-       tf.keras.initializers.RandomUniform),
-      ("random_uniform_or_linear_initializer", [3, 3, 3],
-       [([0, 1], "valley")],
-       ll.LinearInitializer),
-      ("random_uniform_or_linear_initializer", [3, 3, 3],
-       [([0, 1], "valley"), ([2], "peak")],
-       ll.LinearInitializer),
-      ("random_uniform_or_linear_initializer", [3, 3, 3],
-       None,
-       ll.LinearInitializer),
-      ("linear_initializer", [3, 3, 3],
-       [([0, 1], "valley")],
-       ll.LinearInitializer),
-      ("random_monotonic_initializer", [3, 3, 3],
-       [([0, 1], "valley")],
-       ll.RandomMonotonicInitializer))
-  def testCreateKernelInitializer(
-      self,
-      kernel_initializer_id, lattice_sizes, joint_unimodalities, expected_type):
+      ("random_uniform_or_linear_initializer", [3, 3, 3], [
+          ([0, 1, 2], "peak")
+      ], tf.keras.initializers.RandomUniform),
+      ("random_uniform_or_linear_initializer", [3, 3, 3], [
+          ([0, 1, 2], "valley")
+      ], tf.keras.initializers.RandomUniform),
+      ("random_uniform_or_linear_initializer", [3, 3, 3], [
+          ([0, 1], "valley")
+      ], ll.LinearInitializer),
+      ("random_uniform_or_linear_initializer", [3, 3, 3], [
+          ([0, 1], "valley"), ([2], "peak")
+      ], ll.LinearInitializer), ("random_uniform_or_linear_initializer",
+                                 [3, 3, 3], None, ll.LinearInitializer),
+      ("linear_initializer", [3, 3, 3], [
+          ([0, 1], "valley")
+      ], ll.LinearInitializer), ("random_monotonic_initializer", [3, 3, 3], [
+          ([0, 1], "valley")
+      ], ll.RandomMonotonicInitializer))
+  def testCreateKernelInitializer(self, kernel_initializer_id, lattice_sizes,
+                                  joint_unimodalities, expected_type):
     self.assertEqual(
         expected_type,
-        type(ll.create_kernel_initializer(
-            kernel_initializer_id,
-            lattice_sizes,
-            monotonicities=None,
-            output_min=0.0,
-            output_max=1.0,
-            unimodalities=None,
-            joint_unimodalities=joint_unimodalities)))
+        type(
+            ll.create_kernel_initializer(
+                kernel_initializer_id,
+                lattice_sizes,
+                monotonicities=None,
+                output_min=0.0,
+                output_max=1.0,
+                unimodalities=None,
+                joint_unimodalities=joint_unimodalities)))
 
   @parameterized.parameters(
       # Single Unit

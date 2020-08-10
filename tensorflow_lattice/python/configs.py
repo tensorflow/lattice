@@ -219,6 +219,23 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
       feature_analysis_input_fn=feature_analysis_input_fn)
   estimator.train(input_fn=train_input_fn)
   ```
+  You can also construct a random ensemble (RTL) using a `tfl.layers.RTL`
+  layer so long as all features have the same lattice size:
+  ```python
+  model_config = tfl.configs.CalibratedLatticeEnsembleConfig(
+      lattices='rtl_layer',
+      num_lattices=6,  # number of lattices
+      lattice_rank=5,  # number of features in each lattice
+      feature_configs=[...],
+  )
+  feature_analysis_input_fn = create_input_fn(num_epochs=1, ...)
+  train_input_fn = create_input_fn(num_epochs=100, ...)
+  estimator = tfl.estimators.CannedClassifier(
+      feature_columns=feature_columns,
+      model_config=model_config,
+      feature_analysis_input_fn=feature_analysis_input_fn)
+  estimator.train(input_fn=train_input_fn)
+  ```
   To create a Crystals model, you will need to provide a *prefitting_input_fn*
   to the estimator constructor. This input_fn is used to train the prefitting
   model, as described above. The prefitting model does not need to be fully
@@ -271,6 +288,10 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
       lattices: Should be one of the following:
         - String `'random'` indicating that the features in each lattice should
           be selected randomly
+        - String `'rtl_layer'` indicating that the features in each lattice
+          should be selected randomly using a `tfl.layers.RTL` layer. Note that
+          using a `tfl.layers.RTL` layer scales better than using separate
+          `tfl.layers.Lattice` instances for the ensemble.
         - String `'crystals'` to use a heuristic to construct the lattice
           ensemble based on pairwise feature interactions
         - An explicit list of list of feature names to be used in each lattice

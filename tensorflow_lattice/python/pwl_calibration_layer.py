@@ -24,6 +24,7 @@ from __future__ import division
 from __future__ import print_function
 
 from . import pwl_calibration_lib
+from . import utils
 
 from absl import logging
 import numpy as np
@@ -493,8 +494,7 @@ class PWLCalibration(keras.layers.Layer):
 
     asserts = pwl_calibration_lib.assert_constraints(
         outputs=outputs,
-        monotonicity=pwl_calibration_lib.canonicalize_monotonicity(
-            self.monotonicity),
+        monotonicity=utils.canonicalize_monotonicity(self.monotonicity),
         output_min=self.output_min,
         output_max=self.output_max,
         clamp_min=self.clamp_min,
@@ -584,8 +584,7 @@ class UniformOutputInitializer(keras.initializers.Initializer):
         shape=shape,
         output_min=self.output_min,
         output_max=self.output_max,
-        monotonicity=pwl_calibration_lib.canonicalize_monotonicity(
-            self.monotonicity),
+        monotonicity=utils.canonicalize_monotonicity(self.monotonicity),
         keypoints=self.keypoints,
         dtype=dtype)
 
@@ -652,10 +651,8 @@ class PWLCalibrationConstraints(keras.constraints.Constraint):
     self.output_max_constraints = output_max_constraints
     self.num_projection_iterations = num_projection_iterations
 
-    canonical_convexity = pwl_calibration_lib.canonicalize_convexity(
-        self.convexity)
-    canonical_monotonicity = pwl_calibration_lib.canonicalize_monotonicity(
-        self.monotonicity)
+    canonical_convexity = utils.canonicalize_convexity(self.convexity)
+    canonical_monotonicity = utils.canonicalize_monotonicity(self.monotonicity)
     if (canonical_convexity != 0 and canonical_monotonicity == 0 and
         (output_min_constraints != pwl_calibration_lib.BoundConstraintsType.NONE
          or output_max_constraints !=
@@ -670,14 +667,12 @@ class PWLCalibrationConstraints(keras.constraints.Constraint):
     """Applies constraints to w."""
     return pwl_calibration_lib.project_all_constraints(
         weights=w,
-        monotonicity=pwl_calibration_lib.canonicalize_monotonicity(
-            self.monotonicity),
+        monotonicity=utils.canonicalize_monotonicity(self.monotonicity),
         output_min=self.output_min,
         output_max=self.output_max,
         output_min_constraints=self.output_min_constraints,
         output_max_constraints=self.output_max_constraints,
-        convexity=pwl_calibration_lib.canonicalize_convexity(
-            self.convexity),
+        convexity=utils.canonicalize_convexity(self.convexity),
         lengths=self.lengths,
         num_projection_iterations=self.num_projection_iterations)
 

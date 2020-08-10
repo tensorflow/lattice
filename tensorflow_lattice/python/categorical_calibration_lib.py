@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import internal_utils as iu
+from . import internal_utils
 import tensorflow as tf
 
 
@@ -51,7 +51,7 @@ def project(weights, output_min, output_max, monotonicities):
 
   if monotonicities:
     projected_weights = (
-        iu.approximately_project_categorical_partial_monotonicities(
+        internal_utils.approximately_project_categorical_partial_monotonicities(
             projected_weights, monotonicities))
 
   if output_min is not None:
