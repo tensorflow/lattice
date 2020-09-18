@@ -100,6 +100,8 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("kernel_regularizer", None)
     config.setdefault("bias_regularizer", None)
     config.setdefault("allowed_constraints_violation", 1e-6)
+    config.setdefault("units", 1)
+    config.setdefault("unit_index", 0)
     return config
 
   def _GetTrainingInputsAndLabels(self, config):
@@ -150,10 +152,24 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
 
     training_inputs, training_labels, raw_training_inputs = (
         self._GetTrainingInputsAndLabels(config))
+    units = config["units"]
+    num_input_dims = config["num_input_dims"]
+    if units > 1:
+      # In order to test multi 'units' linear, replicate inputs 'units' times
+      # and later use just one out of 'units' outputs in order to ensure that
+      # multi 'units' linear trains exactly similar to single 'units' one.
+      training_inputs = [
+          np.tile(np.expand_dims(x, axis=0), reps=[units, 1])
+          for x in training_inputs
+      ]
+      input_shape = (units, num_input_dims)
+    else:
+      input_shape = (num_input_dims,)
 
     linear_layer = linl.Linear(
-        input_shape=[config["num_input_dims"]],
+        input_shape=input_shape,
         num_input_dims=config["num_input_dims"],
+        units=units,
         monotonicities=config["monotonicities"],
         monotonic_dominances=config["monotonic_dominances"],
         range_dominances=config["range_dominances"],
@@ -170,6 +186,11 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         dtype=tf.float32)
     model = keras.models.Sequential()
     model.add(linear_layer)
+    # When we use multi-unit linear, we only extract a single unit for testing.
+    if units > 1:
+      unit_index = config["unit_index"]
+      model.add(
+          keras.layers.Lambda(lambda x: x[:, unit_index:unit_index + 1]))
     optimizer = config["optimizer"](learning_rate=config["learning_rate"])
     model.compile(loss=keras.losses.mean_squared_error, optimizer=optimizer)
 
@@ -428,6 +449,16 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, expected_loss, delta=_LOSS_EPS)
     self.assertAlmostEqual(loss, self._NegateAndTrain(config), delta=_SMALL_EPS)
+
+    multioutput_config = dict(config)
+    units = 3
+    multioutput_config["units"] = units
+    for unit_index in range(units):
+      multioutput_config["unit_index"] = unit_index
+      loss = self._TrainModel(multioutput_config)
+      self.assertAlmostEqual(loss, expected_loss, delta=_LOSS_EPS)
+      self.assertAlmostEqual(
+          loss, self._NegateAndTrain(multioutput_config), delta=_SMALL_EPS)
 
   @parameterized.parameters(
       (1, [0.2, 0.3], 0, 0.250532),  # Testing sum of weights < 1.0.

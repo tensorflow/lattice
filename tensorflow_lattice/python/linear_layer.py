@@ -56,10 +56,11 @@ class Linear(keras.layers.Layer):
   Weights can be constrained to have a fixed norm.
 
   Input shape:
-  Rank-2 tensor with shape: (batch_size, num_input_dims)
+    - if `units == 1`: tensor of shape: `(batch_size, num_input_dims)`.
+    - if `units > 1`: tensor of shape: `(batch_size, units, num_input_dims)`
 
   Output shape:
-  Rank-2 tensor with shape: (batch_size, 1)
+  Rank-2 tensor with shape: (batch_size, units)
 
   Attributes:
     - All `__init__ `arguments.
@@ -83,6 +84,7 @@ class Linear(keras.layers.Layer):
 
   def __init__(self,
                num_input_dims,
+               units=1,
                monotonicities=None,
                monotonic_dominances=None,
                range_dominances=None,
@@ -99,6 +101,7 @@ class Linear(keras.layers.Layer):
 
     Args:
       num_input_dims: Number of input dimensions.
+      units: Output dimension of the layer.
       monotonicities: None or list or tuple of length 'num_input_dims' of
         {'decreasing', 'none', 'increasing', -1, 0, 1} which specifies if the
         model output should be monotonic in corresponding feature, using
@@ -141,6 +144,7 @@ class Linear(keras.layers.Layer):
     super(Linear, self).__init__(**kwargs)
 
     self.num_input_dims = num_input_dims
+    self.units = units
 
     if isinstance(monotonicities, list) or isinstance(monotonicities, tuple):
       self.monotonicities = list(monotonicities)
@@ -177,23 +181,27 @@ class Linear(keras.layers.Layer):
       for reg in bias_regularizer:
         self.bias_regularizer.append(keras.regularizers.get(reg))
 
+    if units == 1:
+      input_shape = (None, num_input_dims)
+    else:
+      input_shape = (None, units, num_input_dims)
     self.input_spec = keras.layers.InputSpec(
-        dtype=self.dtype, shape=(None, num_input_dims))
+        dtype=self.dtype, shape=input_shape)
 
   def build(self, input_shape):
     """Standard Keras build() method.
 
     Args:
-      input_shape: Must be: (batch_size, num_input_dims)
+      input_shape: Must be: (batch_size, num_input_dims) if units == 1, or
+        (batch_size, units, num_input_dims) if units > 1.
 
     Raises:
-      ValueError: If shape is not (batch_size, num_input_dims).
+      ValueError: If shape is invalid.
     """
-    if len(input_shape) != 2 or input_shape[1] != self.num_input_dims:
-      raise ValueError("'input_shape' must be of rank two and number of "
-                       "elements of second dimension must be equal to "
-                       "'num_input_dims'. 'input_shape': " + str(input_shape) +
-                       "'num_input_dims': " + str(self.num_input_dims))
+    linear_lib.verify_hyperparameters(
+        num_input_dims=self.num_input_dims,
+        units=self.units,
+        input_shape=input_shape)
 
     if (any(self.monotonicities) or self.monotonic_dominances or
         self.range_dominances or self.normalization_order):
@@ -219,7 +227,7 @@ class Linear(keras.layers.Layer):
     self.kernel = self.add_weight(
         LINEAR_LAYER_KERNEL_NAME,
         # 1 column matrix rather than verctor for matrix multiplication.
-        shape=[self.num_input_dims, 1],
+        shape=[self.num_input_dims, self.units],
         initializer=self.kernel_initializer,
         regularizer=kernel_reg,
         constraint=constraints,
@@ -234,7 +242,7 @@ class Linear(keras.layers.Layer):
         bias_reg = lambda x: tf.add_n([r(x) for r in self.bias_regularizer])
       self.bias = self.add_weight(
           LINEAR_LAYER_BIAS_NAME,
-          shape=[],
+          shape=[] if self.units == 1 else [self.units],
           initializer=self.bias_initializer,
           regularizer=bias_reg,
           constraint=None,
@@ -263,7 +271,10 @@ class Linear(keras.layers.Layer):
                                 clip_value_min=self.clip_value_min,
                                 clip_value_max=self.clip_value_max)
 
-    result = tf.matmul(inputs, self.kernel)
+    if self.units == 1:
+      result = tf.matmul(inputs, self.kernel)
+    else:
+      result = tf.reduce_sum(inputs * tf.transpose(self.kernel), axis=-1)
     if self.use_bias:
       result += self.bias
     return result
@@ -271,12 +282,13 @@ class Linear(keras.layers.Layer):
   def compute_output_shape(self, input_shape):
     """Standard Keras compute_output_shape() method."""
     del input_shape
-    return [None, 1]
+    return [None, self.units]
 
   def get_config(self):
     """Standard Keras get_config() method."""
     config = {
         "num_input_dims": self.num_input_dims,
+        "units": self.units,
         "monotonicities": self.monotonicities,
         "use_bias": self.use_bias,
         "normalization_order": self.normalization_order,

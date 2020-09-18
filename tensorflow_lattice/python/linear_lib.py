@@ -36,7 +36,7 @@ def project(weights,
 
   Args:
     weights: Tensor which represents weights of TFL linear layer. Must have
-      shape [len(monotonicities), 1].
+      shape [len(monotonicities), units].
     monotonicities: List or tuple of same length as number of elements in
       'weights' of {-1, 0, 1} which represent monotonicity constraints per
       dimension. -1 stands for decreasing, 0 for no constraints, 1 for
@@ -55,7 +55,7 @@ def project(weights,
       Norm will be computed by: `tf.norm(tensor, ord=normalization_order)`.
 
   Raises:
-    ValueError: If shape of weights is not `(len(monotonicities), 1)`.
+    ValueError: If shape of weights is not `(len(monotonicities), units)`.
 
   Returns:
     'weights' with monotonicity constraints and normalization applied to it.
@@ -72,7 +72,7 @@ def project(weights,
       inverted_increasing_mask = tf.constant(
           value=[0.0 if m == 1 else 1.0 for m in monotonicities],
           dtype=weights.dtype,
-          shape=weights.shape)
+          shape=(weights.shape[0], 1))
       # Multiplying by this mask will keep non monotonic dims same and will
       # set monotonic dims to 0.0. Later by taking maximum with this product
       # we'll essentially take maximumum of monotonic dims with 0.0.
@@ -82,7 +82,7 @@ def project(weights,
       inverted_decreasing_mask = tf.constant(
           value=[0.0 if m == -1 else 1.0 for m in monotonicities],
           dtype=weights.dtype,
-          shape=weights.shape)
+          shape=(weights.shape[0], 1))
       weights = tf.minimum(weights, weights * inverted_decreasing_mask)
 
   if monotonic_dominances:
@@ -96,18 +96,17 @@ def project(weights,
     for dim, (lower, upper) in enumerate(zip(input_min, input_max)):
       if lower is not None and upper is not None:
         scalings[dim] *= upper - lower
-    scalings = tf.constant(scalings, dtype=weights.dtype, shape=weights.shape)
+    scalings = tf.constant(
+        scalings, dtype=weights.dtype, shape=(weights.shape[0], 1))
     weights *= scalings
     weights = internal_utils.approximately_project_categorical_partial_monotonicities(
         weights, range_dominances)
     weights /= scalings
 
   if normalization_order:
-    norm = tf.norm(weights, ord=normalization_order)
-    weights = tf.cond(
-        norm < _NORMALIZATION_EPS,
-        true_fn=lambda: weights,
-        false_fn=lambda: weights / norm)
+    norm = tf.norm(weights, axis=0, ord=normalization_order)
+    norm = tf.where(norm < _NORMALIZATION_EPS, 1.0, norm)
+    weights = weights / norm
 
   return weights
 
@@ -151,7 +150,7 @@ def assert_constraints(weights,
     # Create constant specifying shape explicitly because otherwise due to
     # weights shape ending with dimesion of size 1 broadcasting will hurt us.
     monotonicities_constant = tf.constant(
-        monotonicities, shape=weights.shape, dtype=weights.dtype)
+        monotonicities, shape=(weights.shape[0], 1), dtype=weights.dtype)
     diff = tf.reduce_min(weights * monotonicities_constant)
     asserts.append(
         tf.Assert(
@@ -193,7 +192,7 @@ def assert_constraints(weights,
               summarize=weights.shape[0]))
 
   if normalization_order:
-    norm = tf.norm(weights, ord=normalization_order)
+    norm = tf.norm(weights, axis=0, ord=normalization_order)
     asserts.append(
         # Norm can be either 0.0 or 1.0, because if all weights are close to 0.0
         # we can't scale them to get norm 1.0.
@@ -210,6 +209,8 @@ def assert_constraints(weights,
 
 
 def verify_hyperparameters(num_input_dims=None,
+                           units=None,
+                           input_shape=None,
                            monotonicities=None,
                            monotonic_dominances=None,
                            range_dominances=None,
@@ -230,6 +231,8 @@ def verify_hyperparameters(num_input_dims=None,
 
   Args:
     num_input_dims: None or number of input dimensions.
+    units: Units hyperparameter of Linear layer.
+    input_shape: Shape of layer input.
     monotonicities: List or tuple of same length as number of elements in
       `weights` of {-1, 0, 1} which represent monotonicity constraints per
       dimension. -1 stands for decreasing, 0 for no constraints, 1 for
@@ -263,9 +266,9 @@ def verify_hyperparameters(num_input_dims=None,
                        (monotonicities, len(monotonicities), num_input_dims))
 
   if weights_shape is not None:
-    if len(weights_shape) != 2 or weights_shape[1] != 1:
-      raise ValueError("Expect weights to be a row vector. Weights shape: %s" %
-                       (weights_shape,))
+    if len(weights_shape) != 2:
+      raise ValueError("Expect weights to be a rank 2 tensor. Weights shape: "
+                       "%s" % (weights_shape,))
     if monotonicities is not None and weights_shape[0] != len(monotonicities):
       raise ValueError("Number of elements in 'monotonicities' does not "
                        "correspond to number of weights. Weights shape: %s, "
@@ -280,6 +283,23 @@ def verify_hyperparameters(num_input_dims=None,
           "Number of elements in 'input_max' does not correspond "
           "to number of weights. Weights shape: %s, input_max: %s" %
           (weights_shape, input_max))
+
+  if input_shape is not None:
+    assert units is not None and num_input_dims is not None
+    if (units > 1 and
+        (len(input_shape) != 3 or input_shape[1] != units or
+         input_shape[2] != num_input_dims)):
+      raise ValueError("'input_shape' must be of rank three and number of "
+                       "elements of second and third dimensions must be "
+                       "equal to 'units' and 'num_input_dims' respectively. "
+                       "'input_shape': " + str(input_shape) + "'units': " +
+                       str(units) + "'num_input_dims': " + str(num_input_dims))
+    elif (units == 1 and
+          (len(input_shape) != 2 or input_shape[1] != num_input_dims)):
+      raise ValueError("'input_shape' must be of rank two and number of "
+                       "elements of second dimension must be equal to "
+                       "'num_input_dims'. 'input_shape': " + str(input_shape) +
+                       "'num_input_dims': " + str(num_input_dims))
 
   for dim, (lower, upper) in enumerate(zip(input_min or [], input_max or [])):
     if lower is not None and upper is not None and lower > upper:
