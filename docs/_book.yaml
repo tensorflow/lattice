@@ -36,6 +36,8 @@ upper_tabs:
     - name: API
       skip_translation: true
       contents:
-      - include: /lattice/api_docs/python/_toc.yaml
+      - title: All Symbols
+        path: /lattice/api_docs/python/tfl/all_symbols
+      - include: /lattice/api_docs/python/tfl/_toc.yaml
 
 - include: /_upper_tabs_right.yaml
