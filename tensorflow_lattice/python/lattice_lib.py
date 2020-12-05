@@ -2052,7 +2052,7 @@ def laplacian_regularizer(weights, lattice_sizes, l1=0.0, l2=0.0):
   l2[1] * ((w[3] - w[0])^2 + (w[4] - w[1])^2 + (w[5] - w[2])^2)
   ```
 
-  Arguments:
+  Args:
     weights: `Lattice` weights tensor of shape: `(prod(lattice_sizes), units)`.
     lattice_sizes: List or tuple of integers which represents lattice sizes.
     l1: l1 regularization amount. Either single float or list or tuple of floats
@@ -2129,7 +2129,7 @@ def torsion_regularizer(weights, lattice_sizes, l1=0.0, l2=0.0):
   l2 * ((w[4] + w[0] - w[3] - w[1])^2 + (w[5] + w[1] - w[4] - w[2])^2)
   ```
 
-  Arguments:
+  Args:
     weights: `Lattice` weights tensor of shape: `(prod(lattice_sizes), units)`.
     lattice_sizes: List or tuple of integers which represents lattice sizes.
     l1: l1 regularization amount. Either single float or list or tuple of floats
