@@ -129,6 +129,25 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     model.fit([c, d, e, f], target_cdef)
     model.predict([c, d, e, f])
 
+  def testRTLOutputShape(self):
+    if self.disable_all:
+      return
+
+    # Multiple Outputs Per Lattice
+    input_shape, output_shape = (30,), (None, 6)
+    input_a = tf.keras.layers.Input(shape=input_shape)
+    rtl_0 = rtl_layer.RTL(num_lattices=6, lattice_rank=5)
+    output = rtl_0(input_a)
+    self.assertAllEqual(output_shape, rtl_0.compute_output_shape(input_a.shape))
+    self.assertAllEqual(output_shape, output.shape)
+
+    # Average Outputs
+    output_shape = (None, 1)
+    rtl_1 = rtl_layer.RTL(num_lattices=6, lattice_rank=5, average_outputs=True)
+    output = rtl_1(input_a)
+    self.assertAllEqual(output_shape, rtl_1.compute_output_shape(input_a.shape))
+    self.assertAllEqual(output_shape, output.shape)
+
   def testRTLSaveLoad(self):
     if self.disable_all:
       return

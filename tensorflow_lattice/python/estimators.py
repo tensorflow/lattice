@@ -92,7 +92,8 @@ from tensorflow.python.keras.utils import losses_utils  # pylint: disable=g-dire
 from tensorflow.python.training import training_util  # pylint: disable=g-direct-tensorflow-import
 from tensorflow_estimator.python.estimator import estimator as estimator_lib
 from tensorflow_estimator.python.estimator.canned import optimizers
-from tensorflow_estimator.python.estimator.head import head_utils
+from tensorflow_estimator.python.estimator.head import binary_class_head
+from tensorflow_estimator.python.estimator.head import multi_class_head
 from tensorflow_estimator.python.estimator.head import regression_head
 
 # TODO: support multi dim inputs.
@@ -115,7 +116,7 @@ _ENSEMBLE_STRUCTURE_FILE = 'ensemble_structure.json'
 _LABEL_FEATURE_NAME = '__label__'
 
 # Pooling interval and maximum wait time for workers waiting for files.
-_MAX_WAIT_TIME = 1200
+_MAX_WAIT_TIME = 2400
 _POLL_INTERVAL_SECS = 10
 
 
@@ -656,6 +657,8 @@ def _calibrated_lattice_model_fn(features, labels, label_dimension,
   if training:
     optimizer = optimizers.get_optimizer_instance_v2(optimizer)
     optimizer.iterations = training_util.get_or_create_global_step()
+  else:
+    optimizer = None
 
   return head.create_estimator_spec(
       features=features,
@@ -929,6 +932,7 @@ class CannedClassifier(estimator_lib.EstimatorV2):
                config=None,
                warm_start_from=None,
                loss_reduction=losses_utils.ReductionV2.SUM_OVER_BATCH_SIZE,
+               loss_fn=None,
                dtype=tf.float32):
     """Initializes a `CannedClassifier` instance.
 
@@ -981,16 +985,27 @@ class CannedClassifier(estimator_lib.EstimatorV2):
         names are unchanged.
       loss_reduction: One of `tf.losses.Reduction` except `NONE`. Describes how
         to reduce training loss over batch. Defaults to `SUM_OVER_BATCH_SIZE`.
+      loss_fn: Optional loss function.
       dtype: dtype of layers used in the model.
     """
     config = estimator_lib.maybe_overwrite_model_dir_and_session_config(
         config, model_dir)
     model_dir = config.model_dir
-    head = head_utils.binary_or_multi_class_head(
-        n_classes=n_classes,
-        weight_column=weight_column,
-        label_vocabulary=label_vocabulary,
-        loss_reduction=loss_reduction)
+
+    if n_classes == 2:
+      head = binary_class_head.BinaryClassHead(
+          weight_column=weight_column,
+          label_vocabulary=label_vocabulary,
+          loss_reduction=loss_reduction,
+          loss_fn=loss_fn)
+    else:
+      head = multi_class_head.MultiClassHead(
+          n_classes,
+          weight_column=weight_column,
+          label_vocabulary=label_vocabulary,
+          loss_reduction=loss_reduction,
+          loss_fn=loss_fn)
+
     label_dimension = 1 if n_classes == 2 else n_classes
 
     model_config = copy.deepcopy(model_config)
@@ -1072,6 +1087,7 @@ class CannedRegressor(estimator_lib.EstimatorV2):
                config=None,
                warm_start_from=None,
                loss_reduction=losses_utils.ReductionV2.SUM_OVER_BATCH_SIZE,
+               loss_fn=None,
                dtype=tf.float32):
     """Initializes a `CannedRegressor` instance.
 
@@ -1118,6 +1134,7 @@ class CannedRegressor(estimator_lib.EstimatorV2):
         names are unchanged.
       loss_reduction: One of `tf.losses.Reduction` except `NONE`. Describes how
         to reduce training loss over batch. Defaults to `SUM_OVER_BATCH_SIZE`.
+      loss_fn: Optional loss function. Defaults to `mean_squared_error`.
       dtype: dtype of layers used in the model.
     """
     config = estimator_lib.maybe_overwrite_model_dir_and_session_config(
@@ -1126,7 +1143,8 @@ class CannedRegressor(estimator_lib.EstimatorV2):
     head = regression_head.RegressionHead(
         label_dimension=label_dimension,
         weight_column=weight_column,
-        loss_reduction=loss_reduction)
+        loss_reduction=loss_reduction,
+        loss_fn=loss_fn)
 
     model_config = copy.deepcopy(model_config)
     _update_by_feature_columns(model_config, feature_columns)

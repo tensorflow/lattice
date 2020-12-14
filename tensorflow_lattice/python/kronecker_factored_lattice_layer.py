@@ -310,15 +310,19 @@ class RandomMonotonicInitializer(keras.initializers.Initializer):
   """Initializes a `tfl.layers.KroneckerFactoredLattice` as random monotonic."""
   # pyformat: enable
 
-  def __init__(self, monotonicities, seed=None):
+  def __init__(self, monotonicities, init_min=0.5, init_max=1.5, seed=None):
     """Initializes an instance of `RandomMonotonicInitializer`.
 
     Args:
       monotonicities: Monotonic dimensions for initialization. Does not need to
         match `monotonicities` of `tfl.layers.KroneckerFactoredLattice`.
+      init_min: The lower bound on the range of initialized weights.
+      init_max: The upper bound on the range of initialized weights.
       seed: A Python integer. Used to create a random seed for the distribution.
     """
     self.monotonicities = monotonicities
+    self.init_min = init_min
+    self.init_max = init_max
     self.seed = seed
 
   def __call__(self, shape, dtype=None, partition_info=None):
@@ -334,6 +338,8 @@ class RandomMonotonicInitializer(keras.initializers.Initializer):
         shape=shape,
         monotonicities=utils.canonicalize_monotonicities(
             self.monotonicities, allow_decreasing=False),
+        init_min=self.init_min,
+        init_max=self.init_max,
         dtype=dtype,
         seed=self.seed)
 
@@ -341,6 +347,8 @@ class RandomMonotonicInitializer(keras.initializers.Initializer):
     """Standard Keras config for serializaion."""
     config = {
         "monotonicities": self.monotonicities,
+        "init_min": self.init_min,
+        "init_max": self.init_max,
         "seed": self.seed,
     }  # pyformat: disable
     return config

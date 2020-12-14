@@ -222,6 +222,7 @@ def build_multi_unit_calibration_layers(calibration_input_layer,
               monotonicities=feature_config.monotonicity if isinstance(
                   feature_config.monotonicity, list) else None,
               default_input_value=feature_config.default_value,
+              split_outputs=(units > 1 and not output_single_tensor),
               dtype=dtype,
               name=layer_name)(calibration_input))
     else:
@@ -250,6 +251,7 @@ def build_multi_unit_calibration_layers(calibration_input_layer,
               kernel_regularizer=kernel_regularizer,
               monotonicity=monotonicity,
               convexity=feature_config.pwl_calibration_convexity,
+              split_outputs=(units > 1 and not output_single_tensor),
               dtype=dtype,
               name=layer_name)(calibration_input))
     if output_single_tensor:
@@ -257,7 +259,8 @@ def build_multi_unit_calibration_layers(calibration_input_layer,
     elif units == 1:
       calibration_output[feature_name] = [calibrated]
     else:
-      calibration_output[feature_name] = tf.split(calibrated, units, axis=1)
+      # calibrated will have already been split in this case.
+      calibration_output[feature_name] = calibrated
   return calibration_output
 
 
@@ -614,7 +617,8 @@ def build_lattice_ensemble_layer(submodels_inputs, model_config, dtype):
   return lattice_outputs
 
 
-def build_rtl_layer(calibration_outputs, model_config, submodel_index, dtype):
+def build_rtl_layer(calibration_outputs, model_config, submodel_index,
+                    average_outputs, dtype):
   """Creates a `tfl.layers.RTL` layer.
 
   This function expects that all features defined in
@@ -625,6 +629,7 @@ def build_rtl_layer(calibration_outputs, model_config, submodel_index, dtype):
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
     submodel_index: Corresponding index into submodels.
+    average_outputs: Whether to average the outputs of this layer.
     dtype: dtype
 
   Returns:
@@ -667,19 +672,22 @@ def build_rtl_layer(calibration_outputs, model_config, submodel_index, dtype):
       interpolation=model_config.interpolation,
       kernel_regularizer=lattice_regularizers,
       kernel_initializer=kernel_initializer,
+      average_outputs=average_outputs,
       dtype=dtype,
       name=layer_name)(
           rtl_inputs)
 
 
 def build_calibrated_lattice_ensemble_layer(calibration_input_layer,
-                                            model_config, dtype):
+                                            model_config, average_outputs,
+                                            dtype):
   """Creates a calibration layer followed by a lattice ensemble layer.
 
   Args:
     calibration_input_layer: A mapping from feature name to `tf.keras.Input`.
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
+    average_outputs: Whether to average the outputs of this layer.
     dtype: dtype
 
   Returns:
@@ -711,6 +719,7 @@ def build_calibrated_lattice_ensemble_layer(calibration_input_layer,
         calibration_outputs=calibration_outputs,
         model_config=model_config,
         submodel_index=0,
+        average_outputs=average_outputs,
         dtype=dtype)
   else:
     submodels_inputs = build_calibration_layers(
@@ -725,6 +734,9 @@ def build_calibrated_lattice_ensemble_layer(calibration_input_layer,
         submodels_inputs=submodels_inputs,
         model_config=model_config,
         dtype=dtype)
+
+    if average_outputs:
+      lattice_outputs = tf.keras.layers.Average()(lattice_outputs)
 
   return lattice_outputs
 

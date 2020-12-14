@@ -245,7 +245,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     units = config["units"]
     lattice_sizes = config["lattice_sizes"]
     if units > 1:
-      # In order to test multi 'units' lattice replecate inputs 'units' times
+      # In order to test multi 'units' lattice replicate inputs 'units' times
       # and later use just one out of 'units' outputs in order to ensure that
       # multi 'units' lattice trains exactly similar to single 'units' one.
       training_inputs = [
@@ -1524,8 +1524,8 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     loss = self._TrainModel(config)
     # Delta is large because regularizers for large lattice are prone to
     # numerical errors due to summing up huge number of floats of various
-    # maginitudes hense loss is different in graph and eager modes.
-    self.assertAlmostEqual(loss, 0.910818, delta=0.05)
+    # magnitudes hence loss is different in graph and eager modes.
+    self.assertAlmostEqual(loss, 0.97806, delta=0.05)
 
   @parameterized.parameters(
       ([0], [0], 0.026734),
@@ -2051,6 +2051,65 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     outputs = model.predict(inputs)
     self.assertAllClose(outputs, expected_outputs)
 
+  @parameterized.parameters(
+      (
+          [2, 2],
+          [
+              [0., 0.],
+              [1., 1.],
+              [0., 0.],
+              [2., 10.],
+          ],
+          None,
+          None,
+          0.0, 1.0,
+          [
+              [0., 0.],
+              [1., 1.],
+              [0., 0.],
+              [1., 1.],
+          ],
+      ),
+      (
+          [2, 2],
+          [
+              [0., 0.],
+              [1., 1.],
+              [0., 0.],
+              [2., 10.],
+          ],
+          [(0, 1, 1)],
+          None,
+          0.0, 1.0,
+          [
+              [0.0, 0.0],
+              [0.5, 0.1],
+              [0.0, 0.0],
+              [1.0, 1.0],
+          ],
+      ),
+  )
+  def testFinalizeConstraints(self, lattice_sizes, kernel, edgeworth_trusts,
+                              trapezoid_trusts, output_min, output_max,
+                              expected_output):
+    if self.disable_all:
+      return
+
+    kernel = tf.constant(kernel, dtype=tf.float32)
+    units = int(kernel.shape[1])
+    layer = ll.Lattice(
+        lattice_sizes,
+        units=units,
+        monotonicities=[1] * len(lattice_sizes),
+        edgeworth_trusts=edgeworth_trusts,
+        trapezoid_trusts=trapezoid_trusts,
+        output_min=output_min,
+        output_max=output_max,
+        kernel_initializer=tf.keras.initializers.Constant(kernel),
+    )
+    layer.build(input_shape=(None, units, len(lattice_sizes)))
+    output = layer.finalize_constraints()
+    self.assertAllClose(output, expected_output)
 
 if __name__ == "__main__":
   tf.test.main()
