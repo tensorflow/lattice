@@ -106,6 +106,7 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
     lattice_outputs = premade_lib.build_calibrated_lattice_ensemble_layer(
         calibration_input_layer=input_layer,
         model_config=model_config,
+        average_outputs=(not model_config.use_linear_combination),
         dtype=dtype)
 
     if model_config.use_linear_combination:
@@ -114,11 +115,7 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
           model_config=model_config,
           dtype=dtype)
     else:
-      if isinstance(lattice_outputs, list):
-        averaged_lattice_output = tf.keras.layers.Average()(lattice_outputs)
-      else:
-        averaged_lattice_output = tf.reduce_mean(
-            lattice_outputs, axis=-1, keepdims=True)
+      averaged_lattice_output = lattice_outputs
 
     if model_config.output_calibration:
       model_output = premade_lib.build_output_calibration_layer(

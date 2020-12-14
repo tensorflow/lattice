@@ -78,7 +78,8 @@ class RTL(keras.layers.Layer):
   and (batch_size, num_mon_out) respectively, and
   `num_unconstrained_out + num_mon_out == num_lattices`. If
   `separate_outputs == False` the output will be a rank-2 tensor with shape:
-  (batch_size, num_lattices).
+  (batch_size, num_lattices) if average_outputs is False, or (batch_size, 1) if
+  True.
 
   Attributes:
     - All `__init__ `arguments.
@@ -133,6 +134,7 @@ class RTL(keras.layers.Layer):
                avoid_intragroup_interaction=True,
                kernel_initializer='random_monotonic_initializer',
                kernel_regularizer=None,
+               average_outputs=False,
                **kwargs):
     # pyformat: disable
     """Initializes an instance of `RTL`.
@@ -195,6 +197,8 @@ class RTL(keras.layers.Layer):
           Laplacian regularizer. l1 and l2 must be single floats. Lists of
           floats to specify different regularization amount for every dimension
           is not currently supported.
+      average_outputs: Whether to average the outputs of this layer. Ignored
+        when separate_outputs is True.
       **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
 
     Raises:
@@ -222,6 +226,7 @@ class RTL(keras.layers.Layer):
     self.avoid_intragroup_interaction = avoid_intragroup_interaction
     self.kernel_initializer = kernel_initializer
     self.kernel_regularizer = kernel_regularizer
+    self.average_outputs = average_outputs
 
   def build(self, input_shape):
     """Standard Keras build() method."""
@@ -318,13 +323,21 @@ class RTL(keras.layers.Layer):
         joint_outputs = tf.concat(joint_outputs, axis=1)
       else:
         joint_outputs = joint_outputs[0]
+      if self.average_outputs:
+        joint_outputs = tf.reduce_mean(joint_outputs, axis=-1, keepdims=True)
       return joint_outputs
 
   def compute_output_shape(self, input_shape):
     """Standard Keras compute_output_shape() method."""
-    batch_size = list(input_shape.values())[0][0]
+    if isinstance(input_shape, dict):
+      batch_size = list(input_shape.values())[0][0]
+    else:
+      batch_size = input_shape[0]
     if not self.separate_outputs:
-      return (batch_size, self.num_lattices)
+      if self.average_outputs:
+        return (batch_size, 1)
+      else:
+        return (batch_size, self.num_lattices)
     num_outputs = [0, 0]
     for monotonicities, inputs_for_units in self._rtl_structure:
       output_monotonicity = max(monotonicities)
@@ -354,6 +367,7 @@ class RTL(keras.layers.Layer):
         'avoid_intragroup_interaction': self.avoid_intragroup_interaction,
         'kernel_initializer': self.kernel_initializer,
         'kernel_regularizer': self.kernel_regularizer,
+        'average_outputs': self.average_outputs,
     })
     return config
 

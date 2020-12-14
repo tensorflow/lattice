@@ -22,6 +22,54 @@ import numpy as np
 import tensorflow as tf
 
 
+def custom_reduce_prod(t, axis):
+  """tf.reduce_prod(t, axis) with faster custom gradient.
+
+  Shows comparable speed on CPU, up to 2x speed up on GPU, and 7x on TPU.
+
+  Args:
+    t: The tensor to reduce.
+    axis: The dimension to reduce.
+
+  Returns:
+    prod(t) and grad(prod(t))
+  """
+
+  @tf.custom_gradient
+  def fn(t):
+    # Can safely use the built in forward op.
+    fwd = tf.reduce_prod(t, axis=axis)
+
+    def grad_fn(dy):
+      """Computes the gradient function.
+
+      Args:
+        dy: The gradient flowing into the output of this function.
+
+      Returns:
+        The gradient flowing out through the input of this function.
+      """
+      is_zero = tf.cast(tf.equal(t, 0), tf.float32)
+      num_zeros = tf.reduce_sum(is_zero, axis=axis)
+
+      # If the product contains no zero elements, then simply divide the
+      # product by each element to determine the partial gradients.
+      grad0 = tf.math.divide_no_nan(tf.expand_dims(fwd, axis=axis), t)
+
+      # If the product contained one zero element, then compute the gradient
+      # for that zero element. The gradients for other elements should be
+      # zero.
+      prod = tf.reduce_prod(t + is_zero, axis=axis)
+      grad1 = tf.cast(tf.equal(num_zeros, 1), tf.float32) * prod
+      grad1 = tf.expand_dims(grad1, axis=axis) * is_zero
+
+      return tf.expand_dims(dy, axis=axis) * (grad0 + grad1)
+
+    return fwd, grad_fn
+
+  return fn(t)
+
+
 def evaluate_with_hypercube_interpolation(inputs, scale, bias, kernel, units,
                                           num_terms, lattice_sizes,
                                           clip_inputs):
@@ -54,7 +102,7 @@ def evaluate_with_hypercube_interpolation(inputs, scale, bias, kernel, units,
   """
   # Convert list of tensors to single tensor object.
   if isinstance(inputs, list):
-    inputs = tf.stack(inputs, axis=-1)
+    inputs = tf.concat(inputs, axis=-1)
   if clip_inputs:
     inputs = tf.clip_by_value(inputs, 0.0, lattice_sizes - 1.0)
 
@@ -86,7 +134,7 @@ def evaluate_with_hypercube_interpolation(inputs, scale, bias, kernel, units,
       interpolation_weights, kernel, [1, 1, 1, 1], padding="VALID")
   dotprod = tf.reshape(dotprod, [-1, rows, units, dims, num_terms])
 
-  prod = tf.reduce_prod(dotprod, axis=-2)
+  prod = custom_reduce_prod(dotprod, axis=-2)
 
   results = scale * prod
   # Average across terms for each unit.
@@ -103,6 +151,8 @@ def evaluate_with_hypercube_interpolation(inputs, scale, bias, kernel, units,
 
 def random_monotonic_initializer(shape,
                                  monotonicities,
+                                 init_min=0.5,
+                                 init_max=1.5,
                                  dtype=tf.float32,
                                  seed=None):
   """Returns a uniformly random sampled monotonic weight tensor.
@@ -110,7 +160,7 @@ def random_monotonic_initializer(shape,
   - The uniform random monotonic function will initilaize the lattice parameters
     uniformly at random and make it such that the parameters are monotonically
     increasing for each input.
-  - The random parameters will be sampled from `[0, 1]`
+  - The random parameters will be sampled from `[init_min, init_max]`
 
   Args:
     shape: Shape of weights to initialize. Must be: `(1, lattice_sizes, units *
@@ -118,6 +168,8 @@ def random_monotonic_initializer(shape,
     monotonicities: None or list or tuple of length dims of elements of {0,1}
       which represents monotonicity constraints per dimension. 1 stands for
       increasing (non-decreasing in fact), 0 for no monotonicity constraints.
+    init_min: The lower bound on the range of initialized weights.
+    init_max: The upper bound on the range of initialized weights.
     dtype: dtype
     seed: A Python integer. Used to create a random seed for the distribution.
 
@@ -126,7 +178,8 @@ def random_monotonic_initializer(shape,
       `(1, lattice_sizes, units * dims, num_terms)`.
   """
   # Sample from the uniform distribution.
-  weights = tf.random.uniform(shape, dtype=dtype, seed=seed)
+  weights = tf.random.uniform(
+      shape, minval=init_min, maxval=init_max, dtype=dtype, seed=seed)
   if utils.count_non_zeros(monotonicities) > 0:
     # To sort, we must first reshape and unstack our weights.
     dims = len(monotonicities)
@@ -141,7 +194,7 @@ def random_monotonic_initializer(shape,
     # Now we can unstack each dimension.
     weights = tf.unstack(weights, axis=3)
     monotonic_weights = [
-        tf.sort(weight) if monotonicity else weight
+        tf.sort(weight, axis=1) if monotonicity else weight
         for monotonicity, weight in zip(monotonicities, weights)
     ]
     # Restack, reshape, and return weights

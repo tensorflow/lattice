@@ -55,7 +55,7 @@ landing_page:
             ]))
         model.add(
             tfl.layers.Lattice(
-                lattice_size=[2, 3, 2],
+                lattice_sizes=[2, 3, 2],
                 monotonicities=['increasing', 'increasing', 'increasing'],
                 # Trust: model is more responsive to input 0 if input 1 increases
                 edgeworth_trusts=(0, 1, 'positive')))

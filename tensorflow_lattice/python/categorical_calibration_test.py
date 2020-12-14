@@ -142,8 +142,9 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     else:
       model.add(parallel_combination.ParallelCombination(calibration_layers))
     if config["units"] > 1:
-      model.add(keras.layers.Lambda(
-          lambda x: tf.reduce_mean(x, axis=1, keepdims=True)))
+      model.add(
+          keras.layers.Lambda(
+              lambda x: tf.reduce_mean(x, axis=1, keepdims=True)))
     model.compile(
         loss=keras.losses.mean_squared_error,
         optimizer=config["optimizer"](learning_rate=config["learning_rate"]))
@@ -286,10 +287,12 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.parameters(
       # Standard Keras regularizer:
-      (keras.regularizers.l1_l2(l1=0.01, l2=0.001),),
+      (
+          keras.regularizers.l1_l2(l1=0.01, l2=0.001),),
       # Tuple of regularizers:
-      ((keras.regularizers.l1_l2(l1=0.01, l2=0.0),
-        keras.regularizers.l1_l2(l1=0.0, l2=0.001)),),
+      (
+          (keras.regularizers.l1_l2(
+              l1=0.01, l2=0.0), keras.regularizers.l1_l2(l1=0.0, l2=0.001)),),
   )
   def testRegularizers(self, regularizer):
     if self._disable_all:
@@ -310,6 +313,30 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     # This loss is pure regularization loss because initializer matches target
     # function and there was 0 training epochs.
     self.assertAlmostEqual(loss, 0.072, delta=self._loss_eps)
+
+  def testOutputShape(self):
+    if self._disable_all:
+      return
+
+    # Not Splitting
+    units = 10
+    input_shape, output_shape = (units,), (None, units)
+    input_a = tf.keras.layers.Input(shape=input_shape)
+    cat_cal_0 = categorical_calibraion.CategoricalCalibration(
+        num_buckets=3, units=units)
+    output = cat_cal_0(input_a)
+    self.assertAllEqual(output_shape,
+                        cat_cal_0.compute_output_shape(input_a.shape))
+    self.assertAllEqual(output_shape, output.shape)
+
+    # Splitting
+    output_shape = [(None, 1)] * units
+    cat_cal_1 = categorical_calibraion.CategoricalCalibration(
+        num_buckets=3, units=units, split_outputs=True)
+    output = cat_cal_1(input_a)
+    self.assertAllEqual(output_shape,
+                        cat_cal_1.compute_output_shape(input_a.shape))
+    self.assertAllEqual(output_shape, [o.shape for o in output])
 
 
 if __name__ == "__main__":

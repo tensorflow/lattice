@@ -62,7 +62,9 @@ class PWLCalibration(keras.layers.Layer):
   and 0.0 represents available input.
 
   Output shape:
-  Rank-2 tensor with shape: `(batch_size, units)`.
+  If units > 1 and split_outputs is True, a length `units` list of Rank-2
+    tensors with shape `(batch_size, 1)`. Otherwise, a Rank-2 tensor with shape:
+    `(batch_size, units)`
 
   Attributes:
     - All `__init__` arguments.
@@ -106,6 +108,7 @@ class PWLCalibration(keras.layers.Layer):
                missing_input_value=None,
                missing_output_value=None,
                num_projection_iterations=8,
+               split_outputs=False,
                **kwargs):
     # pyformat: disable
     """Initializes an instance of `PWLCalibration`.
@@ -172,6 +175,8 @@ class PWLCalibration(keras.layers.Layer):
         each update, but the update will be closer to a true L2 projection with
         higher number of iterations. See
         `tfl.pwl_calibration_lib.project_all_constraints` for more details.
+      split_outputs: Whether to split the output tensor into a list of
+        outputs for each unit. Ignored if units < 2.
       **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
 
     Raises:
@@ -271,6 +276,7 @@ class PWLCalibration(keras.layers.Layer):
     self.missing_input_value = missing_input_value
     self.missing_output_value = missing_output_value
     self.num_projection_iterations = num_projection_iterations
+    self.split_outputs = split_outputs
 
   def build(self, input_shape):
     """Standard Keras build() method."""
@@ -441,12 +447,19 @@ class PWLCalibration(keras.layers.Layer):
             tf.equal(inputs, self._missing_input_value_tensor),
             dtype=self.dtype)
       result = is_missing * self.missing_output + (1.0 - is_missing) * result
+
+    if self.units > 1 and self.split_outputs:
+      result = tf.split(result, self.units, axis=1)
+
     return result
 
   def compute_output_shape(self, input_shape):
     """Standard Keras compute_output_shape() method."""
     del input_shape
-    return [None, self.units]
+    if self.units > 1 and self.split_outputs:
+      return [(None, 1)] * self.units
+    else:
+      return (None, self.units)
 
   def get_config(self):
     """Standard Keras config for serialization."""
@@ -467,6 +480,7 @@ class PWLCalibration(keras.layers.Layer):
         "impute_missing": self.impute_missing,
         "missing_input_value": self.missing_input_value,
         "num_projection_iterations": self.num_projection_iterations,
+        "split_outputs": self.split_outputs,
     }  # pyformat: disable
     config.update(super(PWLCalibration, self).get_config())
     return config

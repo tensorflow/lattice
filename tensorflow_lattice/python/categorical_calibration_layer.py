@@ -47,7 +47,9 @@ class CategoricalCalibration(keras.layers.Layer):
   Rank-2 tensor with shape:  `(batch_size, units)` or `(batch_size, 1)`.
 
   Output shape:
-  Rank-2 tensor with shape: `(batch_size, units)`.
+  If units > 1 and split_outputs is True, a length `units` list of Rank-2
+    tensors with shape `(batch_size, 1)`. Otherwise, a Rank-2 tensor with shape:
+    `(batch_size, units)`
 
   Attributes:
     - All `__init__` args.
@@ -96,6 +98,7 @@ class CategoricalCalibration(keras.layers.Layer):
                kernel_initializer="uniform",
                kernel_regularizer=None,
                default_input_value=None,
+               split_outputs=False,
                **kwargs):
     # pyformat: disable
     """Initializes a `CategoricalCalibration` instance.
@@ -119,6 +122,8 @@ class CategoricalCalibration(keras.layers.Layer):
         regularizer objects.
       default_input_value: If set, all inputs which are equal to this value will
         be treated as default and mapped to the last bucket.
+      split_outputs: Whether to split the output tensor into a list of
+        outputs for each unit. Ignored if units < 2.
       **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
 
     Raises:
@@ -153,6 +158,7 @@ class CategoricalCalibration(keras.layers.Layer):
       for reg in kernel_regularizer:
         self.kernel_regularizer.append(keras.regularizers.get(reg))
     self.default_input_value = default_input_value
+    self.split_outputs = split_outputs
 
   def build(self, input_shape):
     """Standard Keras build() method."""
@@ -217,14 +223,22 @@ class CategoricalCalibration(keras.layers.Layer):
       return tf.matmul(
           tf.one_hot(tf.squeeze(inputs, axis=[-1]), depth=self.num_buckets),
           self.kernel)
-    return tf.reduce_sum(
+    result = tf.reduce_sum(
         tf.one_hot(inputs, axis=1, depth=self.num_buckets) * self.kernel,
         axis=1)
+
+    if self.split_outputs:
+      result = tf.split(result, self.units, axis=1)
+
+    return result
 
   def compute_output_shape(self, input_shape):
     """Standard Keras compute_output_shape() method."""
     del input_shape
-    return [None, self.units]
+    if self.units > 1 and self.split_outputs:
+      return [(None, 1)] * self.units
+    else:
+      return (None, self.units)
 
   def get_config(self):
     """Standard Keras config for serialization."""
@@ -239,6 +253,7 @@ class CategoricalCalibration(keras.layers.Layer):
         "kernel_regularizer":
             [keras.regularizers.serialize(r) for r in self.kernel_regularizer],
         "default_input_value": self.default_input_value,
+        "split_outputs": self.split_outputs,
     }  # pyformat: disable
     config.update(super(CategoricalCalibration, self).get_config())
     return config

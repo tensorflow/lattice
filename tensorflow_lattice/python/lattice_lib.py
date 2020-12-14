@@ -682,7 +682,8 @@ def _approximately_project_monotonicity(weights, lattice_sizes, monotonicities):
   return min_projection
 
 
-def _approximately_project_edgeworth(weights, lattice_sizes, edgeworth_trusts):
+def _approximately_project_edgeworth(weights, lattice_sizes, units,
+                                     edgeworth_trusts):
   """Approximately projects to strictly meet all edgeworth trust constraints.
 
   Note that this function will not introduce violations to any
@@ -732,9 +733,11 @@ def _approximately_project_edgeworth(weights, lattice_sizes, edgeworth_trusts):
   global satisfying solution for all edgeworth trust constraints.
 
   Args:
-    weights: Tensor with weights whose shape matches lattice_sizes.
+    weights: Tensor with weights whose shape matches lattice_sizes
+      plus units if units > 1.
     lattice_sizes: List or tuple of integers which represents lattice sizes.
       which correspond to weights.
+    units: Output dimension of the lattice.
     edgeworth_trusts: None or iterable of three-element tuples. First element is
       the index of the main (monotonic) feature. Second element is the index of
       the conditional feature. Third element is the direction of trust: 1 if
@@ -751,6 +754,9 @@ def _approximately_project_edgeworth(weights, lattice_sizes, edgeworth_trusts):
     layers = _unstack_nd(trust_projection, [main_dim, cond_dim])
     # Unlike other trust projections, cannot simply reverse layers beforehand
     # based on cond_direction; asymmetry would break algorithm.
+    dims = len(layers[0][0].shape)
+    axis = (tf.constant(list(range(dims - 1)), dtype=tf.int32) if units > 1
+            else None)
     if cond_direction > 0:
       for i in range(0, lattice_sizes[main_dim] - 1):
         for j in range(0, lattice_sizes[cond_dim] - 1):
@@ -759,14 +765,16 @@ def _approximately_project_edgeworth(weights, lattice_sizes, edgeworth_trusts):
           # Move all weights by the value of the biggest violation to both
           # satisfy this constraint and not hurt others. See function comments
           # for more details.
-          max_violation = tf.maximum(tf.reduce_max(difference_in_slopes), 0)
+          max_violation = tf.maximum(
+              tf.reduce_max(difference_in_slopes, axis=axis), 0)
           layers[i + 1][j + 1] += max_violation
     else:
       for i in range(lattice_sizes[main_dim] - 2, -1, -1):
         for j in range(lattice_sizes[cond_dim] - 2, -1, -1):
           difference_in_slopes = ((layers[i + 1][j + 1] - layers[i][j + 1]) -
                                   (layers[i + 1][j] - layers[i][j]))
-          max_violation = tf.maximum(tf.reduce_max(difference_in_slopes), 0)
+          max_violation = tf.maximum(
+              tf.reduce_max(difference_in_slopes, axis=axis), 0)
           layers[i][j] -= max_violation
     trust_projection = _stack_nd(layers, [main_dim, cond_dim])
 
@@ -776,8 +784,8 @@ def _approximately_project_edgeworth(weights, lattice_sizes, edgeworth_trusts):
 # TODO: It is likely that this algorithm will work for all trapezoid
 # trust constraints without needing the reduce_max, as long as there are no
 # edgeworth constraints. If true, consider using that approach when possible.
-def _approximately_project_trapezoid(weights, lattice_sizes, trapezoid_trusts,
-                                     edgeworth_trusts):
+def _approximately_project_trapezoid(weights, lattice_sizes, units,
+                                     trapezoid_trusts, edgeworth_trusts):
   """Approximately projects to strictly meet all trapezoid trust constraints.
 
   Note that this function will not introduce violations to any
@@ -864,9 +872,11 @@ def _approximately_project_trapezoid(weights, lattice_sizes, trapezoid_trusts,
   global satisfying solution for all trapezoid trust constraints.
 
   Args:
-    weights: Tensor with weights whose shape matches lattice_sizes.
+    weights: Tensor with weights whose shape matches lattice_sizes plus units
+      if units > 1.
     lattice_sizes: List or tuple of integers which represents lattice sizes.
       which correspond to weights.
+    units: Output dimension of the lattice.
     trapezoid_trusts: None or iterable of three-element tuples. First element is
       the index of the main (monotonic) feature. Second element is the index of
       the conditional feature. Third element is the direction of trust set to 1
@@ -895,12 +905,14 @@ def _approximately_project_trapezoid(weights, lattice_sizes, trapezoid_trusts,
     lhs_update, rhs_update = 0, 0
     for j in range(0, lattice_sizes[cond_dim] - 1):
       lhs_difference = layers[0][j + 1] - layers[0][j]
-      lhs_update = _trapezoid_violation_update(lhs_difference, any_edgeworth,
-                                               same_edgeworth, lhs_update)
+      lhs_update = _trapezoid_violation_update(lhs_difference, units,
+                                               any_edgeworth, same_edgeworth,
+                                               lhs_update)
       layers[0][j + 1] -= lhs_update
       rhs_difference = layers[max_main_dim][j] - layers[max_main_dim][j + 1]
-      rhs_update = _trapezoid_violation_update(rhs_difference, any_edgeworth,
-                                               same_edgeworth, rhs_update)
+      rhs_update = _trapezoid_violation_update(rhs_difference, units,
+                                               any_edgeworth, same_edgeworth,
+                                               rhs_update)
       layers[max_main_dim][j + 1] += rhs_update
     if cond_direction < 0:
       layers = _reverse_second_list_dimension(layers)
@@ -909,8 +921,8 @@ def _approximately_project_trapezoid(weights, lattice_sizes, trapezoid_trusts,
   return weights
 
 
-def _trapezoid_violation_update(differences, any_edgeworth, same_edgeworth,
-                                prior_update):
+def _trapezoid_violation_update(differences, units, any_edgeworth,
+                                same_edgeworth, prior_update):
   """Calculates update amount based on violations for trapezoid projection.
 
   Note that the shape of the returned tensor is different based on the value
@@ -923,6 +935,7 @@ def _trapezoid_violation_update(differences, any_edgeworth, same_edgeworth,
   Args:
     differences: Tensor containing amounts by which constraints are satisfied or
       violated.
+    units: Output dimension of the lattice.
     any_edgeworth: Boolean for whether any edgeworth trust constraints are set
       for this lattice layer.
     same_edgeworth: Boolean for whether there is a matching edgeworth constraint
@@ -934,15 +947,18 @@ def _trapezoid_violation_update(differences, any_edgeworth, same_edgeworth,
     consisting of a single element.
 
   """
+  dims = len(differences.shape) - 1
+  axis = tf.constant(list(range(dims)), dtype=tf.int32) if units > 1 else None
   if any_edgeworth and same_edgeworth:
-    return tf.maximum(tf.maximum(tf.reduce_max(differences), 0), prior_update)
+    return tf.maximum(tf.maximum(
+        tf.reduce_max(differences, axis=axis), 0), prior_update)
   elif any_edgeworth:
-    return tf.maximum(tf.reduce_max(differences), 0)
+    return tf.maximum(tf.reduce_max(differences, axis=axis), 0)
   else:
     return tf.maximum(differences, 0)
 
 
-def _approximately_project_bounds(weights, output_min, output_max):
+def _approximately_project_bounds(weights, units, output_min, output_max):
   """Approximately projects to strictly meet min/max constraints.
 
   Note that this function will not introduce violations to any
@@ -961,7 +977,9 @@ def _approximately_project_bounds(weights, output_min, output_max):
   max_weight = output_max.
 
   Args:
-    weights: Tensor with weights whose shape matches `lattice_sizes`.
+    weights: Tensor with weights whose shape matches `lattice_sizes` plus units
+      if units > 1.
+    units: Output dimension of the lattice.
     output_min: None or minimum possible output.
     output_max: None or maximum possible output.
 
@@ -971,16 +989,20 @@ def _approximately_project_bounds(weights, output_min, output_max):
 
   # Project into [output_min, output_max] by translating and scaling output if
   # necessary.
+  dims = len(weights.shape) - 1
+  axis = tf.constant(list(range(dims)), dtype=tf.int32) if units > 1 else None
   final_projection = weights
   if output_max is None and output_min is not None:
-    final_projection += tf.maximum(output_min - tf.reduce_min(final_projection),
-                                   0)
+    final_projection += tf.maximum(
+        output_min - tf.reduce_min(final_projection, axis=axis), 0)
   elif output_max is not None and output_min is None:
     final_projection -= tf.maximum(
-        tf.reduce_max(final_projection) - output_max, 0)
+        tf.reduce_max(final_projection, axis=axis) - output_max, 0)
   elif output_max is not None and output_min is not None:
-    max_violation = tf.maximum(tf.reduce_max(final_projection) - output_max, 0)
-    min_violation = tf.maximum(output_min - tf.reduce_min(final_projection), 0)
+    max_violation = tf.maximum(
+        tf.reduce_max(final_projection, axis=axis) - output_max, 0)
+    min_violation = tf.maximum(
+        output_min - tf.reduce_min(final_projection, axis=axis), 0)
     final_projection += (min_violation - output_min)
     final_projection *= ((output_max - output_min) /
                          ((output_max + max_violation) -
@@ -1045,14 +1067,15 @@ def finalize_constraints(weights,
   weights = _approximately_project_monotonicity(weights, lattice_sizes,
                                                 monotonicities)
   if edgeworth_trusts or trapezoid_trusts:
-    weights = _approximately_project_edgeworth(weights, lattice_sizes,
+    weights = _approximately_project_edgeworth(weights, lattice_sizes, units,
                                                edgeworth_trusts)
-    weights = _approximately_project_trapezoid(weights, lattice_sizes,
+    weights = _approximately_project_trapezoid(weights, lattice_sizes, units,
                                                trapezoid_trusts,
                                                edgeworth_trusts)
     # Simple capping, applied in a later step, adds less distortion than this
     # scaling projection; however, it could violate trust constraints.
-    weights = _approximately_project_bounds(weights, output_min, output_max)
+    weights = _approximately_project_bounds(weights, units, output_min,
+                                            output_max)
   return tf.reshape(weights, shape=[-1, units])
 
 

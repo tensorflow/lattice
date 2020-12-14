@@ -1345,6 +1345,29 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       config["clamp_max"] = True
       loss = self._TrainModel(config)
 
+  def testOutputShape(self):
+    if self._disable_all:
+      return
+
+    # Not Splitting
+    units = 10
+    input_keypoints = [1, 2, 3, 4, 5]
+    input_shape, output_shape = (units,), (None, units)
+    input_a = tf.keras.layers.Input(shape=input_shape)
+    pwl_0 = keras_layer.PWLCalibration(
+        input_keypoints=input_keypoints, units=units)
+    output = pwl_0(input_a)
+    self.assertAllEqual(output_shape, pwl_0.compute_output_shape(input_a.shape))
+    self.assertAllEqual(output_shape, output.shape)
+
+    # Splitting
+    output_shape = [(None, 1)] * units
+    pwl_1 = keras_layer.PWLCalibration(
+        input_keypoints=input_keypoints, units=units, split_outputs=True)
+    output = pwl_1(input_a)
+    self.assertAllEqual(output_shape, pwl_1.compute_output_shape(input_a.shape))
+    self.assertAllEqual(output_shape, [o.shape for o in output])
+
 
 if __name__ == "__main__":
   tf.test.main()
