@@ -44,7 +44,8 @@ flags.DEFINE_integer('num_epochs', 200, 'Number of training epoch.')
 def main(_):
   # UCI Statlog (Heart) dataset.
   csv_file = tf.keras.utils.get_file(
-      'heart.csv', 'http://storage.googleapis.com/applied-dl/heart.csv')
+      'heart.csv',
+      'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv')
   df = pd.read_csv(csv_file)
   target = df.pop('target')
   train_size = int(len(df) * 0.8)

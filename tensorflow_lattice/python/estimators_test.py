@@ -40,7 +40,8 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
 
     # UCI Statlog (Heart) dataset.
     heart_csv_file = tf.keras.utils.get_file(
-        'heart.csv', 'http://storage.googleapis.com/applied-dl/heart.csv')
+        'heart.csv',
+        'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv')
     heart_df = pd.read_csv(heart_csv_file)
     heart_target = heart_df.pop('target')
     heart_train_size = int(len(heart_df) * 0.8)
