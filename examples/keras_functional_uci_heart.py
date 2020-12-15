@@ -81,7 +81,8 @@ flags.DEFINE_integer('num_epochs', 200, 'Number of training epoch.')
 def main(_):
   # UCI Statlog (Heart) dataset.
   csv_file = tf.keras.utils.get_file(
-      'heart.csv', 'http://storage.googleapis.com/applied-dl/heart.csv')
+      'heart.csv',
+      'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv')
   training_data_df = pd.read_csv(csv_file).sample(
       frac=1.0, random_state=41).reset_index(drop=True)
 
@@ -126,8 +127,8 @@ def main(_):
   age_embedding = keras.layers.Embedding(
       input_dim=10,
       output_dim=len(lattice_sizes_for_embedding),
-      embeddings_initializer=keras.initializers.RandomNormal(seed=1)
-  )(age_input)
+      embeddings_initializer=keras.initializers.RandomNormal(seed=1))(
+          age_input)
   # Flatten to get rid of redundant tensor dimension created by embedding layer.
   age_embedding = keras.layers.Flatten()(age_embedding)
 
@@ -140,8 +141,7 @@ def main(_):
       # will not collapse as result of multiplication.
       shape=(1, 2))
   age_ranged = keras.layers.multiply(
-      [keras.activations.sigmoid(age_embedding),
-       embedding_lattice_input_range])
+      [keras.activations.sigmoid(age_embedding), embedding_lattice_input_range])
   lattice_inputs.append(age_ranged)
 
   # ############### sex ###############
@@ -156,7 +156,8 @@ def main(_):
       output_max=lattice_sizes[2] - 1.0,
       # Initializes all outputs to (output_min + output_max) / 2.0.
       kernel_initializer='constant',
-  )(sex_input)
+  )(
+      sex_input)
   lattice_inputs.append(sex_calibrator)
 
   # ############### cp ###############
@@ -171,8 +172,8 @@ def main(_):
       output_max=lattice_sizes[3] - 1.0,
       monotonicity='increasing',
       # You can specify TFL regularizers as tuple ('regularizer name', l1, l2).
-      kernel_regularizer=('hessian', 0.0, 1e-4)
-  )(cp_input)
+      kernel_regularizer=('hessian', 0.0, 1e-4))(
+          cp_input)
   lattice_inputs.append(cp_calibrator)
 
   # ############### trestbps ###############
@@ -182,8 +183,8 @@ def main(_):
   trestbps_calibrator = tfl.layers.PWLCalibration(
       # Alternatively to uniform keypoints you might want to use quantiles as
       # keypoints.
-      input_keypoints=np.quantile(
-          training_data_df['trestbps'], np.linspace(0.0, 1.0, num=5)),
+      input_keypoints=np.quantile(training_data_df['trestbps'],
+                                  np.linspace(0.0, 1.0, num=5)),
       dtype=tf.float32,
       # Together with quantile keypoints you might want to initialize piecewise
       # linear function to have 'equal_slopes' in order for output of layer
@@ -196,7 +197,8 @@ def main(_):
       clamp_min=True,
       clamp_max=True,
       monotonicity='increasing',
-  )(trestbps_input)
+  )(
+      trestbps_input)
   lattice_inputs.append(trestbps_calibrator)
 
   # ############### chol ###############
@@ -219,8 +221,8 @@ def main(_):
       # You can specify list of regularizers. You are not limited to TFL
       # regularizrs. Feel free to use any :)
       kernel_regularizer=[('laplacian', 0.0, 1e-4),
-                          keras.regularizers.l1_l2(l1=0.001)]
-  )(chol_input)
+                          keras.regularizers.l1_l2(l1=0.001)])(
+                              chol_input)
   lattice_inputs.append(chol_calibrator)
 
   # ############### fbs ###############
@@ -242,7 +244,8 @@ def main(_):
       # seed in order to simplify experimentation.
       kernel_initializer=keras.initializers.RandomUniform(
           minval=0.0, maxval=lattice_sizes[5] - 1.0, seed=1),
-  )(fbs_input)
+  )(
+      fbs_input)
   lattice_inputs.append(fbs_calibrator)
 
   # ############### restecg ###############
@@ -258,7 +261,8 @@ def main(_):
       # Categorical calibration layer supports standard Keras regularizers.
       kernel_regularizer=keras.regularizers.l1_l2(l1=0.001),
       kernel_initializer='constant',
-  )(restecg_input)
+  )(
+      restecg_input)
   lattice_inputs.append(restecg_calibrator)
 
   # Lattice inputs must be either list of d tensors of rank (batch_size, 1) or
@@ -274,22 +278,25 @@ def main(_):
   # Note that making embedding inputs monotonic does not make sense.
   lattice = tfl.layers.Lattice(
       lattice_sizes=lattice_sizes,
-      monotonicities=['none', 'none', 'none', 'increasing', 'increasing',
-                      'increasing', 'increasing', 'increasing'],
+      monotonicities=[
+          'none', 'none', 'none', 'increasing', 'increasing', 'increasing',
+          'increasing', 'increasing'
+      ],
       output_min=0.0,
       output_max=1.0,
-  )(lattice_inputs_tensor)
+  )(
+      lattice_inputs_tensor)
 
-  model = keras.models.Model(
-      inputs=model_inputs,
-      outputs=lattice)
-  model.compile(loss=keras.losses.mean_squared_error,
-                optimizer=keras.optimizers.Adagrad(learning_rate=1.0))
+  model = keras.models.Model(inputs=model_inputs, outputs=lattice)
+  model.compile(
+      loss=keras.losses.mean_squared_error,
+      optimizer=keras.optimizers.Adagrad(learning_rate=1.0))
 
   feature_names = ['age', 'sex', 'cp', 'trestbps', 'chol', 'fbs', 'restecg']
-  features = np.split(training_data_df[feature_names].values.astype(np.float32),
-                      indices_or_sections=len(feature_names),
-                      axis=1)
+  features = np.split(
+      training_data_df[feature_names].values.astype(np.float32),
+      indices_or_sections=len(feature_names),
+      axis=1)
   target = training_data_df[['target']].values.astype(np.float32)
 
   # Bucketize input for embedding.
@@ -302,12 +309,13 @@ def main(_):
   embedding_bins[-1] += 1.0
   features[0] = np.digitize(features[0], bins=embedding_bins)
 
-  model.fit(features,
-            target,
-            batch_size=32,
-            epochs=FLAGS.num_epochs,
-            validation_split=0.2,
-            shuffle=False)
+  model.fit(
+      features,
+      target,
+      batch_size=32,
+      epochs=FLAGS.num_epochs,
+      validation_split=0.2,
+      shuffle=False)
 
 
 if __name__ == '__main__':
