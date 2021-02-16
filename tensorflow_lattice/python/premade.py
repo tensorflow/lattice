@@ -39,6 +39,7 @@ from __future__ import print_function
 from . import aggregation_layer
 from . import categorical_calibration_layer
 from . import configs
+from . import kronecker_factored_lattice_layer as kfll
 from . import lattice_layer
 from . import linear_layer
 from . import parallel_combination_layer
@@ -528,6 +529,8 @@ def get_custom_objects(custom_objects=None):
           configs.AggregateFunctionConfig,
       'Aggregation':
           aggregation_layer.Aggregation,
+      'BiasInitializer':
+          kfll.BiasInitializer,
       'CalibratedLatticeEnsemble':
           CalibratedLatticeEnsemble,
       'CalibratedLattice':
@@ -548,6 +551,12 @@ def get_custom_objects(custom_objects=None):
           configs.DominanceConfig,
       'FeatureConfig':
           configs.FeatureConfig,
+      'KFLRandomMonotonicInitializer':
+          kfll.KFLRandomMonotonicInitializer,
+      'KroneckerFactoredLattice':
+          kfll.KroneckerFactoredLattice,
+      'KroneckerFactoredLatticeConstraints':
+          kfll.KroneckerFactoredLatticeConstraints,
       'LaplacianRegularizer':
           lattice_layer.LaplacianRegularizer,
       'Lattice':
@@ -574,6 +583,10 @@ def get_custom_objects(custom_objects=None):
           configs.RegularizerConfig,
       'RTL':
           rtl_layer.RTL,
+      'ScaleConstraints':
+          kfll.ScaleConstraints,
+      'ScaleInitializer':
+          kfll.ScaleInitializer,
       'TorsionRegularizer':
           lattice_layer.TorsionRegularizer,
       'TrustConfig':

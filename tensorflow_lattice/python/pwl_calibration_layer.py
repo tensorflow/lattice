@@ -37,6 +37,7 @@ LENGTHS_NAME = "lengths"
 MISSING_INPUT_VALUE_NAME = "missing_input_value"
 PWL_CALIBRATION_KERNEL_NAME = "pwl_calibration_kernel"
 PWL_CALIBRATION_MISSING_OUTPUT_NAME = "pwl_calibration_missing_output"
+INTERPOLATION_LOGITS_NAME = "interpolation_logits"
 
 
 class PWLCalibration(keras.layers.Layer):
@@ -109,6 +110,7 @@ class PWLCalibration(keras.layers.Layer):
                missing_output_value=None,
                num_projection_iterations=8,
                split_outputs=False,
+               input_keypoints_type="fixed",
                **kwargs):
     # pyformat: disable
     """Initializes an instance of `PWLCalibration`.
@@ -177,6 +179,11 @@ class PWLCalibration(keras.layers.Layer):
         `tfl.pwl_calibration_lib.project_all_constraints` for more details.
       split_outputs: Whether to split the output tensor into a list of
         outputs for each unit. Ignored if units < 2.
+      input_keypoints_type: One of "fixed" or "learned_interior". If
+        "learned_interior", keypoints are initialized to the values in
+        `input_keypoints` but then allowed to vary during training, with the
+        exception of the first and last keypoint location which are fixed.
+        Convexity can only be imposed with "fixed".
       **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
 
     Raises:
@@ -204,6 +211,10 @@ class PWLCalibration(keras.layers.Layer):
       raise ValueError("'input_keypoints' can't be None")
     if monotonicity is None:
       raise ValueError("'monotonicity' can't be None. Did you mean '0'?")
+    if convexity not in ("none",
+                         0) and input_keypoints_type == "learned_interior":
+      raise ValueError("Cannot set input_keypoints_type to 'learned_interior'"
+                       " and impose convexity constraints.")
 
     self.input_keypoints = input_keypoints
     self.units = units
@@ -277,25 +288,40 @@ class PWLCalibration(keras.layers.Layer):
     self.missing_output_value = missing_output_value
     self.num_projection_iterations = num_projection_iterations
     self.split_outputs = split_outputs
+    self.input_keypoints_type = input_keypoints_type
 
   def build(self, input_shape):
     """Standard Keras build() method."""
     input_keypoints = np.array(self.input_keypoints)
     # Don't need last keypoint for interpolation because we need only beginnings
     # of intervals.
-    self._interpolation_keypoints = tf.constant(
-        input_keypoints[:-1],
-        dtype=self.dtype,
-        name=INTERPOLATION_KEYPOINTS_NAME)
-    self._lengths = tf.constant(
-        input_keypoints[1:] - input_keypoints[:-1],
-        dtype=self.dtype,
-        name=LENGTHS_NAME)
+    if self.input_keypoints_type == "fixed":
+      self._interpolation_keypoints = tf.constant(
+          input_keypoints[:-1],
+          dtype=self.dtype,
+          name=INTERPOLATION_KEYPOINTS_NAME)
+      self._lengths = tf.constant(
+          input_keypoints[1:] - input_keypoints[:-1],
+          dtype=self.dtype,
+          name=LENGTHS_NAME)
+    else:
+      self._keypoint_min = input_keypoints[0]
+      self._keypoint_range = input_keypoints[-1] - input_keypoints[0]
+      # Logits are initialized such that they will recover the scaled keypoint
+      # gaps in input_keypoints.
+      initial_logits = np.log(
+          (input_keypoints[1:] - input_keypoints[:-1]) / self._keypoint_range)
+      tiled_logits = np.tile(initial_logits, self.units)
+      self.interpolation_logits = self.add_weight(
+          INTERPOLATION_LOGITS_NAME,
+          shape=[self.units, len(input_keypoints) - 1],
+          initializer=tf.constant_initializer(tiled_logits),
+          dtype=self.dtype)
 
     constraints = PWLCalibrationConstraints(
         monotonicity=self.monotonicity,
         convexity=self.convexity,
-        lengths=self._lengths,
+        lengths=self._lengths if self.input_keypoints_type == "fixed" else None,
         output_min=self.output_min,
         output_max=self.output_max,
         output_min_constraints=self._output_min_constraints,
@@ -400,22 +426,36 @@ class PWLCalibration(keras.layers.Layer):
       raise ValueError("Shape of input tensor for PWLCalibration layer must be "
                        "[-1, units] or [-1, 1]. It is: " + str(inputs.shape))
 
-    if inputs.dtype != self._interpolation_keypoints.dtype:
+    if self.input_keypoints_type == "fixed":
+      keypoints_dtype = self._interpolation_keypoints.dtype
+    else:
+      keypoints_dtype = self.interpolation_logits.dtype
+    if inputs.dtype != keypoints_dtype:
       raise ValueError("dtype(%s) of input to PWLCalibration layer does not "
                        "correspond to dtype(%s) of keypoints. You can enforce "
                        "dtype of keypoints by explicitly providing 'dtype' "
                        "parameter to layer constructor or by passing keypoints "
                        "in such format which by default will be converted into "
-                       "desired one." %
-                       (inputs.dtype, self._interpolation_keypoints.dtype))
+                       "desired one." % (inputs.dtype, keypoints_dtype))
 
     # Here is calibration. Everything else is handling of missing.
-    if inputs.shape[1] > 1:
-      # Add dimension to multi dim input to get shape [batch_size, units, 1].
-      # Interpolation will have shape [batch_size, units, weights].
+    if inputs.shape[1] > 1 or (self.input_keypoints_type == "learned_interior"
+                               and self.units > 1):
+      # Interpolation will have shape [batch_size, units, weights] in these
+      # cases. To prepare for that, we add a dimension to the input here to get
+      # shape [batch_size, units, 1] or [batch_size, 1, 1] if 1d input.
       inputs_to_calibration = tf.expand_dims(inputs, -1)
     else:
       inputs_to_calibration = inputs
+    if self.input_keypoints_type == "learned_interior":
+      self._lengths = tf.multiply(
+          tf.nn.softmax(self.interpolation_logits, axis=1),
+          self._keypoint_range,
+          name=LENGTHS_NAME)
+      self._interpolation_keypoints = tf.add(
+          tf.cumsum(self._lengths, axis=1, exclusive=True),
+          self._keypoint_min,
+          name=INTERPOLATION_KEYPOINTS_NAME)
     interpolation_weights = pwl_calibration_lib.compute_interpolation_weights(
         inputs_to_calibration, self._interpolation_keypoints, self._lengths)
     if self.is_cyclic:
@@ -428,7 +468,7 @@ class PWLCalibration(keras.layers.Layer):
       bias_and_heights = self.kernel
 
     # bias_and_heights has shape [weight, units].
-    if inputs.shape[1] > 1:
+    if len(interpolation_weights.shape) > 2:
       # Multi dim input has interpolation shape [batch_size, units, weights].
       result = tf.reduce_sum(
           interpolation_weights * tf.transpose(bias_and_heights), axis=-1)
@@ -481,6 +521,7 @@ class PWLCalibration(keras.layers.Layer):
         "missing_input_value": self.missing_input_value,
         "num_projection_iterations": self.num_projection_iterations,
         "split_outputs": self.split_outputs,
+        "input_keypoints_type": self.input_keypoints_type,
     }  # pyformat: disable
     config.update(super(PWLCalibration, self).get_config())
     return config
@@ -530,11 +571,35 @@ class PWLCalibration(keras.layers.Layer):
     return asserts
 
   def keypoints_outputs(self):
-    """Returns tensor which corresponds to outputs of layer for keypoints."""
+    """Returns tensor of keypoint outputs of shape [num_weights, num_units]."""
     kp_outputs = tf.cumsum(self.kernel)
     if self.is_cyclic:
       kp_outputs = tf.concat([kp_outputs, kp_outputs[0:1]], axis=0)
     return kp_outputs
+
+  def keypoints_inputs(self):
+    """Returns tensor of keypoint inputs of shape [num_weights, num_units]."""
+    # We don't store the last keypoint in self._interpolation_keypoints since
+    # it is not needed for training or evaluation, but we re-add it here to
+    # align with the keypoints_outputs function.
+    if self.input_keypoints_type == "fixed":
+      all_keypoints = tf.concat([
+          self._interpolation_keypoints,
+          self._interpolation_keypoints[-1:] + self._lengths[-1:]
+      ],
+                                axis=0)
+      return tf.stack([all_keypoints] * self.units, axis=1)
+    else:
+      lengths = tf.nn.softmax(
+          self.interpolation_logits, axis=-1) * self._keypoint_range
+      interpolation_keypoints = tf.cumsum(
+          lengths, axis=-1, exclusive=True) + self._keypoint_min
+      all_keypoints = tf.concat([
+          interpolation_keypoints,
+          interpolation_keypoints[:, -1:] + lengths[:, -1:]
+      ],
+                                axis=1)
+      return tf.transpose(all_keypoints)
 
 
 class UniformOutputInitializer(keras.initializers.Initializer):

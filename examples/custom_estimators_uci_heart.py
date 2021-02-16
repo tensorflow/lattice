@@ -18,7 +18,7 @@
 This example trains a TFL custom estimators on the UCI heart dataset.
 
 Example usage:
-custom_estimators_uci_heart --num_epochs=40
+custom_estimators_uci_heart --num_epochs=5000
 """
 
 from __future__ import absolute_import
@@ -38,7 +38,7 @@ from tensorflow_estimator.python.estimator.head import binary_class_head
 FLAGS = flags.FLAGS
 flags.DEFINE_float('learning_rate', 0.01, 'Learning rate.')
 flags.DEFINE_integer('batch_size', 100, 'Batch size.')
-flags.DEFINE_integer('num_epochs', 200, 'Number of training epoch.')
+flags.DEFINE_integer('num_epochs', 2000, 'Number of training epoch.')
 
 
 def main(_):
@@ -121,7 +121,7 @@ def main(_):
         tfl.layers.PWLCalibration(
             input_keypoints=[0.0, 1.0, 2.0, 3.0],
             output_min=0.0,
-            output_max=lattice_sizes[0] - 1.0,
+            output_max=lattice_sizes[2] - 1.0,
             # You can specify TFL regularizers as tuple
             # ('regularizer name', l1, l2).
             kernel_regularizer=('hessian', 0.0, 1e-4),
@@ -130,7 +130,7 @@ def main(_):
         tfl.layers.CategoricalCalibration(
             num_buckets=3,
             output_min=0.0,
-            output_max=lattice_sizes[1] - 1.0,
+            output_max=lattice_sizes[3] - 1.0,
             # Categorical monotonicity can be partial order.
             # (i, j) indicates that we must have output(i) <= output(i).
             # Make sure to set the lattice monotonicity to 1 for this dimension.
@@ -138,8 +138,15 @@ def main(_):
         )(inputs['thal']),
     ])
     output = tfl.layers.Lattice(
-        lattice_sizes=lattice_sizes, monotonicities=lattice_monotonicities)(
-            lattice_input)
+        lattice_sizes=lattice_sizes,
+        monotonicities=lattice_monotonicities,
+        # Add a kernel_initializer so that the Lattice is not initialized as a
+        # flat plane. The output_min and output_max could be arbitrary, as long
+        # as output_min < output_max.
+        kernel_initializer=tfl.lattice_layer.RandomMonotonicInitializer(
+            lattice_sizes=lattice_sizes, output_min=-10, output_max=10),
+    )(
+        lattice_input)
 
     training = (mode == tf.estimator.ModeKeys.TRAIN)
     model = tf.keras.Model(inputs=inputs, outputs=output)

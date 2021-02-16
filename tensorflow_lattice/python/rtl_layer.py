@@ -28,6 +28,7 @@ from __future__ import print_function
 import collections
 import itertools
 
+from . import kronecker_factored_lattice_layer as kfll
 from . import lattice_layer
 from . import rtl_lib
 
@@ -40,6 +41,7 @@ from tensorflow import keras
 _MAX_RTL_SWAPS = 10000
 _RTLInput = collections.namedtuple('_RTLInput',
                                    ['monotonicity', 'group', 'input_index'])
+RTL_KFL_NAME = 'rtl_kronecker_factored_lattice'
 RTL_LATTICE_NAME = 'rtl_lattice'
 INPUTS_FOR_UNITS_PREFIX = 'inputs_for_lattice'
 RTL_CONCAT_NAME = 'rtl_concat'
@@ -125,12 +127,16 @@ class RTL(keras.layers.Layer):
                lattice_size=2,
                output_min=None,
                output_max=None,
+               init_min=None,
+               init_max=None,
                separate_outputs=False,
                random_seed=42,
                num_projection_iterations=10,
                monotonic_at_every_step=True,
                clip_inputs=True,
                interpolation='hypercube',
+               parameterization='all_vertices',
+               num_terms=2,
                avoid_intragroup_interaction=True,
                kernel_initializer='random_monotonic_initializer',
                kernel_regularizer=None,
@@ -145,12 +151,15 @@ class RTL(keras.layers.Layer):
       lattice_size: Number of lattice vertices per dimension (minimum is 2).
       output_min: None or lower bound of the output.
       output_max: None or upper bound of the output.
+      init_min: None or lower bound of lattice kernel initialization.
+      init_max: None or upper bound of lattice kernel initialization.
       separate_outputs: If set to true, the output will be a dict in the same
         format as the input to the layer, ready to be passed to another RTL
         layer. If false, the output will be a single tensor of shape
         (batch_size, num_lattices). See output shape for details.
       random_seed: Random seed for the randomized feature arrangement in the
-        ensemble.
+        ensemble. Also used for initialization of lattices using
+        `'kronecker_factored'` parameterization.
       num_projection_iterations: Number of iterations of Dykstra projections
         algorithm. Projection updates will be closer to a true projection (with
         respect to the L2 norm) with higher number of iterations. Increasing
@@ -170,6 +179,35 @@ class RTL(keras.layers.Layer):
         'simplex' uses d+1 parameters and thus scales better. For details see
         `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
         `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
+      parameterization: The parameterization of the lattice function class to
+        use. A lattice function is uniquely determined by specifying its value
+        on every lattice vertex. A parameterization scheme is a mapping from a
+        vector of parameters to a multidimensional array of lattice vertex
+        values. It can be one of:
+          - String `'all_vertices'`: This is the "traditional" parameterization
+            that keeps one scalar parameter per lattice vertex where the mapping
+            is essentially the identity map. With this scheme, the number of
+            parameters scales exponentially with the number of inputs to the
+            lattice. The underlying lattices used will be `tfl.layers.Lattice`
+            layers.
+          - String `'kronecker_factored'`: With this parameterization, for each
+            lattice input i we keep a collection of `num_terms` vectors each
+            having `feature_configs[0].lattice_size` entries (note that the
+            lattice size of the first feature will be used as the lattice size
+            for all other features as well). To obtain the tensor of lattice
+            vertex values, for `t=1,2,...,num_terms` we compute the outer
+            product of the `t'th` vector in each collection, multiply by a
+            per-term scale, and sum the resulting tensors. Finally, we add a
+            single shared bias parameter to each entry in the sum. With this
+            scheme, the number of parameters grows linearly with `lattice_rank`
+            (assuming lattice sizes and `num_terms` are held constant).
+            Currently, only monotonicity shape constraint and bound constraint
+            are supported for this scheme. Regularization is not currently
+            supported. The underlying lattices used will be
+            `tfl.layers.KroneckerFactoredLattice` layers.
+      num_terms: The number of terms in a lattice using `'kronecker_factored'`
+        parameterization. Ignored if parameterization is set to
+        `'all_vertices'`.
       avoid_intragroup_interaction: If set to true, the RTL algorithm will try
         to avoid having inputs from the same group in the same lattice.
       kernel_initializer: One of:
@@ -179,13 +217,25 @@ class RTL(keras.layers.Layer):
           that minimum possible output is equal to output_min and maximum
           possible output is equal to output_max. See
           `tfl.lattice_layer.LinearInitializer` class docstring for more
-          details.
+          details. This initialization is not supported when using the
+          `'kronecker_factored'` parameterization.
         - `'random_monotonic_initializer'`: initialize parameters uniformly at
           random such that all parameters are monotonically increasing for each
           input. Parameters will be sampled uniformly at random from the range
+          `[init_min, init_max]` if specified, otherwise
           `[output_min, output_max]`. See
           `tfl.lattice_layer.RandomMonotonicInitializer` class docstring for
-          more details.
+          more details. This initialization is not supported when using the
+          `'kronecker_factored'` parameterization.
+        - `'kfl_random_monotonic_initializer'`: initialize parameters uniformly
+          at random such that all parameters are monotonically increasing for
+          each monotonic input. Parameters will be sampled uniformly at random
+          from the range `[init_min, init_max]` if specified. Otherwise, the
+          initialization range will be algorithmically determined depending on
+          output_{min/max}. See `tfl.layers.KroneckerFactoredLattice` and
+          `tfl.kronecker_factored_lattice.KFLRandomMonotonicInitializer` class
+          docstrings for more details. This initialization is not supported when
+          using `'all_vertices'` parameterization.
       kernel_regularizer: None or a single element or a list of following:
         - Tuple `('torsion', l1, l2)` or List `['torsion', l1, l2]` where l1 and
           l2 represent corresponding regularization amount for graph Torsion
@@ -203,26 +253,34 @@ class RTL(keras.layers.Layer):
 
     Raises:
       ValueError: If layer hyperparameters are invalid.
+      ValueError: If `parameterization` is not one of `'all_vertices'` or
+        `'kronecker_factored'`.
     """
     # pyformat: enable
     rtl_lib.verify_hyperparameters(
         lattice_size=lattice_size,
         output_min=output_min,
         output_max=output_max,
-        kernel_regularizer=kernel_regularizer,
-        interpolation=interpolation)
+        interpolation=interpolation,
+        parameterization=parameterization,
+        kernel_initializer=kernel_initializer,
+        kernel_regularizer=kernel_regularizer)
     super(RTL, self).__init__(**kwargs)
     self.num_lattices = num_lattices
     self.lattice_rank = lattice_rank
     self.lattice_size = lattice_size
     self.output_min = output_min
     self.output_max = output_max
+    self.init_min = init_min
+    self.init_max = init_max
     self.separate_outputs = separate_outputs
     self.random_seed = random_seed
     self.num_projection_iterations = num_projection_iterations
     self.monotonic_at_every_step = monotonic_at_every_step
     self.clip_inputs = clip_inputs
     self.interpolation = interpolation
+    self.parameterization = parameterization
+    self.num_terms = num_terms
     self.avoid_intragroup_interaction = avoid_intragroup_interaction
     self.kernel_initializer = kernel_initializer
     self.kernel_regularizer = kernel_regularizer
@@ -257,21 +315,57 @@ class RTL(keras.layers.Layer):
               inputs_for_units, dtype=tf.int32, name=inputs_for_units_name)
       ]):
         units = len(inputs_for_units)
-        layer_name = '{}_{}'.format(RTL_LATTICE_NAME, monotonicities_str)
-        self._lattice_layers[str(monotonicities)] = lattice_layer.Lattice(
-            lattice_sizes=[self.lattice_size] * self.lattice_rank,
-            units=units,
-            monotonicities=monotonicities,
-            output_min=self.output_min,
-            output_max=self.output_max,
-            num_projection_iterations=self.num_projection_iterations,
-            monotonic_at_every_step=self.monotonic_at_every_step,
-            clip_inputs=self.clip_inputs,
-            interpolation=self.interpolation,
-            kernel_initializer=self.kernel_initializer,
-            kernel_regularizer=kernel_regularizer,
-            name=layer_name,
-        )
+        if self.parameterization == 'all_vertices':
+          layer_name = '{}_{}'.format(RTL_LATTICE_NAME, monotonicities_str)
+          lattice_sizes = [self.lattice_size] * self.lattice_rank
+          kernel_initializer = lattice_layer.create_kernel_initializer(
+              kernel_initializer_id=self.kernel_initializer,
+              lattice_sizes=lattice_sizes,
+              monotonicities=monotonicities,
+              output_min=self.output_min,
+              output_max=self.output_max,
+              unimodalities=None,
+              joint_unimodalities=None,
+              init_min=self.init_min,
+              init_max=self.init_max)
+          self._lattice_layers[str(monotonicities)] = lattice_layer.Lattice(
+              lattice_sizes=lattice_sizes,
+              units=units,
+              monotonicities=monotonicities,
+              output_min=self.output_min,
+              output_max=self.output_max,
+              num_projection_iterations=self.num_projection_iterations,
+              monotonic_at_every_step=self.monotonic_at_every_step,
+              clip_inputs=self.clip_inputs,
+              interpolation=self.interpolation,
+              kernel_initializer=kernel_initializer,
+              kernel_regularizer=kernel_regularizer,
+              name=layer_name,
+          )
+        elif self.parameterization == 'kronecker_factored':
+          layer_name = '{}_{}'.format(RTL_KFL_NAME, monotonicities_str)
+          kernel_initializer = kfll.create_kernel_initializer(
+              kernel_initializer_id=self.kernel_initializer,
+              monotonicities=monotonicities,
+              output_min=self.output_min,
+              output_max=self.output_max,
+              init_min=self.init_min,
+              init_max=self.init_max)
+          self._lattice_layers[str(
+              monotonicities)] = kfll.KroneckerFactoredLattice(
+                  lattice_sizes=self.lattice_size,
+                  units=units,
+                  num_terms=self.num_terms,
+                  monotonicities=monotonicities,
+                  output_min=self.output_min,
+                  output_max=self.output_max,
+                  clip_inputs=self.clip_inputs,
+                  kernel_initializer=kernel_initializer,
+                  scale_initializer='scale_initializer',
+                  name=layer_name)
+        else:
+          raise ValueError('Unknown type of parameterization: {}'.format(
+              self.parameterization))
     super(RTL, self).build(input_shape)
 
   def call(self, x, **kwargs):
@@ -358,12 +452,16 @@ class RTL(keras.layers.Layer):
         'lattice_size': self.lattice_size,
         'output_min': self.output_min,
         'output_max': self.output_max,
+        'init_min': self.init_min,
+        'init_max': self.init_max,
         'separate_outputs': self.separate_outputs,
         'random_seed': self.random_seed,
         'num_projection_iterations': self.num_projection_iterations,
         'monotonic_at_every_step': self.monotonic_at_every_step,
         'clip_inputs': self.clip_inputs,
         'interpolation': self.interpolation,
+        'parameterization': self.parameterization,
+        'num_terms': self.num_terms,
         'avoid_intragroup_interaction': self.avoid_intragroup_interaction,
         'kernel_initializer': self.kernel_initializer,
         'kernel_regularizer': self.kernel_regularizer,

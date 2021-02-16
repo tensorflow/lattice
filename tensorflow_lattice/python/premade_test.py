@@ -22,6 +22,7 @@ import json
 
 import tempfile
 from absl import logging
+from absl.testing import parameterized
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -95,7 +96,7 @@ feature_configs = [
 ]
 
 
-class PremadeTest(tf.test.TestCase):
+class PremadeTest(parameterized.TestCase, tf.test.TestCase):
   """Tests for TFL premade."""
 
   def setUp(self):
@@ -497,24 +498,44 @@ class PremadeTest(tf.test.TestCase):
         json.dumps(model.get_config(), sort_keys=True, cls=self.Encoder),
         json.dumps(loaded_model.get_config(), sort_keys=True, cls=self.Encoder))
 
-  def testCalibratedLatticeEnsembleCrystals(self):
+  @parameterized.parameters(
+      ('hypercube', 'all_vertices', 0, 0.85),
+      ('simplex', 'all_vertices', 0, 0.89),
+      ('hypercube', 'kronecker_factored', 2, 0.82),
+      ('hypercube', 'kronecker_factored', 4, 0.82),
+  )
+  def testCalibratedLatticeEnsembleCrystals(self, interpolation,
+                                            parameterization, num_terms,
+                                            expected_minimum_auc):
     # Construct model.
     self._ResetAllBackends()
+    crystals_feature_configs = copy.deepcopy(self.heart_feature_configs)
     model_config = configs.CalibratedLatticeEnsembleConfig(
         regularizer_configs=[
             configs.RegularizerConfig(name='torsion', l2=1e-4),
             configs.RegularizerConfig(name='output_calib_hessian', l2=1e-4),
         ],
-        feature_configs=self.heart_feature_configs,
+        feature_configs=crystals_feature_configs,
         lattices='crystals',
         num_lattices=6,
         lattice_rank=5,
+        interpolation=interpolation,
+        parameterization=parameterization,
+        num_terms=num_terms,
         separate_calibrators=True,
         output_calibration=False,
         output_min=self.heart_min_label,
         output_max=self.heart_max_label - self.numerical_error_epsilon,
         output_initialization=[self.heart_min_label, self.heart_max_label],
     )
+    if parameterization == 'kronecker_factored':
+      model_config.regularizer_configs = None
+      for feature_config in model_config.feature_configs:
+        feature_config.lattice_size = 2
+        feature_config.unimodality = 'none'
+        feature_config.reflects_trust_in = None
+        feature_config.dominates = None
+        feature_config.regularizer_configs = None
     # Perform prefitting steps.
     prefitting_model_config = premade_lib.construct_prefitting_model_config(
         model_config)
@@ -548,9 +569,16 @@ class PremadeTest(tf.test.TestCase):
         self.heart_test_x, self.heart_test_y, verbose=False)
     logging.info('Calibrated lattice ensemble crystals classifier results:')
     logging.info(results)
-    self.assertGreater(results[1], 0.85)
+    self.assertGreater(results[1], expected_minimum_auc)
 
-  def testCalibratedLatticeEnsembleRTL(self):
+  @parameterized.parameters(
+      ('hypercube', 'all_vertices', 0, 0.85),
+      ('simplex', 'all_vertices', 0, 0.88),
+      ('hypercube', 'kronecker_factored', 2, 0.86),
+      ('hypercube', 'kronecker_factored', 4, 0.9),
+  )
+  def testCalibratedLatticeEnsembleRTL(self, interpolation, parameterization,
+                                       num_terms, expected_minimum_auc):
     # Construct model.
     self._ResetAllBackends()
     rtl_feature_configs = copy.deepcopy(self.heart_feature_configs)
@@ -569,12 +597,18 @@ class PremadeTest(tf.test.TestCase):
         lattices='rtl_layer',
         num_lattices=6,
         lattice_rank=5,
+        interpolation=interpolation,
+        parameterization=parameterization,
+        num_terms=num_terms,
         separate_calibrators=True,
         output_calibration=False,
         output_min=self.heart_min_label,
         output_max=self.heart_max_label - self.numerical_error_epsilon,
         output_initialization=[self.heart_min_label, self.heart_max_label],
     )
+    # We must remove all regularization if using 'kronecker_factored'.
+    if parameterization == 'kronecker_factored':
+      model_config.regularizer_configs = None
     # Construct and train final model
     model = premade.CalibratedLatticeEnsemble(model_config)
     model.compile(
@@ -591,15 +625,72 @@ class PremadeTest(tf.test.TestCase):
         self.heart_test_x, self.heart_test_y, verbose=False)
     logging.info('Calibrated lattice ensemble rtl classifier results:')
     logging.info(results)
-    self.assertGreater(results[1], 0.85)
+    self.assertGreater(results[1], expected_minimum_auc)
 
-  def testLatticeEnsembleH5FormatSaveLoad(self):
+  @parameterized.parameters(
+      ('hypercube', 'all_vertices', 0, 0.81),
+      ('simplex', 'all_vertices', 0, 0.81),
+      ('hypercube', 'kronecker_factored', 2, 0.79),
+      ('hypercube', 'kronecker_factored', 4, 0.8),
+  )
+  def testCalibratedLattice(self, interpolation, parameterization, num_terms,
+                            expected_minimum_auc):
+    # Construct model configuration.
+    self._ResetAllBackends()
+    lattice_feature_configs = copy.deepcopy(self.heart_feature_configs[:5])
+    model_config = configs.CalibratedLatticeConfig(
+        feature_configs=lattice_feature_configs,
+        interpolation=interpolation,
+        parameterization=parameterization,
+        num_terms=num_terms,
+        regularizer_configs=[
+            configs.RegularizerConfig(name='torsion', l2=1e-4),
+            configs.RegularizerConfig(name='output_calib_hessian', l2=1e-4),
+        ],
+        output_min=self.heart_min_label,
+        output_max=self.heart_max_label,
+        output_calibration=False,
+        output_initialization=[self.heart_min_label, self.heart_max_label],
+    )
+    if parameterization == 'kronecker_factored':
+      model_config.regularizer_configs = None
+      for feature_config in model_config.feature_configs:
+        feature_config.lattice_size = 2
+        feature_config.unimodality = 'none'
+        feature_config.reflects_trust_in = None
+        feature_config.dominates = None
+        feature_config.regularizer_configs = None
+    # Construct and train final model
+    model = premade.CalibratedLattice(model_config)
+    model.compile(
+        loss=tf.keras.losses.BinaryCrossentropy(),
+        metrics=tf.keras.metrics.AUC(),
+        optimizer=tf.keras.optimizers.Adam(0.01))
+    model.fit(
+        self.heart_train_x[:5],
+        self.heart_train_y,
+        batch_size=100,
+        epochs=200,
+        verbose=False)
+    results = model.evaluate(
+        self.heart_test_x[:5], self.heart_test_y, verbose=False)
+    logging.info('Calibrated lattice classifier results:')
+    logging.info(results)
+    self.assertGreater(results[1], expected_minimum_auc)
+
+  @parameterized.parameters(
+      ('all_vertices', 0),
+      ('kronecker_factored', 2),
+  )
+  def testLatticeEnsembleH5FormatSaveLoad(self, parameterization, num_terms):
     model_config = configs.CalibratedLatticeEnsembleConfig(
         feature_configs=copy.deepcopy(feature_configs),
         lattices=[['numerical_1', 'categorical'],
                   ['numerical_2', 'categorical']],
         num_lattices=2,
         lattice_rank=2,
+        parameterization=parameterization,
+        num_terms=num_terms,
         separate_calibrators=True,
         regularizer_configs=[
             configs.RegularizerConfig('calib_hessian', l2=1e-3),
@@ -610,6 +701,14 @@ class PremadeTest(tf.test.TestCase):
         output_calibration=True,
         output_calibration_num_keypoints=5,
         output_initialization=[-1.0, 1.0])
+    if parameterization == 'kronecker_factored':
+      model_config.regularizer_configs = None
+      for feature_config in model_config.feature_configs:
+        feature_config.lattice_size = 2
+        feature_config.unimodality = 'none'
+        feature_config.reflects_trust_in = None
+        feature_config.dominates = None
+        feature_config.regularizer_configs = None
     model = premade.CalibratedLatticeEnsemble(model_config)
     # Compile and fit model.
     model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
@@ -623,7 +722,11 @@ class PremadeTest(tf.test.TestCase):
           model.predict(fake_data['eval_xs']),
           loaded_model.predict(fake_data['eval_xs']))
 
-  def testLatticeEnsembleRTLH5FormatSaveLoad(self):
+  @parameterized.parameters(
+      ('all_vertices', 0),
+      ('kronecker_factored', 2),
+  )
+  def testLatticeEnsembleRTLH5FormatSaveLoad(self, parameterization, num_terms):
     rtl_feature_configs = copy.deepcopy(feature_configs)
     for feature_config in rtl_feature_configs:
       feature_config.lattice_size = 2
@@ -636,6 +739,8 @@ class PremadeTest(tf.test.TestCase):
         lattices='rtl_layer',
         num_lattices=2,
         lattice_rank=2,
+        parameterization=parameterization,
+        num_terms=num_terms,
         separate_calibrators=True,
         regularizer_configs=[
             configs.RegularizerConfig('calib_hessian', l2=1e-3),
@@ -646,6 +751,8 @@ class PremadeTest(tf.test.TestCase):
         output_calibration=True,
         output_calibration_num_keypoints=5,
         output_initialization=[-1.0, 1.0])
+    if parameterization == 'kronecker_factored':
+      model_config.regularizer_configs = None
     model = premade.CalibratedLatticeEnsemble(model_config)
     # Compile and fit model.
     model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
@@ -659,9 +766,15 @@ class PremadeTest(tf.test.TestCase):
           model.predict(fake_data['eval_xs']),
           loaded_model.predict(fake_data['eval_xs']))
 
-  def testLatticeH5FormatSaveLoad(self):
+  @parameterized.parameters(
+      ('all_vertices', 0),
+      ('kronecker_factored', 2),
+  )
+  def testLatticeH5FormatSaveLoad(self, parameterization, num_terms):
     model_config = configs.CalibratedLatticeConfig(
         feature_configs=copy.deepcopy(feature_configs),
+        parameterization=parameterization,
+        num_terms=num_terms,
         regularizer_configs=[
             configs.RegularizerConfig('calib_wrinkle', l2=1e-3),
             configs.RegularizerConfig('torsion', l2=1e-3),
@@ -671,6 +784,14 @@ class PremadeTest(tf.test.TestCase):
         output_calibration=True,
         output_calibration_num_keypoints=6,
         output_initialization=[0.0, 1.0])
+    if parameterization == 'kronecker_factored':
+      model_config.regularizer_configs = None
+      for feature_config in model_config.feature_configs:
+        feature_config.lattice_size = 2
+        feature_config.unimodality = 'none'
+        feature_config.reflects_trust_in = None
+        feature_config.dominates = None
+        feature_config.regularizer_configs = None
     model = premade.CalibratedLattice(model_config)
     # Compile and fit model.
     model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))

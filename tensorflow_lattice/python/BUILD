@@ -117,6 +117,7 @@ py_library(
     deps = [
         ":categorical_calibration_layer",
         ":configs",
+        ":kronecker_factored_lattice_layer",
         ":lattice_layer",
         ":linear_layer",
         ":model_info",
@@ -197,6 +198,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":kronecker_factored_lattice_layer",
+        ":kronecker_factored_lattice_lib",
         ":test_utils",
         # absl/logging dep,
         # absl/testing:parameterized dep,
@@ -329,6 +331,7 @@ py_library(
         ":aggregation_layer",
         ":categorical_calibration_layer",
         ":configs",
+        ":kronecker_factored_lattice_layer",
         ":lattice_layer",
         ":parallel_combination_layer",
         ":premade_lib",
@@ -346,6 +349,8 @@ py_library(
         ":aggregation_layer",
         ":categorical_calibration_layer",
         ":configs",
+        ":kronecker_factored_lattice_layer",
+        ":kronecker_factored_lattice_lib",
         ":lattice_layer",
         ":lattice_lib",
         ":linear_layer",
@@ -372,6 +377,7 @@ py_test(
         ":premade",
         ":premade_lib",
         # absl/logging dep,
+        # absl/testing:parameterized dep,
         # numpy dep,
         # tensorflow dep,
     ],
@@ -439,6 +445,7 @@ py_library(
     srcs = ["rtl_layer.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":kronecker_factored_lattice_layer",
         ":lattice_layer",
         ":rtl_lib",
         # tensorflow:tensorflow_no_contrib dep,

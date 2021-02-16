@@ -23,13 +23,21 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
+import inspect
+
 from . import kronecker_factored_lattice_lib as kfl_lib
 from . import utils
+import tensorflow as tf
 from tensorflow import keras
 
+DIMS_NAME = "dims"
 KFL_SCALE_NAME = "kronecker_factored_lattice_scale"
 KFL_BIAS_NAME = "kronecker_factored_lattice_bias"
 KFL_KERNEL_NAME = "kronecker_factored_lattice_kernel"
+LATTICE_SIZES_NAME = "lattice_sizes"
+NUM_TERMS_NAME = "num_terms"
+UNITS_NAME = "units"
 
 
 # TODO: add support for different lattice_sizes for each input
@@ -61,6 +69,8 @@ class KroneckerFactoredLattice(keras.layers.Layer):
 
   * **Monotonicity:** constrains the function to be increasing in the
     corresponding dimension.
+
+  There are upper and lower bound constraints on the output.
 
   Input shape:
     - if `units == 1`: tensor of shape: `(batch_size, ..., dims)`
@@ -105,9 +115,11 @@ class KroneckerFactoredLattice(keras.layers.Layer):
                units=1,
                num_terms=2,
                monotonicities=None,
+               output_min=None,
+               output_max=None,
                clip_inputs=True,
-               satisfy_constraints_at_every_step=True,
-               kernel_initializer="random_monotonic_initializer",
+               kernel_initializer="kfl_random_monotonic_initializer",
+               scale_initializer="scale_initializer",
                **kwargs):
     # pyformat: disable
     """Initializes an instance of `KroneckerFactoredLattice`.
@@ -122,14 +134,22 @@ class KroneckerFactoredLattice(keras.layers.Layer):
         be monotonic in the corresponding feature, using 'increasing' or 1 to
         indicate increasing monotonicity and 'none' or 0 to indicate no
         monotonicity constraints.
+      output_min: None or lower bound of the output.
+      output_max: None or upper bound of the output.
       clip_inputs: If inputs should be clipped to the input range of the
         Kronecker-Factored Lattice.
-      satisfy_constraints_at_every_step: Whether to strictly enforce constraints
-        after every gradient update by applying an imprecise projection.
       kernel_initializer: None or one of:
-        - `'random_monotonic_initializer'`: initializes parameters as uniform
+        - `'kfl_random_monotonic_initializer'`: initializes parameters as uniform
           random functions that are monotonic in monotonic dimensions.
         - Any Keras initializer object.
+      scale_initializer: None or one of:
+        - `'scale_initializer'`: Initializes scale depending on output_min and
+          output_max. If both output_min and output_max are set, scale is
+          initialized to half their difference, alternating signs for each term.
+          If only output_min is set, scale is initialized to 1 for each term. If
+          only output_max is set, scale is initialized to -1 for each term.
+          Otherwise scale is initialized to alternate between 1 and -1 for each
+          term.
       **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
 
     Raises:
@@ -137,19 +157,31 @@ class KroneckerFactoredLattice(keras.layers.Layer):
     """
     # pyformat: enable
     kfl_lib.verify_hyperparameters(
-        lattice_sizes=lattice_sizes, units=units, num_terms=num_terms)
+        lattice_sizes=lattice_sizes,
+        units=units,
+        num_terms=num_terms,
+        output_min=output_min,
+        output_max=output_max)
     super(KroneckerFactoredLattice, self).__init__(**kwargs)
 
     self.lattice_sizes = lattice_sizes
     self.units = units
     self.num_terms = num_terms
     self.monotonicities = monotonicities
+    self.output_min = output_min
+    self.output_max = output_max
     self.clip_inputs = clip_inputs
-    self.satisfy_constraints_at_every_step = satisfy_constraints_at_every_step
 
     self.kernel_initializer = create_kernel_initializer(
         kernel_initializer_id=kernel_initializer,
-        monotonicities=self.monotonicities)
+        monotonicities=self.monotonicities,
+        output_min=self.output_min,
+        output_max=self.output_max)
+
+    self.scale_initializer = create_scale_initializer(
+        scale_initializer_id=scale_initializer,
+        output_min=self.output_min,
+        output_max=self.output_max)
 
   def build(self, input_shape):
     """Standard Keras build() method."""
@@ -163,41 +195,70 @@ class KroneckerFactoredLattice(keras.layers.Layer):
     else:
       dims = input_shape.as_list()[-1]
 
+    if self.output_min is not None or self.output_max is not None:
+      scale_constraints = ScaleConstraints(
+          output_min=self.output_min, output_max=self.output_max)
+    else:
+      scale_constraints = None
     self.scale = self.add_weight(
         KFL_SCALE_NAME,
         shape=[self.units, self.num_terms],
-        initializer=ScaleInitializer(),
+        initializer=self.scale_initializer,
+        constraint=scale_constraints,
         dtype=self.dtype)
     self.bias = self.add_weight(
         KFL_BIAS_NAME,
         shape=[self.units],
-        initializer="zeros",
+        initializer=BiasInitializer(self.output_min, self.output_max),
+        trainable=(self.output_min is None and self.output_max is None),
         dtype=self.dtype)
 
-    if self.monotonicities:
+    if (self.monotonicities or self.output_min is not None or
+        self.output_max is not None):
       constraints = KroneckerFactoredLatticeConstraints(
           units=self.units,
           scale=self.scale,
           monotonicities=self.monotonicities,
-          satisfy_constraints_at_every_step=self
-          .satisfy_constraints_at_every_step)
+          output_min=self.output_min,
+          output_max=self.output_max)
     else:
       constraints = None
 
     # Note that the first dimension of shape is 1 to work with
-    # tf.nn.depthwise_conv2d.
+    # tf.nn.depthwise_conv2d. We also provide scale to the __call__ method
+    # of the initializer using partial functions if it accepts scale.
+    parameters = inspect.signature(self.kernel_initializer).parameters.keys()
+    if "scale" in parameters:
+      kernel_initializer = functools.partial(
+          self.kernel_initializer, scale=self.scale.initialized_value())
+    else:
+      kernel_initializer = self.kernel_initializer
     self.kernel = self.add_weight(
         KFL_KERNEL_NAME,
         shape=[1, self.lattice_sizes, self.units * dims, self.num_terms],
-        initializer=self.kernel_initializer,
+        initializer=kernel_initializer,
         constraint=constraints,
         dtype=self.dtype)
 
-    self._final_constraints = KroneckerFactoredLatticeConstraints(
+    self._final_kernel_constraints = KroneckerFactoredLatticeConstraints(
         units=self.units,
         scale=self.scale,
         monotonicities=self.monotonicities,
-        satisfy_constraints_at_every_step=True)
+        output_min=self.output_min,
+        output_max=self.output_max)
+
+    self._final_scale_constraints = ScaleConstraints(
+        output_min=self.output_min, output_max=self.output_max)
+
+    # These tensors are meant for book keeping. Note that this slightly
+    # increases the size of the graph.
+    self.lattice_sizes_tensor = tf.constant(
+        self.lattice_sizes, dtype=tf.int32, name=LATTICE_SIZES_NAME)
+    self.units_tensor = tf.constant(
+        self.units, dtype=tf.int32, name=UNITS_NAME)
+    self.dims_tensor = tf.constant(dims, dtype=tf.int32, name=DIMS_NAME)
+    self.num_terms_tensor = tf.constant(
+        self.num_terms, dtype=tf.int32, name=NUM_TERMS_NAME)
 
     super(KroneckerFactoredLattice, self).build(input_shape)
 
@@ -230,28 +291,33 @@ class KroneckerFactoredLattice(keras.layers.Layer):
         "units": self.units,
         "num_terms": self.num_terms,
         "monotonicities": self.monotonicities,
+        "output_min": self.output_min,
+        "output_max": self.output_max,
         "clip_inputs": self.clip_inputs,
-        "satisfy_constraints_at_every_step":
-            self.satisfy_constraints_at_every_step,
         "kernel_initializer":
             keras.initializers.serialize(self.kernel_initializer),
+        "scale_initializer":
+            keras.initializers.serialize(self.scale_initializer),
     }  # pyformat: disable
     config.update(super(KroneckerFactoredLattice, self).get_config())
     return config
 
+  # TODO: can we remove this now that we always project at every step?
   def finalize_constraints(self):
     """Ensures layers weights strictly satisfy constraints.
 
     Applies approximate projection to strictly satisfy specified constraints.
-    If `monotonic_at_every_step == True` there is no need to call this function.
 
     Returns:
-      In eager mode directly updates weights and returns variable which stores
-      them. In graph mode returns `assign_add` op which has to be executed to
-      updates weights.
+      In eager mode directly updates kernel and scale and returns the variables
+      which store them. In graph mode returns a `group` op containing the
+      `assign_add` ops which have to be executed to update the kernel and scale.
     """
-    return self.kernel.assign_add(
-        self._final_constraints(self.kernel) - self.kernel)
+    finalize_kernel = self.kernel.assign_add(
+        self._final_kernel_constraints(self.kernel) - self.kernel)
+    finalize_scale = self.scale.assign_add(
+        self._final_scale_constraints(self.scale) - self.scale)
+    return tf.group([finalize_kernel, finalize_scale])
 
   def assert_constraints(self, eps=1e-6):
     """Asserts that weights satisfy all constraints.
@@ -271,10 +337,17 @@ class KroneckerFactoredLattice(keras.layers.Layer):
         scale=self.scale,
         monotonicities=utils.canonicalize_monotonicities(
             self.monotonicities, allow_decreasing=False),
+        output_min=self.output_min,
+        output_max=self.output_max,
         eps=eps)
 
 
-def create_kernel_initializer(kernel_initializer_id, monotonicities):
+def create_kernel_initializer(kernel_initializer_id,
+                              monotonicities,
+                              output_min,
+                              output_max,
+                              init_min=None,
+                              init_max=None):
   """Returns a kernel Keras initializer object from its id.
 
   This function is used to convert the 'kernel_initializer' parameter in the
@@ -286,32 +359,83 @@ def create_kernel_initializer(kernel_initializer_id, monotonicities):
       parameter in the constructor of `tfl.layers.KroneckerFactoredLattice`.
     monotonicities: See the documentation of the same parameter in the
       constructor of `tfl.layers.KroneckerFactoredLattice`.
+    output_min: See the documentation of the same parameter in the constructor
+      of `tfl.layers.KroneckerFactoredLattice`.
+    output_max: See the documentation of the same parameter in the constructor
+      of `tfl.layers.KroneckerFactoredLattice`.
+    init_min: None or lower bound of kernel initialization. If set, init_max
+      must also be set. Ignored if kernel_initializer_id is a Keras object.
+    init_max: None or upper bound of kernel initialization. If set, init_min
+      must also be set. Ignored if kernel_initializer_id is a Keras object.
 
   Returns:
     The Keras initializer object for the `tfl.layers.KroneckerFactoredLattice`
     kernel variable.
+
+  Raises:
+    ValueError: If only one of init_{min/max} is set.
   """
+  if init_min is None and init_max is None:
+    init_min, init_max = kfl_lib.default_init_params(output_min, output_max)
+  elif init_min is not None and init_max is not None:
+    # We have nothing to set here.
+    pass
+  else:
+    raise ValueError("Both or neither of init_{min/max} must be set")
+
   # Construct initializer.
   if kernel_initializer_id in [
-      "random_monotonic_initializer", "RandomMonotonicInitializer"
+      "kfl_random_monotonic_initializer", "KFLRandomMonotonicInitializer"
   ]:
-    return RandomMonotonicInitializer(monotonicities)
+    return KFLRandomMonotonicInitializer(
+        monotonicities=monotonicities, init_min=init_min, init_max=init_max)
   else:
     # This is needed for Keras deserialization logic to be aware of our custom
     # objects.
     with keras.utils.custom_object_scope({
-        "RandomMonotonicInitializer": RandomMonotonicInitializer,
+        "KFLRandomMonotonicInitializer": KFLRandomMonotonicInitializer,
     }):
       return keras.initializers.get(kernel_initializer_id)
 
 
-class RandomMonotonicInitializer(keras.initializers.Initializer):
+def create_scale_initializer(scale_initializer_id, output_min, output_max):
+  """Returns a scale Keras initializer object from its id.
+
+  This function is used to convert the 'scale_initializer' parameter in the
+  constructor of tfl.layers.KroneckerFactoredLattice into the corresponding
+  initializer object.
+
+  Args:
+    scale_initializer_id: See the documentation of the 'scale_initializer'
+      parameter in the constructor of `tfl.layers.KroneckerFactoredLattice`.
+    output_min: See the documentation of the same parameter in the constructor
+      of `tfl.layers.KroneckerFactoredLattice`.
+    output_max: See the documentation of the same parameter in the constructor
+      of `tfl.layers.KroneckerFactoredLattice`.
+
+  Returns:
+    The Keras initializer object for the `tfl.layers.KroneckerFactoredLattice`
+    scale variable.
+  """
+  # Construct initializer.
+  if scale_initializer_id in ["scale_initializer", "ScaleInitializer"]:
+    return ScaleInitializer(output_min=output_min, output_max=output_max)
+  else:
+    # This is needed for Keras deserialization logic to be aware of our custom
+    # objects.
+    with keras.utils.custom_object_scope({
+        "ScaleInitializer": ScaleInitializer,
+    }):
+      return keras.initializers.get(scale_initializer_id)
+
+
+class KFLRandomMonotonicInitializer(keras.initializers.Initializer):
   # pyformat: disable
   """Initializes a `tfl.layers.KroneckerFactoredLattice` as random monotonic."""
   # pyformat: enable
 
   def __init__(self, monotonicities, init_min=0.5, init_max=1.5, seed=None):
-    """Initializes an instance of `RandomMonotonicInitializer`.
+    """Initializes an instance of `KFLRandomMonotonicInitializer`.
 
     Args:
       monotonicities: Monotonic dimensions for initialization. Does not need to
@@ -325,17 +449,19 @@ class RandomMonotonicInitializer(keras.initializers.Initializer):
     self.init_max = init_max
     self.seed = seed
 
-  def __call__(self, shape, dtype=None, partition_info=None):
+  def __call__(self, shape, scale, dtype=None, **kwargs):
     """Returns weights of `tfl.layers.KroneckerFactoredLattice` layer.
 
     Args:
       shape: Must be: `(1, lattice_sizes, units * dims, num_terms)`.
+      scale: Scale variable of shape: `(units, num_terms)`.
       dtype: Standard Keras initializer param.
-      partition_info: Standard Keras initializer param. Not used.
+      **kwargs: Other args passed to `tf.keras.initializers.Initializer`
+        __call__ method.
     """
-    del partition_info
-    return kfl_lib.random_monotonic_initializer(
+    return kfl_lib.kfl_random_monotonic_initializer(
         shape=shape,
+        scale=scale,
         monotonicities=utils.canonicalize_monotonicities(
             self.monotonicities, allow_decreasing=False),
         init_min=self.init_min,
@@ -356,20 +482,94 @@ class RandomMonotonicInitializer(keras.initializers.Initializer):
 
 class ScaleInitializer(keras.initializers.Initializer):
   # pyformat: disable
-  """Initializes scale to alternate between 1 and -1 for each term."""
+  """Initializes scale depending on output_min and output_max.
+
+  If both output_min and output_max are set, scale is initialized to half their
+  difference, alternating signs for each term. If only output_min is set, scale
+  is initialized to 1 for each term. If only output_max is set, scale is
+  initialized to -1 for each term. Otherwise scale is initialized to alternate
+  between 1 and -1 for each term.
+  """
   # pyformat: enable
 
-  def __call__(self, shape, dtype=None, partition_info=None):
+  def __init__(self, output_min, output_max):
+    """Initializes an instance of `ScaleInitializer`.
+
+    Args:
+      output_min: None or minimum layer output.
+      output_max: None or maximum layer output.
+    """
+    self.output_min = output_min
+    self.output_max = output_max
+
+  def __call__(self, shape, dtype=None, **kwargs):
     """Returns weights of `tfl.layers.KroneckerFactoredLattice` scale.
 
     Args:
       shape: Must be: `(units, num_terms)`.
       dtype: Standard Keras initializer param.
-      partition_info: Standard Keras initializer param. Not used.
+      **kwargs: Other args passed to `tf.keras.initializers.Initializer`
+        __call__ method.
     """
-    del partition_info
     units, num_terms = shape
-    return kfl_lib.scale_initializer(units=units, num_terms=num_terms)
+    return kfl_lib.scale_initializer(
+        units=units,
+        num_terms=num_terms,
+        output_min=self.output_min,
+        output_max=self.output_max)
+
+  def get_config(self):
+    """Standard Keras config for serializaion."""
+    config = {
+        "output_min": self.output_min,
+        "output_max": self.output_max,
+    }  # pyformat: disable
+    return config
+
+
+class BiasInitializer(keras.initializers.Initializer):
+  # pyformat: disable
+  """Initializes bias depending on output_min and output_max.
+
+  If both output_min and output_max are set, bias is initialized to their
+  average. If only output_min is set, bias is initialized to output_min. If only
+  output_max is set, bias is initialized to output_max. Otherwise bias is
+  initialized to zeros.
+  """
+  # pyformat: enable
+
+  def __init__(self, output_min, output_max):
+    """Initializes an instance of `BiasInitializer`.
+
+    Args:
+      output_min: None or minimum layer output.
+      output_max: None or maximum layer output.
+    """
+    self.output_min = output_min
+    self.output_max = output_max
+
+  def __call__(self, shape, dtype=None, **kwargs):
+    """Returns weights of `tfl.layers.KroneckerFactoredLattice` bias.
+
+    Args:
+      shape: Must be: `(units, num_terms)`.
+      dtype: Standard Keras initializer param.
+      **kwargs: Other args passed to `tf.keras.initializers.Initializer`
+        __call__ method.
+    """
+    return kfl_lib.bias_initializer(
+        units=shape[0],
+        output_min=self.output_min,
+        output_max=self.output_max,
+        dtype=dtype)
+
+  def get_config(self):
+    """Standard Keras config for serializaion."""
+    config = {
+        "output_min": self.output_min,
+        "output_max": self.output_max,
+    }  # pyformat: disable
+    return config
 
 
 class KroneckerFactoredLatticeConstraints(keras.constraints.Constraint):
@@ -388,7 +588,8 @@ class KroneckerFactoredLatticeConstraints(keras.constraints.Constraint):
                units,
                scale,
                monotonicities=None,
-               satisfy_constraints_at_every_step=True):
+               output_min=None,
+               output_max=None):
     """Initializes an instance of `KroneckerFactoredLatticeConstraints`.
 
     Args:
@@ -397,15 +598,18 @@ class KroneckerFactoredLatticeConstraints(keras.constraints.Constraint):
       scale: Scale variable of shape: `(units, num_terms)`.
       monotonicities: Same meaning as corresponding parameter of
         `KroneckerFactoredLattice`.
-      satisfy_constraints_at_every_step: Whether to use approximate projection
-        to ensure that constratins are strictly satisfied.
+      output_min: Same meaning as corresponding parameter of
+        `KroneckerFactoredLattice`.
+      output_max: Same meaning as corresponding parameter of
+        `KroneckerFactoredLattice`.
     """
     self.units = units
     self.scale = scale
     self.monotonicities = utils.canonicalize_monotonicities(
         monotonicities, allow_decreasing=False)
     self.num_constraint_dims = utils.count_non_zeros(self.monotonicities)
-    self.satisfy_constraints_at_every_step = satisfy_constraints_at_every_step
+    self.output_min = output_min
+    self.output_max = output_max
 
   def __call__(self, w):
     """Applies constraints to `w`.
@@ -417,12 +621,14 @@ class KroneckerFactoredLatticeConstraints(keras.constraints.Constraint):
     Returns:
       Constrained and projected w.
     """
-    if self.num_constraint_dims and self.satisfy_constraints_at_every_step:
-      w = kfl_lib.finalize_constraints(
+    if self.num_constraint_dims:
+      w = kfl_lib.finalize_weight_constraints(
           w,
           units=self.units,
           scale=self.scale,
-          monotonicities=self.monotonicities)
+          monotonicities=self.monotonicities,
+          output_min=self.output_min,
+          output_max=self.output_max)
     return w
 
   def get_config(self):
@@ -431,6 +637,55 @@ class KroneckerFactoredLatticeConstraints(keras.constraints.Constraint):
         "units": self.units,
         "scale": self.scale,
         "monotonicities": self.monotonicities,
-        "satisfy_constraints_at_every_step":
-            self.satisfy_constraints_at_every_step,
+        "output_min": self.output_min,
+        "output_max": self.output_max,
+    }  # pyformat: disable
+
+
+class ScaleConstraints(keras.constraints.Constraint):
+  # pyformat: disable
+  """Constraints for `tfl.layers.KroneckerFactoredLattice` scale.
+
+  Constraints the scale variable to be between
+  `[output_min-output_max, output_max-output_min]` such that the final output
+  of the layer is within the desired `[output_min, output_max]` range, assuming
+  bias is properly fixed to be `output_min`.
+
+  Attributes:
+    - All `__init__` arguments.
+  """
+  # pyformat: enable
+
+  def __init__(self, output_min=None, output_max=None):
+    """Initializes an instance of `ScaleConstraints`.
+
+    Args:
+      output_min: Same meaning as corresponding parameter of
+        `KroneckerFactoredLattice`.
+      output_max: Same meaning as corresponding parameter of
+        `KroneckerFactoredLattice`.
+    """
+    self.output_min = output_min
+    self.output_max = output_max
+
+  def __call__(self, scale):
+    """Applies constraints to `scale`.
+
+    Args:
+      scale: Kronecker-Factored Lattice scale tensor of shape: `(units,
+        num_terms)`.
+
+    Returns:
+      Constrained and clipped scale.
+    """
+    if self.output_min is not None or self.output_max is not None:
+      scale = kfl_lib.finalize_scale_constraints(
+          scale, output_min=self.output_min, output_max=self.output_max)
+    return scale
+
+  def get_config(self):
+    """Standard Keras config for serialization."""
+    return {
+        "output_min": self.output_min,
+        "output_max": self.output_max,
     }  # pyformat: disable
