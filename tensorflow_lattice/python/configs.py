@@ -267,6 +267,8 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
                num_lattices=None,
                lattice_rank=None,
                interpolation='hypercube',
+               parameterization='all_vertices',
+               num_terms=2,
                separate_calibrators=True,
                use_linear_combination=False,
                use_bias=False,
@@ -305,6 +307,34 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
         'simplex' uses d+1 parameters and thus scales better. For details see
         `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
         `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
+      parameterization: The parameterization of the lattice function class to
+        use. A lattice function is uniquely determined by specifying its value
+        on every lattice vertex. A parameterization scheme is a mapping from a
+        vector of parameters to a multidimensional array of lattice vertex
+        values. It can be one of:
+          - String `'all_vertices'`: This is the "traditional" parameterization
+            that keeps one scalar parameter per lattice vertex where the mapping
+            is essentially the identity map. With this scheme, the number of
+            parameters scales exponentially with the number of inputs to the
+            lattice. The underlying lattices used will be `tfl.layers.Lattice`
+            layers.
+          - String `'kronecker_factored'`: With this parameterization, for each
+            lattice input i we keep a collection of `num_terms` vectors each
+            having `feature_configs[0].lattice_size` entries (note that all
+            features must have the same lattice size). To obtain the tensor of
+            lattice vertex values, for `t=1,2,...,num_terms` we compute the
+            outer product of the `t'th` vector in each collection, multiply by a
+            per-term scale, and sum the resulting tensors. Finally, we add a
+            single shared bias parameter to each entry in the sum. With this
+            scheme, the number of parameters grows linearly with `lattice_rank`
+            (assuming lattice sizes and `num_terms` are held constant).
+            Currently, only monotonicity shape constraint and bound constraint
+            are supported for this scheme. Regularization is not currently
+            supported. The underlying lattices used will be
+            `tfl.layers.KroneckerFactoredLattice` layers.
+      num_terms: The number of terms in a lattice using `'kronecker_factored'`
+        parameterization. Ignored if parameterization is set to
+        `'all_vertices'`.
       separate_calibrators: If features should be separately calibrated for each
         lattice in the ensemble.
       use_linear_combination: If set to true, a linear combination layer will be
@@ -375,12 +405,15 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
   def __init__(self,
                feature_configs=None,
                interpolation='hypercube',
+               parameterization='all_vertices',
+               num_terms=2,
                regularizer_configs=None,
                output_min=None,
                output_max=None,
                output_calibration=False,
                output_calibration_num_keypoints=10,
-               output_initialization='quantiles'):
+               output_initialization='quantiles',
+               random_seed=0):
     """Initializes a `CalibratedLatticeConfig` instance.
 
     Args:
@@ -392,6 +425,34 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
         'simplex' uses d+1 parameters and thus scales better. For details see
         `tfl.lattice_lib.evaluate_with_simplex_interpolation` and
         `tfl.lattice_lib.evaluate_with_hypercube_interpolation`.
+      parameterization: The parameterization of the lattice function class to
+        use. A lattice function is uniquely determined by specifying its value
+        on every lattice vertex. A parameterization scheme is a mapping from a
+        vector of parameters to a multidimensional array of lattice vertex
+        values. It can be one of:
+          - String `'all_vertices'`: This is the "traditional" parameterization
+            that keeps one scalar parameter per lattice vertex where the mapping
+            is essentially the identity map. With this scheme, the number of
+            parameters scales exponentially with the number of inputs to the
+            lattice. The underlying lattice used will be a `tfl.layers.Lattice`
+            layer.
+          - String `'kronecker_factored'`: With this parameterization, for each
+            lattice input i we keep a collection of `num_terms` vectors each
+            having `feature_configs[0].lattice_size` entries (note that all
+            features must have the same lattice size). To obtain the tensor of
+            lattice vertex values, for `t=1,2,...,num_terms` we compute the
+            outer product of the `t'th` vector in each collection, multiply by a
+            per-term scale, and sum the resulting tensors. Finally, we add a
+            single shared bias parameter to each entry in the sum. With this
+            scheme, the number of parameters grows linearly with
+            `len(feature_configs)` (assuming lattice sizes and `num_terms` are
+            held constant). Currently, only monotonicity shape constraint and
+            bound constraint are supported for this scheme. Regularization is
+            not currently supported. The underlying lattice used will be a
+            `tfl.layers.KroneckerFactoredLattice` layer.
+      num_terms: The number of terms in a lattice using `'kronecker_factored'`
+        parameterization. Ignored if parameterization is set to
+        `'all_vertices'`.
       regularizer_configs: A list of `tfl.configs.RegularizerConfig` instances
         that apply global regularization.
       output_min: Lower bound constraint on the output of the model.
@@ -410,6 +471,9 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
           - String `'uniform'`: Output is initliazed uniformly in label range.
           - A list of numbers: To be used for initialization of the output
             lattice or output calibrator.
+      random_seed: Random seed to use for initialization of a lattice with
+        `'kronecker_factored'` parameterization. Ignored if parameterization is
+        set to `'all_vertices'`.
     """
     super(CalibratedLatticeConfig, self).__init__(locals())
 

@@ -532,9 +532,15 @@ class Lattice(keras.layers.Layer):
         eps=eps)
 
 
-def create_kernel_initializer(kernel_initializer_id, lattice_sizes,
-                              monotonicities, output_min, output_max,
-                              unimodalities, joint_unimodalities):
+def create_kernel_initializer(kernel_initializer_id,
+                              lattice_sizes,
+                              monotonicities,
+                              output_min,
+                              output_max,
+                              unimodalities,
+                              joint_unimodalities,
+                              init_min=None,
+                              init_max=None):
   """Returns a kernel Keras initializer object from its id.
 
   This function is used to convert the 'kernel_initializer' parameter in the
@@ -555,29 +561,20 @@ def create_kernel_initializer(kernel_initializer_id, lattice_sizes,
       constructor of tfl.Lattice.
     joint_unimodalities: See the documentation of the same parameter in the
       constructor of tfl.Lattice.
+    init_min: None or lower bound of kernel initialization. If set, init_max
+      must also be set.
+    init_max: None or upper bound of kernel initialization. If set, init_min
+      must also be set.
 
   Returns:
     The Keras initializer object for the tfl.Lattice kernel variable.
+
+  Raises:
+    ValueError: If only one of init_{min/max} is set.
   """
-
-  def default_params(output_min, output_max):
-    """Return reasonable default parameters if not defined explicitly."""
-    if output_min is not None:
-      output_init_min = output_min
-    elif output_max is not None:
-      output_init_min = min(0.0, output_max)
-    else:
-      output_init_min = 0.0
-
-    if output_max is not None:
-      output_init_max = output_max
-    elif output_min is not None:
-      output_init_max = max(1.0, output_min)
-    else:
-      output_init_max = 1.0
-
-    # Return our min and max.
-    return output_init_min, output_init_max
+  if ((init_min is not None and init_max is None) or
+      (init_min is None and init_max is not None)):
+    raise ValueError("Both or neither of init_{min/max} must be set")
 
   def do_joint_unimodalities_contain_all_features(joint_unimodalities):
     if (joint_unimodalities is None) or (len(joint_unimodalities) != 1):
@@ -597,23 +594,27 @@ def create_kernel_initializer(kernel_initializer_id, lattice_sizes,
         all_unimodalities[dim] = direction
 
   if kernel_initializer_id in ["linear_initializer", "LinearInitializer"]:
-    output_init_min, output_init_max = default_params(output_min, output_max)
+    if init_min is None and init_max is None:
+      init_min, init_max = lattice_lib.default_init_params(
+          output_min, output_max)
 
     return LinearInitializer(
         lattice_sizes=lattice_sizes,
         monotonicities=monotonicities,
-        output_min=output_init_min,
-        output_max=output_init_max,
+        output_min=init_min,
+        output_max=init_max,
         unimodalities=all_unimodalities)
   elif kernel_initializer_id in [
       "random_monotonic_initializer", "RandomMonotonicInitializer"
   ]:
-    output_init_min, output_init_max = default_params(output_min, output_max)
+    if init_min is None and init_max is None:
+      init_min, init_max = lattice_lib.default_init_params(
+          output_min, output_max)
 
     return RandomMonotonicInitializer(
         lattice_sizes=lattice_sizes,
-        output_min=output_init_min,
-        output_max=output_init_max,
+        output_min=init_min,
+        output_max=init_max,
         unimodalities=all_unimodalities)
   elif kernel_initializer_id in [
       "random_uniform_or_linear_initializer", "RandomUniformOrLinearInitializer"
@@ -621,10 +622,12 @@ def create_kernel_initializer(kernel_initializer_id, lattice_sizes,
     if do_joint_unimodalities_contain_all_features(joint_unimodalities):
       return create_kernel_initializer("random_uniform", lattice_sizes,
                                        monotonicities, output_min, output_max,
-                                       unimodalities, joint_unimodalities)
+                                       unimodalities, joint_unimodalities,
+                                       init_min, init_max)
     return create_kernel_initializer("linear_initializer", lattice_sizes,
                                      monotonicities, output_min, output_max,
-                                     unimodalities, joint_unimodalities)
+                                     unimodalities, joint_unimodalities,
+                                     init_min, init_max)
   else:
     # This is needed for Keras deserialization logic to be aware of our custom
     # objects.

@@ -283,6 +283,8 @@ def _node_name(node):
     return 'Linear'
   if isinstance(node, model_info.LatticeNode):
     return 'Lattice'
+  if isinstance(node, model_info.KroneckerFactoredLatticeNode):
+    return 'KroneckerFactoredLattice'
   if isinstance(node, model_info.MeanNode):
     return 'Average'
   return str(type(node))

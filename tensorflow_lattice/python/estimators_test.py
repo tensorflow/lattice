@@ -595,17 +595,18 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
     self.assertLess(results['average_loss'], average_loss)
 
   @parameterized.parameters(
-      ('random', 5, 6, False, True),
-      ('random', 4, 5, True, False),
-      ('rtl_layer', 5, 6, False, True),
-      ('rtl_layer', 4, 5, True, False),
+      ('random', 5, 6, 'all_vertices', False, True),
+      ('random', 4, 5, 'kronecker_factored', True, False),
+      ('rtl_layer', 5, 6, 'kronecker_factored', False, True),
+      ('rtl_layer', 4, 5, 'all_vertices', True, False),
   )
   def testCalibratedLatticeEnsembleModelInfo(self, lattices, num_lattices,
-                                             lattice_rank, separate_calibrators,
+                                             lattice_rank, parameterization,
+                                             separate_calibrators,
                                              output_calibration):
     self._ResetAllBackends()
     feature_configs = copy.deepcopy(self.heart_feature_configs)
-    if lattices == 'rtl_layer':
+    if lattices == 'rtl_layer' or parameterization == 'kronecker_factored':
       # RTL Layer only supports monotonicity and bound constraints.
       for feature_config in feature_configs:
         feature_config.lattice_size = 2
@@ -618,6 +619,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         lattices=lattices,
         num_lattices=num_lattices,
         lattice_rank=lattice_rank,
+        parameterization=parameterization,
         separate_calibrators=separate_calibrators,
         output_calibration=output_calibration,
     )
@@ -707,10 +709,12 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
       self.assertCountEqual(lattice, expected_lattice)
 
   @parameterized.parameters(
-      ('linear', True),
-      ('lattice', False),
+      ('linear', None, True),
+      ('lattice', 'all_vertices', False),
+      ('lattice', 'kronecker_factored', False),
   )
-  def testCalibratedModelInfo(self, model_type, output_calibration):
+  def testCalibratedModelInfo(self, model_type, parameterization,
+                              output_calibration):
     self._ResetAllBackends()
     if model_type == 'linear':
       model_config = configs.CalibratedLinearConfig(
@@ -718,8 +722,18 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
           output_calibration=output_calibration,
       )
     else:
+      feature_configs = copy.deepcopy(self.heart_feature_configs)
+      if parameterization == 'kronecker_factored':
+        # RTL Layer only supports monotonicity and bound constraints.
+        for feature_config in feature_configs:
+          feature_config.lattice_size = 2
+          feature_config.unimodality = 'none'
+          feature_config.reflects_trust_in = None
+          feature_config.dominates = None
+          feature_config.regularizer_configs = None
       model_config = configs.CalibratedLatticeConfig(
-          feature_configs=self.heart_feature_configs,
+          feature_configs=feature_configs,
+          parameterization=parameterization,
           output_calibration=output_calibration,
       )
     estimator = estimators.CannedClassifier(

@@ -25,6 +25,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow_lattice.python import kronecker_factored_lattice_layer as kfll
+from tensorflow_lattice.python import kronecker_factored_lattice_lib as kfl_lib
 from tensorflow_lattice.python import test_utils
 
 
@@ -162,9 +163,9 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
 
     Returns:
       Tuple `(training_inputs, training_labels, raw_training_inputs)` where
-        `training_inputs` and `training_labels` are data for training and
-        `raw_training_inputs` are representation of training_inputs for
-        visualisation.
+      `training_inputs` and `training_labels` are data for training and
+      `raw_training_inputs` are representation of training_inputs for
+      visualisation.
     """
     raw_training_inputs = config["x_generator"](
         num_points=config["num_training_records"],
@@ -185,10 +186,12 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("units", 1)
     config.setdefault("num_terms", 2)
     config.setdefault("monotonicities", None)
+    config.setdefault("output_min", None)
+    config.setdefault("output_max", None)
     config.setdefault("signal_name", "TEST")
-    config.setdefault("satisfy_constraints_at_every_step", True)
     config.setdefault("target_monotonicity_diff", 0.0)
     config.setdefault("lattice_index", 0)
+    config.setdefault("scale_initializer", "scale_initializer")
 
     return config
 
@@ -237,9 +240,10 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         units=units,
         num_terms=config["num_terms"],
         monotonicities=config["monotonicities"],
-        satisfy_constraints_at_every_step=config[
-            "satisfy_constraints_at_every_step"],
+        output_min=config["output_min"],
+        output_max=config["output_max"],
         kernel_initializer=config["kernel_initializer"],
+        scale_initializer=config["scale_initializer"],
         input_shape=input_shape,
         dtype=tf.float32)
     model = keras.models.Sequential()
@@ -264,6 +268,8 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
 
     if tf.executing_eagerly():
       tf.print("final weights: ", keras_layer.kernel)
+      tf.print("final scale: ", keras_layer.scale)
+      tf.print("final bias: ", keras_layer.bias)
     assetion_ops = keras_layer.assert_constraints(
         eps=-config["target_monotonicity_diff"])
     if not tf.executing_eagerly() and assetion_ops:
@@ -275,7 +281,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     if self.disable_all:
       return
     monotonicities = [1]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 20,
@@ -290,11 +296,11 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.118006, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.114794, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = ["increasing"]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 20,
@@ -309,11 +315,11 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 2.842038, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 2.841594, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = [1]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 5,
@@ -337,7 +343,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     if self.disable_all:
       return
     monotonicities = [1, 1]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 21,
@@ -352,11 +358,11 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.530398, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.405031, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = ["none", "increasing"]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 21,
@@ -371,11 +377,11 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.595422, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.209862, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = [1, 0]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 21,
@@ -390,11 +396,11 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.362752, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.417009, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = [1, 1]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 2,
@@ -409,7 +415,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.051138, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.050983, delta=self.loss_eps)
     self._TestEnsemble(config)
 
   def testMonotonicity5d(self):
@@ -434,7 +440,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAlmostEqual(loss, 0.000524, delta=self.loss_eps)
 
     monotonicities = [1, 1, 1, 1, 1]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 2,
@@ -449,11 +455,11 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.015825, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.014968, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = [1, "increasing", 1, 1]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 3,
@@ -468,7 +474,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.376523, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.377255, delta=self.loss_eps)
     self._TestEnsemble(config)
 
   @parameterized.parameters(
@@ -530,7 +536,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     if self.disable_all:
       return
     monotonicities = [1] * 10
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 2,
@@ -545,19 +551,19 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.183625, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.190541, delta=self.loss_eps)
 
     monotonicities = [0, 1, 0, 1, 1, 0, 1, 1, 1, 0]
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config["monotonicities"] = monotonicities
     config["kernel_initializer"] = kernel_initializer
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.190994, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.194174, delta=self.loss_eps)
 
   @parameterized.parameters(
       # Custom TFL initializer:
-      ("random_monotonic_initializer", 2.668374),
+      ("kfl_random_monotonic_initializer", 2.668374),
       # Standard Keras initializer:
       (keras.initializers.Constant(value=1.5), 2.140740),
       # Standard Keras initializer specified as string constant:
@@ -566,8 +572,8 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
   def testInitializerType(self, initializer, expected_loss):
     if self.disable_all:
       return
-    if initializer == "random_monotonic_initializer":
-      initializer = kfll.RandomMonotonicInitializer(
+    if initializer == "kfl_random_monotonic_initializer":
+      initializer = kfll.KFLRandomMonotonicInitializer(
           monotonicities=None, seed=self.seed)
     config = {
         "lattice_sizes": 3,
@@ -615,6 +621,173 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         with self.assertRaises(tf.errors.InvalidArgumentError):
           self._TrainModel(config)
 
+  @parameterized.parameters(
+      (-1, 1,
+       kfll.KFLRandomMonotonicInitializer(
+           monotonicities=None, init_min=-10,
+           init_max=10), "scale_initializer"),
+      (None, 1,
+       kfll.KFLRandomMonotonicInitializer(
+           monotonicities=None, init_min=-10,
+           init_max=10), "scale_initializer"),
+      (-1, None,
+       kfll.KFLRandomMonotonicInitializer(
+           monotonicities=None, init_min=-10,
+           init_max=10), "scale_initializer"),
+      (-1, 1, "kfl_random_monotonic_initializer",
+       tf.keras.initializers.Constant(value=-100)),
+      (None, 1, "kfl_random_monotonic_initializer",
+       tf.keras.initializers.Constant(value=100)),
+      (-1, None, "kfl_random_monotonic_initializer",
+       tf.keras.initializers.Constant(value=-100)),
+  )
+  def testAssertBounds(self, output_min, output_max, kernel_initializer,
+                       scale_initializer):
+    if self.disable_all:
+      return
+    # Specify random initializer that ensures initial output can be out of
+    # bounds and do 0 training iterations so no projections are executed.
+    config = {
+        "lattice_sizes": 2,
+        "input_dims": 2,
+        "num_training_records": 100,
+        "num_training_epoch": 0,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 0.15,
+        "x_generator": self._TwoDMeshGrid,
+        "y_function": self._ScaledSum,
+        "monotonicities": [0, 0],
+        "output_min": output_min,
+        "output_max": output_max,
+        "kernel_initializer": kernel_initializer,
+        "scale_initializer": scale_initializer,
+    }
+    with self.assertRaises(tf.errors.InvalidArgumentError):
+      self._TrainModel(config)
+
+  @parameterized.parameters(
+      (2, 1, -3, -1, 4.868363),
+      (2, 2, 0, 1, 0.169257),
+      (1, 2, -5, 5, 0.011738),
+      (1, 10, -1, 1, 0.680978),
+      (1, 3, None, None, 0.035185),
+      (1, 2, None, 5, 0.011590),
+      (3, 3, 0, None, 0.010172),
+      (4, 2, None, -2, 10.178278),
+  )
+  def testOutputBounds(self, units, input_dims, output_min, output_max,
+                       expected_loss):
+    if self.disable_all:
+      return
+    monotonicities = [1] * input_dims
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
+        monotonicities=monotonicities, seed=self.seed)
+    config = {
+        "lattice_sizes": 4,
+        "units": units,
+        "input_dims": input_dims,
+        "num_training_records": 900,
+        "num_training_epoch": 100,
+        "optimizer": tf.keras.optimizers.Adagrad,
+        "learning_rate": 1.0,
+        "x_generator": self._ScatterXUniformly,
+        "y_function": self._SinPlusX,
+        "monotonicities": monotonicities,
+        "output_min": output_min,
+        "output_max": output_max,
+        "kernel_initializer": kernel_initializer,
+        # This is the epsilon error allowed when asserting constraints,
+        # including bounds. We include this to ensure that the bound constraint
+        # assertions do not fail due to numerical errors.
+        "target_monotonicity_diff": -1e-6,
+    }  # pyformat: disable
+    loss = self._TrainModel(config)
+    self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
+    self._TestEnsemble(config)
+
+  @parameterized.parameters(
+      (2, 1, 3, 2, -1, 1),
+      (2, 2, 2, 1, None, 1),
+      (2, 1, 3, 4, -1, None),
+      (3, 3, 4, 2, -50, 2),
+      (4, 4, 2, 4, -1.5, 2.3),
+      (2, 2, 2, 2, None, None),
+  )
+  # Note: dims must be at least 1
+  def testConstraints(self, lattice_sizes, units, dims, num_terms, output_min,
+                      output_max):
+    if self.disable_all:
+      return
+    # Run our test for 100 iterations to minimize the chance we pass by chance.
+    for _ in range(100):
+      # Create 100 random inputs that are frozen in all but the increasing
+      # dimension, which increases uniformly from 0 to lattice_sizes-1.
+      batch_size = 100
+      random_vals = [
+          np.random.uniform(0, lattice_sizes - 1) for _ in range(dims - 1)
+      ]
+      increasing_dim = np.random.randint(0, dims)
+      step_size = (lattice_sizes - 1) / batch_size
+      values = [
+          np.roll([0.0 + (i * step_size)] + random_vals, increasing_dim)
+          for i in range(batch_size)
+      ]
+      if units > 1:
+        values = [[value] * units for value in values]
+        shape = [batch_size, units, dims]
+      else:
+        shape = [batch_size, dims]
+      inputs = tf.constant(values, dtype=tf.float32, shape=shape)
+
+      # Create our weights, constraint them, and evaluate our function on our
+      # constructed inputs.
+      init_min = -1.5 if output_min is None else output_min
+      init_max = 1.5 if output_max is None else output_max
+
+      # Offset the initiailization bounds to increase likelihood of breaking
+      # constraints.
+      offset = 100
+      kernel = tf.random.uniform([1, lattice_sizes, units * dims, num_terms],
+                                 minval=init_min - offset,
+                                 maxval=init_max + offset)
+      scale = tf.random.uniform([units, num_terms],
+                                minval=init_min,
+                                maxval=init_max)
+      bias = kfl_lib.bias_initializer(
+          units, output_min, output_max, dtype=tf.float32)
+
+      scale_constraint = kfll.ScaleConstraints(output_min, output_max)
+      constrained_scale = scale_constraint(scale)
+
+      monotonicities = [np.random.randint(0, 2) for _ in range(dims)]
+      monotonicities[increasing_dim] = 1
+      kernel_constraint = kfll.KroneckerFactoredLatticeConstraints(
+          units, constrained_scale, monotonicities, output_min, output_max)
+      constrained_kernel = kernel_constraint(kernel)
+
+      outputs = kfl_lib.evaluate_with_hypercube_interpolation(
+          inputs=inputs,
+          scale=constrained_scale,
+          bias=bias,
+          kernel=constrained_kernel,
+          units=units,
+          num_terms=num_terms,
+          lattice_sizes=lattice_sizes,
+          clip_inputs=True)
+
+      # Check that outputs are inside our bounds
+      min_check = float("-inf") if output_min is None else output_min
+      self.assertEqual(tf.reduce_sum(tf.cast(outputs < min_check, tf.int32)), 0)
+      max_check = float("+inf") if output_max is None else output_max
+      self.assertEqual(tf.reduce_sum(tf.cast(outputs > max_check, tf.int32)), 0)
+      # Check that we satisfy monotonicity constraints. Note that by
+      # construction the outputs should already be in sorted order.
+      sorted_outputs = tf.sort(outputs, axis=0)
+      # We use close equality instead of strict equality because of numerical
+      # errors that result in nearly identical arrays failing a strict check
+      # after sorting.
+      self.assertAllClose(outputs, sorted_outputs, rtol=1e-6, atol=1e-6)
+
   def testInputOutOfBounds(self):
     if self.disable_all:
       return
@@ -633,7 +806,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAlmostEqual(loss, 0.018726, delta=self.loss_eps)
     self._TestEnsemble(config)
 
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=None, seed=self.seed)
     config = {
         "lattice_sizes": 2,
@@ -655,7 +828,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
       return
     monotonicities = [0] * 16
     monotonicities[3], monotonicities[4], monotonicities[10] = (1, 1, 1)
-    kernel_initializer = kfll.RandomMonotonicInitializer(
+    kernel_initializer = kfll.KFLRandomMonotonicInitializer(
         monotonicities=monotonicities, seed=self.seed)
     config = {
         "lattice_sizes": 2,
@@ -673,14 +846,14 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "target_monotonicity_diff": -1e-5,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.251715, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.257097, delta=self.loss_eps)
 
   @parameterized.parameters(
-      (2, 5, 2, 49),
-      (2, 6, 4, 49),
-      (2, 9, 2, 49),
-      (3, 5, 4, 56),
-      (3, 9, 2, 56),
+      (2, 5, 2, 57),
+      (2, 6, 4, 57),
+      (2, 9, 2, 57),
+      (3, 5, 4, 63),
+      (3, 9, 2, 63),
   )
   def testGraphSize(self, lattice_sizes, input_dims, num_terms,
                     expected_graph_size):
@@ -703,13 +876,16 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.parameters(
       ("random_uniform", tf.keras.initializers.RandomUniform),
-      ("random_monotonic_initializer", kfll.RandomMonotonicInitializer))
+      ("kfl_random_monotonic_initializer", kfll.KFLRandomMonotonicInitializer))
   def testCreateKernelInitializer(self, kernel_initializer_id, expected_type):
     self.assertEqual(
         expected_type,
         type(
             kfll.create_kernel_initializer(
-                kernel_initializer_id, monotonicities=None)))
+                kernel_initializer_id,
+                monotonicities=None,
+                output_min=None,
+                output_max=None)))
 
   # We test that the scale variable attribute of our KroneckerFactoredLattice
   # is the same object as the scale contained in the constraint on the kernel,
@@ -718,8 +894,9 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
   # across all uses of the object.
   def testSavingLoadingScale(self):
     # Create simple x --> x^2 dataset.
-    train_data = [[float(x), float(x)**2] for x in range(100)]
+    train_data = [[[float(x)], float(x)**2] for x in range(100)]
     train_x, train_y = zip(*train_data)
+    train_x, train_y = np.array(train_x), np.array(train_y)
     # Construct simple single lattice model. Must have monotonicities specified
     # or constraint will be None.
     keras_layer = kfll.KroneckerFactoredLattice(
@@ -743,7 +920,15 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
               "KroneckerFactoredLattice":
                   kfll.KroneckerFactoredLattice,
               "KroneckerFactoredLatticeConstraint":
-                  kfll.KroneckerFactoredLatticeConstraints
+                  kfll.KroneckerFactoredLatticeConstraints,
+              "KFLRandomMonotonicInitializer":
+                  kfll.KFLRandomMonotonicInitializer,
+              "ScaleInitializer":
+                  kfll.ScaleInitializer,
+              "ScaleConstraints":
+                  kfll.ScaleConstraints,
+              "BiasInitializer":
+                  kfll.BiasInitializer,
           })
     # Extract loaded layer.
     loaded_keras_layer = loaded_model.layers[0]
@@ -751,10 +936,6 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     loaded_layer_scale = loaded_keras_layer.scale
     loaded_constraint_scale = loaded_keras_layer.kernel.constraint.scale
     self.assertIs(loaded_layer_scale, loaded_constraint_scale)
-    # Train for another epoch and test equality of all updated elements just to
-    # be safe.
-    loaded_model.fit(train_x, train_y)
-    self.assertAllEqual(loaded_layer_scale, loaded_constraint_scale)
 
   @parameterized.parameters(
       (1, 3, 1),

@@ -73,6 +73,7 @@ import time
 
 from . import categorical_calibration_layer
 from . import configs
+from . import kronecker_factored_lattice_layer as kfll
 from . import lattice_layer
 from . import linear_layer
 from . import model_info
@@ -1433,8 +1434,251 @@ def _create_lattice_nodes(sess, ops, graph, submodel_input_nodes):
   return lattice_nodes
 
 
-def _create_rtl_lattice_nodes(sess, ops, graph, calibration_nodes_map):
-  """Returns a map from lattice_submodel_index to LatticeNode."""
+def _create_kronecker_factored_lattice_nodes(sess, ops, graph,
+                                             submodel_input_nodes):
+  """Returns a map from submodel_idx to KroneckerFactoredLatticeNode."""
+  kfl_nodes = {}
+  # KroneckerFactoredLattice kernel weights.
+  # {KFL_LAYER_NAME}_{submodel_idx}/{KFL_KERNEL_NAME}
+  kfl_kernel_op_re = '^{}_(.*)/{}/Read/ReadVariableOp$'.format(
+      premade_lib.KFL_LAYER_NAME,
+      kfll.KFL_KERNEL_NAME,
+  )
+  for kfl_kernel_op, submodel_idx in _match_op(ops, kfl_kernel_op_re):
+    kfl_kernel = sess.run(
+        graph.get_operation_by_name(kfl_kernel_op).outputs[0]).flatten()
+
+    # KroneckerFactoredLattice scale.
+    # {KFL_LAYER_NAME}_{submodel_idx}/{KFL_SCALE_NAME}
+    kfl_scale_op_name = '{}_{}/{}/Read/ReadVariableOp'.format(
+        premade_lib.KFL_LAYER_NAME, submodel_idx, kfll.KFL_SCALE_NAME)
+    kfl_scale = sess.run(
+        graph.get_operation_by_name(kfl_scale_op_name).outputs[0]).flatten()
+
+    # KroneckerFactoredLattice bias.
+    # {KFL_LAYER_NAME}_{submodel_idx}/{KFL_BIAS_NAME}
+    kfl_bias_op_name = '{}_{}/{}/Read/ReadVariableOp'.format(
+        premade_lib.KFL_LAYER_NAME, submodel_idx, kfll.KFL_BIAS_NAME)
+    kfl_bias = sess.run(
+        graph.get_operation_by_name(kfl_bias_op_name).outputs[0]).flatten()
+
+    # Lattice sizes.
+    # {KFL_LAYER_NAME}_{submodel_idx}/{LATTICE_SIZES_NAME}
+    lattice_sizes_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME,
+                                              submodel_idx,
+                                              kfll.LATTICE_SIZES_NAME)
+    lattice_sizes = sess.run(
+        graph.get_operation_by_name(
+            lattice_sizes_op_name).outputs[0])
+
+    # Units.
+    # {KFL_LAYER_NAME}_{submodel_idx}/{UNITS_NAME}
+    units_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME,
+                                      submodel_idx, kfll.UNITS_NAME)
+    units = sess.run(
+        graph.get_operation_by_name(units_op_name).outputs[0])
+
+    # Dims.
+    # {KFL_LAYER_NAME}_{submodel_idx}/{DIMS_NAME}
+    dims_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME,
+                                     submodel_idx, kfll.DIMS_NAME)
+    dims = sess.run(
+        graph.get_operation_by_name(dims_op_name).outputs[0])
+
+    # Num terms.
+    # {KFL_LAYER_NAME}_{submodel_idx}/{NUM_TERMS_NAME}
+    num_terms_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME,
+                                          submodel_idx, kfll.NUM_TERMS_NAME)
+    num_terms = sess.run(
+        graph.get_operation_by_name(num_terms_op_name).outputs[0])
+
+    # Shape the flat weights, scale, and bias parameters based on the calculated
+    # lattice_sizes, units, dims, and num_terms.
+    weights = np.reshape(kfl_kernel,
+                         (1, lattice_sizes, units * dims, num_terms))
+    scale = np.reshape(kfl_scale, (units, num_terms))
+    bias = np.reshape(kfl_bias, (units))
+
+    # Sort input nodes by input index.
+    input_nodes = [
+        node for _, node in sorted(submodel_input_nodes[submodel_idx])
+    ]
+
+    kfl_node = model_info.KroneckerFactoredLatticeNode(
+        input_nodes=input_nodes, weights=weights, scale=scale, bias=bias)
+    kfl_nodes[submodel_idx] = kfl_node
+  return kfl_nodes
+
+
+def _create_rtl_submodel_kronecker_factored_lattice_nodes(
+    sess, ops, graph, flattened_calibration_nodes, submodel_idx, submodel_key):
+  """Returns next key and map from key+unit to KroneckerFactoredLatticeNode."""
+  submodel_kfl_nodes = {}
+  # KroneckerFactoredLattice kernel weights
+  # {RTL_LAYER_NAME}_{submodel_idx}/
+  # {RTL_KFL_NAME}_{monotonicities}/{KFL_KERNEL_NAME}
+  kfl_kernel_op_re = '^{}_{}/{}_(.*)/{}/Read/ReadVariableOp$'.format(
+      premade_lib.RTL_LAYER_NAME,
+      submodel_idx,
+      rtl_layer.RTL_KFL_NAME,
+      kfll.KFL_KERNEL_NAME,
+  )
+  for kfl_kernel_op, monotonicities in _match_op(ops, kfl_kernel_op_re):
+    kfl_kernel = sess.run(
+        graph.get_operation_by_name(kfl_kernel_op).outputs[0]).flatten()
+
+    # KroneckerFactoredLattice scale.
+    # {RTL_LAYER_NAME}_{submodel_idx}/
+    # {RTL_KFL_NAME}_{monotonicities}/{KFL_SCALE_NAME}
+    kfl_scale_op_name = '{}_{}/{}_{}/{}/Read/ReadVariableOp'.format(
+        premade_lib.RTL_LAYER_NAME,
+        submodel_idx,
+        rtl_layer.RTL_KFL_NAME,
+        monotonicities,
+        kfll.KFL_SCALE_NAME,
+    )
+    kfl_scale = sess.run(
+        graph.get_operation_by_name(kfl_scale_op_name).outputs[0]).flatten()
+
+    # KroneckerFactoredLattice bias.
+    # {RTL_LAYER_NAME}_{submodel_idx}/
+    # {RTL_KFL_NAME}_{monotonicities}/{KFL_BIAS_NAME}
+    kfl_bias_op_name = '{}_{}/{}_{}/{}/Read/ReadVariableOp'.format(
+        premade_lib.RTL_LAYER_NAME,
+        submodel_idx,
+        rtl_layer.RTL_KFL_NAME,
+        monotonicities,
+        kfll.KFL_BIAS_NAME,
+    )
+    kfl_bias = sess.run(
+        graph.get_operation_by_name(kfl_bias_op_name).outputs[0]).flatten()
+
+    # Lattice sizes.
+    # {RTL_LAYER_NAME}_{submodel_idx}/
+    # {RTL_KFL_NAME}_{monotonicities}/{LATTICE_SIZES_NAME}
+    lattice_sizes_op_name = '{}_{}/{}_{}/{}'.format(
+        premade_lib.RTL_LAYER_NAME,
+        submodel_idx,
+        rtl_layer.RTL_KFL_NAME,
+        monotonicities,
+        kfll.LATTICE_SIZES_NAME,
+    )
+    lattice_sizes = sess.run(
+        graph.get_operation_by_name(lattice_sizes_op_name).outputs[0])
+
+    # Dims.
+    # {RTL_LAYER_NAME}_{submodel_idx}/
+    # {RTL_KFL_NAME}_{monotonicities}/{DIMS_NAME}
+    dims_op_name = '{}_{}/{}_{}/{}'.format(
+        premade_lib.RTL_LAYER_NAME,
+        submodel_idx,
+        rtl_layer.RTL_KFL_NAME,
+        monotonicities,
+        kfll.DIMS_NAME,
+    )
+    dims = sess.run(graph.get_operation_by_name(dims_op_name).outputs[0])
+
+    # Num terms.
+    # {RTL_LAYER_NAME}_{submodel_idx}/
+    # {RTL_KFL_NAME}_{monotonicities}/{NUM_TERMS_NAME}
+    num_terms_op_name = '{}_{}/{}_{}/{}'.format(
+        premade_lib.RTL_LAYER_NAME,
+        submodel_idx,
+        rtl_layer.RTL_KFL_NAME,
+        monotonicities,
+        kfll.NUM_TERMS_NAME,
+    )
+    num_terms = sess.run(
+        graph.get_operation_by_name(num_terms_op_name).outputs[0])
+
+    # inputs_for_units
+    # {RTL_LAYER_NAME}_{submodel_index}/
+    # {INPUTS_FOR_UNITS_PREFIX}_{monotonicities}
+    inputs_for_units_op_name = '{}_{}/{}_{}'.format(
+        premade_lib.RTL_LAYER_NAME, submodel_idx,
+        rtl_layer.INPUTS_FOR_UNITS_PREFIX, monotonicities)
+    inputs_for_units = sess.run(
+        graph.get_operation_by_name(inputs_for_units_op_name).outputs[0])
+
+    # Make a unique kfl for each unit.
+    units = inputs_for_units.shape[0]
+    for i in range(units):
+      # Shape the flat weights, scale, and bias parameters based on the
+      # calculated lattice_sizes, units, dims, and num_terms.
+      weights = np.reshape(kfl_kernel,
+                           (1, lattice_sizes, units * dims, num_terms))
+      scale = np.reshape(kfl_scale, (units, num_terms))
+      bias = np.reshape(kfl_bias, (units))
+
+      # Gather input nodes for lattice node.
+      indices = inputs_for_units[i]
+      input_nodes = [flattened_calibration_nodes[index] for index in indices]
+
+      kfl_node = model_info.KroneckerFactoredLatticeNode(
+          input_nodes=input_nodes, weights=weights, scale=scale, bias=bias)
+      submodel_kfl_nodes[submodel_key] = kfl_node
+      submodel_key += 1
+  return submodel_key, submodel_kfl_nodes
+
+
+def _create_rtl_submodel_lattice_nodes(sess, ops, graph,
+                                       flattened_calibration_nodes,
+                                       submodel_idx, submodel_key):
+  """Returns next key and map from key+unit to LatticeNode."""
+  submodel_lattice_nodes = {}
+  # Lattice kernel weights.
+  # {RTL_LAYER_NAME}_{submodel_idx}/
+  # {RTL_LATTICE_NAME}_{monotonicities}/{LATTICE_KERNEL_NAME}
+  lattice_kernel_op_re = '^{}_{}/{}_(.*)/{}/Read/ReadVariableOp$'.format(
+      premade_lib.RTL_LAYER_NAME,
+      submodel_idx,
+      rtl_layer.RTL_LATTICE_NAME,
+      lattice_layer.LATTICE_KERNEL_NAME,
+  )
+  for lattice_kernel_op, monotonicities in _match_op(ops, lattice_kernel_op_re):
+    lattice_kernel = sess.run(
+        graph.get_operation_by_name(lattice_kernel_op).outputs[0])
+
+    # Lattice sizes.
+    # {RTL_LAYER_NAME}_{submodel_idx}/
+    # {RTL_LATTICE_NAME}_{monotonicities}/{LATTICE_SIZES_NAME}
+    lattice_sizes_op_name = '{}_{}/{}_{}/{}'.format(
+        premade_lib.RTL_LAYER_NAME, submodel_idx, rtl_layer.RTL_LATTICE_NAME,
+        monotonicities, lattice_layer.LATTICE_SIZES_NAME)
+    lattice_sizes = sess.run(
+        graph.get_operation_by_name(
+            lattice_sizes_op_name).outputs[0]).flatten()
+
+    # inputs_for_units
+    # {RTL_LAYER_NAME}_{submodel_index}/
+    # {INPUTS_FOR_UNITS_PREFIX}_{monotonicities}
+    inputs_for_units_op_name = '{}_{}/{}_{}'.format(
+        premade_lib.RTL_LAYER_NAME, submodel_idx,
+        rtl_layer.INPUTS_FOR_UNITS_PREFIX, monotonicities)
+    inputs_for_units = sess.run(
+        graph.get_operation_by_name(inputs_for_units_op_name).outputs[0])
+
+    # Make a unique lattice for each unit.
+    units = inputs_for_units.shape[0]
+    for i in range(units):
+      # Shape the flat lattice parameters based on the calculated lattice
+      # sizes.
+      weights = np.reshape(lattice_kernel[:, i], lattice_sizes)
+
+      # Gather input nodes for lattice node.
+      indices = inputs_for_units[i]
+      input_nodes = [flattened_calibration_nodes[index] for index in indices]
+
+      lattice_node = model_info.LatticeNode(
+          input_nodes=input_nodes, weights=weights)
+      submodel_lattice_nodes[submodel_key] = lattice_node
+      submodel_key += 1
+  return submodel_key, submodel_lattice_nodes
+
+
+def _create_rtl_lattice_nodes(sess, ops, graph, calibration_nodes_map,
+                              kronecker_factored):
+  """Returns a map from lattice_submodel_index to lattice type Node."""
   lattice_nodes = {}
   lattice_submodel_index = 0
   # Feature name in concat op.
@@ -1458,57 +1702,14 @@ def _create_rtl_lattice_nodes(sess, ops, graph, calibration_nodes_map):
     for feature_name in names_in_flattened_order:
       flattened_calibration_nodes.extend(calibration_nodes_map[feature_name])
 
-    # Lattice kernel weights.
-    # {RTL_LAYER_NAME}_{submodel_idx}/
-    # {RTL_LATTICE_NAME}_{monotonicities}/{LATTICE_KERNEL_NAME}
-    lattice_kernel_op_re = '^{}_{}/{}_(.*)/{}/Read/ReadVariableOp$'.format(
-        premade_lib.RTL_LAYER_NAME,
-        submodel_idx,
-        rtl_layer.RTL_LATTICE_NAME,
-        lattice_layer.LATTICE_KERNEL_NAME,
-    )
-    for lattice_kernel_op, monotonicities in _match_op(ops,
-                                                       lattice_kernel_op_re):
-      # Lattice kernel weights.
-      lattice_kernel = sess.run(
-          graph.get_operation_by_name(lattice_kernel_op).outputs[0])
-
-      # Lattice sizes.
-      # {RTL_LAYER_NAME}_{submodel_idx}/
-      # {RTL_LATTICE_NAME}_{monotonicities}/{LATTICE_SIZES_NAME}
-      lattice_sizes_op_name = '{}_{}/{}_{}/{}'.format(
-          premade_lib.RTL_LAYER_NAME, submodel_idx, rtl_layer.RTL_LATTICE_NAME,
-          monotonicities, lattice_layer.LATTICE_SIZES_NAME)
-
-      lattice_sizes = sess.run(
-          graph.get_operation_by_name(
-              lattice_sizes_op_name).outputs[0]).flatten()
-
-      # inputs_for_units
-      # {RTL_LAYER_NAME}_{submodel_index}/
-      # {INPUTS_FOR_UNITS_PREFIX}_{monotonicities}
-      inputs_for_units_op_name = '{}_{}/{}_{}'.format(
-          premade_lib.RTL_LAYER_NAME, submodel_idx,
-          rtl_layer.INPUTS_FOR_UNITS_PREFIX, monotonicities)
-
-      inputs_for_units = sess.run(
-          graph.get_operation_by_name(inputs_for_units_op_name).outputs[0])
-
-      # Make a unique lattice for each unit.
-      units = inputs_for_units.shape[0]
-      for i in range(units):
-        # Shape the flat lattice parameters based on the calculated lattice
-        # sizes.
-        weights = np.reshape(lattice_kernel[:, i], lattice_sizes)
-
-        # Gather input nodes for lattice node.
-        indices = inputs_for_units[i]
-        input_nodes = [flattened_calibration_nodes[index] for index in indices]
-
-        lattice_node = model_info.LatticeNode(
-            input_nodes=input_nodes, weights=weights)
-        lattice_nodes[lattice_submodel_index] = lattice_node
-        lattice_submodel_index += 1
+    if kronecker_factored:
+      node_fn = _create_rtl_submodel_kronecker_factored_lattice_nodes
+    else:
+      node_fn = _create_rtl_submodel_lattice_nodes
+    lattice_submodel_index, submodel_lattice_nodes = node_fn(
+        sess, ops, graph, flattened_calibration_nodes, submodel_idx,
+        lattice_submodel_index)
+    lattice_nodes.update(submodel_lattice_nodes)
   return lattice_nodes
 
 
@@ -1595,6 +1796,7 @@ def _create_output_calibration_node(sess, ops, graph, input_node):
   return output_calibration_node
 
 
+# TODO: add support for KFL in RTL Layer
 def get_model_graph(saved_model_path, tag='serve'):
   """Returns all layers and parameters used in a saved model as a graph.
 
@@ -1666,11 +1868,23 @@ def get_model_graph(saved_model_path, tag='serve'):
     submodel_output_nodes.update(lattice_nodes)
     nodes.extend(lattice_nodes.values())
 
+    # Ensemble Kronecker Factored Lattice nodes.
+    kfl_nodes = _create_kronecker_factored_lattice_nodes(
+        sess, ops, graph, submodel_input_nodes)
+    submodel_output_nodes.update(kfl_nodes)
+    nodes.extend(kfl_nodes.values())
+
     # RTL Lattice nodes.
-    rtl_lattice_nodes = _create_rtl_lattice_nodes(sess, ops, graph,
-                                                  calibration_nodes_map)
+    rtl_lattice_nodes = _create_rtl_lattice_nodes(
+        sess, ops, graph, calibration_nodes_map, kronecker_factored=False)
     submodel_output_nodes.update(rtl_lattice_nodes)
     nodes.extend(rtl_lattice_nodes.values())
+
+    # RTL Kronecker Factored Lattice nodes.
+    kfl_rtl_nodes = _create_rtl_lattice_nodes(
+        sess, ops, graph, calibration_nodes_map, kronecker_factored=True)
+    submodel_output_nodes.update(kfl_rtl_nodes)
+    nodes.extend(kfl_rtl_nodes.values())
 
     # Output combination node.
     model_output_node = _create_output_combination_node(sess, ops, graph,

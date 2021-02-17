@@ -97,21 +97,34 @@ def compute_interpolation_weights(inputs, keypoints, lengths):
   """Computes weights for PWL calibration.
 
   Args:
-    inputs: Tensor of shape: `(D0, D1, ..., DN, 1)` which represents inputs to
-      to the pwl function. A typical shape is: `(batch_size, 1)`.
-    keypoints: Rank-1 tensor of shape `(num_keypoints - 1)` which represents
-      left keypoint of pieces of piecewise linear function along X axis.
-    lengths: Rank-1 tensor of shape `(num_keypoints - 1)` which represents
-      lengths of pieces of piecewise linear function along X axis.
+    inputs: Tensor of shape: `(batch_size, 1)`, `(batch_size, units, 1)` or
+    `(batch_size, 1, 1)`. For multi-unit calibration, broadcasting will be used
+    if needed.
+    keypoints: Tensor of shape `(num_keypoints-1)` or `(units, num_keypoints-1)`
+      which represents left keypoint of pieces of piecewise linear function
+      along X axis.
+    lengths: Tensor of shape `(num_keypoints-1)` or `(units, num_keypoints-1)`
+      which represents lengths of pieces of piecewise linear function along X
+      axis.
 
   Returns:
-    Interpolation weights tensor of shape: `(D0, D1, ..., DN, num_keypoints)`.
+    Interpolation weights tensor of shape: `(batch_size, num_keypoints)` or
+    `(batch_size, units, num_keypoints)`.
   """
   weights = (inputs - keypoints) / lengths
   weights = tf.minimum(weights, 1.0)
   weights = tf.maximum(weights, 0.0)
-  # Prepend 1.0 at the beginning to add bias unconditionally.
-  return tf.concat([tf.ones_like(inputs), weights], axis=-1)
+  # Prepend 1.0 at the beginning to add bias unconditionally. Worth testing
+  # different strategies, including those commented out, on different hardware.
+  if len(keypoints.shape) == 1:
+    return tf.concat([tf.ones_like(inputs), weights], axis=-1)
+  else:
+    shape = tf.concat([tf.shape(weights)[:-1], [1]], axis=0)
+    return tf.concat([tf.ones(shape), weights], axis=-1)
+  # return tf.concat([tf.ones_like(weights)[..., :1], weights], axis=-1)
+  # return tf.concat([tf.ones_like(weights[..., :1]), weights], axis=-1)
+  # paddings = [[0, 0]] * (len(weights.shape) - 1) + [[1, 0]]
+  # return tf.pad(weights, paddings, constant_values=1.)
 
 
 def linear_initializer(shape,

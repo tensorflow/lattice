@@ -33,8 +33,8 @@ class ModelGraph(
   describe model structure and parameters.
 
   Attributes:
-   nodes: List of all the nodes in the model.
-   output_node: The output node of the model.
+    nodes: List of all the nodes in the model.
+    output_node: The output node of the model.
   """
 
 
@@ -44,9 +44,9 @@ class InputFeatureNode(
   """Input features to the model.
 
   Attributes:
-   name: Name of the input feature.
-   is_categorical: If the feature is categorical.
-   vocabulary_list: Category values for categorical features or None.
+    name: Name of the input feature.
+    is_categorical: If the feature is categorical.
+    vocabulary_list: Category values for categorical features or None.
   """
 
 
@@ -58,11 +58,11 @@ class PWLCalibrationNode(
   """Represetns a PWL calibration layer.
 
   Attributes:
-   input_node: Input node for the calibration.
-   input_keypoints: Input keypoints for PWL calibration.
-   output_keypoints: Output keypoints for PWL calibration.
-   default_input: Default/missing input value or None.
-   default_output: Default/missing output value or None.
+    input_node: Input node for the calibration.
+    input_keypoints: Input keypoints for PWL calibration.
+    output_keypoints: Output keypoints for PWL calibration.
+    default_input: Default/missing input value or None.
+    default_output: Default/missing output value or None.
   """
 
 
@@ -72,10 +72,10 @@ class CategoricalCalibrationNode(
   """Represetns a categorical calibration layer.
 
   Attributes:
-   input_node: Input node for the calibration.
-   output_values: Output calibration values. If the calibrated feature has
-     default/missing values, the last value will be for default/missing.
-   default_input: Default/missing input value or None.
+    input_node: Input node for the calibration.
+    output_values: Output calibration values. If the calibrated feature has
+      default/missing values, the last value will be for default/missing.
+    default_input: Default/missing input value or None.
   """
 
 
@@ -85,9 +85,9 @@ class LinearNode(
   """Represents a linear layer.
 
   Attributes:
-   input_nodes: List of input nodes to the linear layer.
-   coefficients: Linear weights.
-   bias: Bias term for the linear layer.
+    input_nodes: List of input nodes to the linear layer.
+    coefficients: Linear weights.
+    bias: Bias term for the linear layer.
   """
 
 
@@ -96,8 +96,23 @@ class LatticeNode(
   """Represetns a lattice layer.
 
   Attributes:
-   input_nodes: List of input nodes to the lattice layer.
-   weights: Lattice parameters.
+    input_nodes: List of input nodes to the lattice layer.
+    weights: Lattice parameters.
+  """
+
+
+class KroneckerFactoredLatticeNode(
+    collections.namedtuple('KroneckerFactoredLatticeNode',
+                           ['input_nodes', 'weights', 'scale', 'bias'])):
+  """Represents a kronecker-factored lattice layer.
+
+  Attributes:
+    input_nodes: List of input nodes to the kronecker-factored lattice layer.
+    weights: Kronecker-factored lattice kernel parameters of shape
+      `(1, lattice_sizes, units * dims, num_terms)`.
+    scale: Kronecker-factored lattice scale parameters of shape
+      `(units, num_terms)`.
+    bias: Kronecker-factored lattice bias parameters of shape `(units)`.
   """
 
 
@@ -105,5 +120,5 @@ class MeanNode(collections.namedtuple('MeanNode', ['input_nodes'])):
   """Represents an averaging layer.
 
   Attributes:
-   input_nodes: List of input nodes to the average layer.
+    input_nodes: List of input nodes to the average layer.
   """

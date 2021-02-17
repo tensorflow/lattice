@@ -152,6 +152,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("constraint_assertion_eps", 1e-6)
     config.setdefault("model_dir", "/tmp/test_pwl_model_dir/")
     config.setdefault("dtype", tf.float32)
+    config.setdefault("input_keypoints_type", "fixed")
 
     if "input_keypoints" not in config:
       # If "input_keypoints" are provided - other params referred by code below
@@ -229,7 +230,8 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
               impute_missing=config["impute_missing"],
               missing_output_value=config["missing_output_value"],
               missing_input_value=config["missing_input_value"],
-              num_projection_iterations=config["num_projection_iterations"]))
+              num_projection_iterations=config["num_projection_iterations"],
+              input_keypoints_type=config["input_keypoints_type"]))
     if len(calibration_layers) == 1:
       if config["use_separate_missing"]:
         model.add(
@@ -510,11 +512,15 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     self._AssertSonnetEquivalentToKeras(config)
 
   @parameterized.parameters(
-      (1, False, 0.001022),
-      (3, False, 0.000543),
-      (3, True, 0.000987),
+      (1, False, 0.001022, "fixed"),
+      (3, False, 0.000543, "fixed"),
+      (3, True, 0.000987, "fixed"),
+      (1, False, 0.000393, "learned_interior"),
+      (3, False, 0.000427, "learned_interior"),
+      (3, True, 0.000577, "learned_interior"),
   )
-  def testUnconstrainedNoMissingValue(self, units, one_d_input, expected_loss):
+  def testUnconstrainedNoMissingValue(self, units, one_d_input, expected_loss,
+                                      input_keypoints_type):
     if self._disable_all:
       return
     config = {
@@ -532,6 +538,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_max": 1.0,
         "output_min": None,
         "output_max": None,
+        "input_keypoints_type": input_keypoints_type,
     }
     loss = self._TrainModel(config)
     self.assertAlmostEqual(loss, expected_loss, delta=self._loss_eps)
@@ -1367,6 +1374,43 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     output = pwl_1(input_a)
     self.assertAllEqual(output_shape, pwl_1.compute_output_shape(input_a.shape))
     self.assertAllEqual(output_shape, [o.shape for o in output])
+
+  @parameterized.parameters(("fixed", 1, 1), ("fixed", 1, 2), ("fixed", 2, 2),
+                            ("learned_interior", 1, 1),
+                            ("learned_interior", 1, 2),
+                            ("learned_interior", 2, 2))
+  def testKeypointsInputs(self, input_keypoints_type, input_dims, output_units):
+    if self._disable_all:
+      return
+
+    input_keypoints = [0, 0.5, 1]
+    expected_function_output = np.array([[0.0] * output_units,
+                                         [0.5] * output_units,
+                                         [1.0] * output_units])
+
+    # Check after layer build
+    pwl = keras_layer.PWLCalibration(
+        input_keypoints=input_keypoints,
+        units=output_units,
+        input_keypoints_type=input_keypoints_type)
+    pwl.build(input_shape=[10, input_dims])
+    self.assertAllEqual(expected_function_output, pwl.keypoints_inputs())
+
+    # Check after Keras model compile
+    model = keras.models.Sequential()
+    model.add(tf.keras.layers.Input(shape=[input_dims], dtype=tf.float32))
+    model.add(pwl)
+    model.compile(loss=keras.losses.mean_squared_error)
+    self.assertAllEqual(expected_function_output, pwl.keypoints_inputs())
+
+    # Check after Keras model fit; look for change in learned case.
+    train_x = np.random.uniform(size=(10, input_dims))
+    train_y = train_x[:, 0]**2
+    model.fit(train_x, train_y, batch_size=len(train_x), epochs=5, verbose=0)
+    if input_keypoints_type == "fixed":
+      self.assertAllEqual(expected_function_output, pwl.keypoints_inputs())
+    else:
+      self.assertNotAllEqual(expected_function_output, pwl.keypoints_inputs())
 
 
 if __name__ == "__main__":

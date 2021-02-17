@@ -413,6 +413,31 @@ def _bucketize_consequtive_equal_dims(inputs, lattice_sizes):
   return zip(inputs, bucket_sizes, bucket_dim_sizes)
 
 
+def default_init_params(output_min, output_max):
+  """Returns reasonable default parameters if not defined explicitly.
+
+  Args:
+    output_min: None or minimum layer output.
+    output_max: None or maximum layer output.
+  """
+  if output_min is not None:
+    init_min = output_min
+  elif output_max is not None:
+    init_min = min(0.0, output_max)
+  else:
+    init_min = 0.0
+
+  if output_max is not None:
+    init_max = output_max
+  elif output_min is not None:
+    init_max = max(1.0, output_min)
+  else:
+    init_max = 1.0
+
+  # Return our min and max.
+  return init_min, init_max
+
+
 def linear_initializer(lattice_sizes,
                        output_min,
                        output_max,
