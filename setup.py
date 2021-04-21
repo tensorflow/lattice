@@ -42,7 +42,7 @@ _install_requires = [
     "numpy",
     "pandas",
     "six",
-    "sklearn",
+    "scikit-learn",
     "matplotlib",
     "graphviz",
     "dm-sonnet",
