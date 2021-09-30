@@ -16,6 +16,7 @@
 
 from tensorflow_lattice.python.aggregation_layer import Aggregation
 from tensorflow_lattice.python.categorical_calibration_layer import CategoricalCalibration
+from tensorflow_lattice.python.cdf_layer import CDF
 from tensorflow_lattice.python.kronecker_factored_lattice_layer import KroneckerFactoredLattice
 from tensorflow_lattice.python.lattice_layer import Lattice
 from tensorflow_lattice.python.linear_layer import Linear

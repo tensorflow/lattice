@@ -166,13 +166,18 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     self.heart_test_x, self.heart_test_y = extract_features(
         heart_test_dataframe)
 
-    # Let's define our label minimum and maximum.
-    self.heart_min_label = float(np.min(self.heart_train_y))
-    self.heart_max_label = float(np.max(self.heart_train_y))
-    # Our lattice models may have predictions above 1.0 due to numerical errors.
-    # We can subtract this small epsilon value from our output_max to make sure
-    # we do not predict values outside of our label bound.
+    # TODO: determine the cause of numerical issues resulting in
+    # predictions outside the range (likely PWL --> Lattice connection).
+    # Our lattice models may have predictions above 1.0  or below 0.0 due to
+    # numerical errors. We can subtract this small epsilon value from our
+    # output_max and add it to our output_min to make sure we do not predict
+    # values outside of our label bound.
     self.numerical_error_epsilon = 1e-5
+    # Let's define our label minimum and maximum.
+    self.heart_min_label = float(np.min(
+        self.heart_train_y)) + self.numerical_error_epsilon
+    self.heart_max_label = float(np.max(
+        self.heart_train_y)) - self.numerical_error_epsilon
 
     def compute_quantiles(features,
                           num_keypoints=10,
@@ -525,7 +530,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         separate_calibrators=True,
         output_calibration=False,
         output_min=self.heart_min_label,
-        output_max=self.heart_max_label - self.numerical_error_epsilon,
+        output_max=self.heart_max_label,
         output_initialization=[self.heart_min_label, self.heart_max_label],
     )
     if parameterization == 'kronecker_factored':
@@ -603,7 +608,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         separate_calibrators=True,
         output_calibration=False,
         output_min=self.heart_min_label,
-        output_max=self.heart_max_label - self.numerical_error_epsilon,
+        output_max=self.heart_max_label,
         output_initialization=[self.heart_min_label, self.heart_max_label],
     )
     # We must remove all regularization if using 'kronecker_factored'.
@@ -677,6 +682,82 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     logging.info('Calibrated lattice classifier results:')
     logging.info(results)
     self.assertGreater(results[1], expected_minimum_auc)
+
+  def testLearnedCalibrationInputKeypoints(self):
+    # First let's try a CalibratedLatticeEnsemble
+    self._ResetAllBackends()
+    learned_keypoints_feature_configs = copy.deepcopy(
+        self.heart_feature_configs)
+    for feature_config in learned_keypoints_feature_configs:
+      feature_config.pwl_calibration_input_keypoints_type = 'learned_interior'
+    model_config = configs.CalibratedLatticeEnsembleConfig(
+        regularizer_configs=[
+            configs.RegularizerConfig(name='torsion', l2=1e-4),
+            configs.RegularizerConfig(name='output_calib_hessian', l2=1e-4),
+        ],
+        feature_configs=learned_keypoints_feature_configs,
+        lattices='random',
+        num_lattices=6,
+        lattice_rank=5,
+        interpolation='hypercube',
+        separate_calibrators=True,
+        output_calibration=True,
+        output_min=self.heart_min_label,
+        output_max=self.heart_max_label,
+        output_initialization=[self.heart_min_label, self.heart_max_label],
+        output_calibration_input_keypoints_type='learned_interior',
+    )
+    premade_lib.set_random_lattice_ensemble(model_config)
+    # Construct and train final model
+    model = premade.CalibratedLatticeEnsemble(model_config)
+    model.compile(
+        loss=tf.keras.losses.BinaryCrossentropy(),
+        metrics=tf.keras.metrics.AUC(),
+        optimizer=tf.keras.optimizers.Adam(0.01))
+    model.fit(
+        self.heart_train_x,
+        self.heart_train_y,
+        batch_size=100,
+        epochs=200,
+        verbose=False)
+    results = model.evaluate(
+        self.heart_test_x, self.heart_test_y, verbose=False)
+    logging.info('Calibrated random lattice ensemble classifier results:')
+    logging.info(results)
+    self.assertGreater(results[1], 0.86)
+
+    # Now let's try a CalibratedLattice
+    self._ResetAllBackends()
+    model_config = configs.CalibratedLatticeConfig(
+        feature_configs=learned_keypoints_feature_configs[:5],
+        interpolation='hypercube',
+        regularizer_configs=[
+            configs.RegularizerConfig(name='torsion', l2=1e-4),
+            configs.RegularizerConfig(name='output_calib_hessian', l2=1e-4),
+        ],
+        output_min=self.heart_min_label,
+        output_max=self.heart_max_label,
+        output_calibration=True,
+        output_initialization=[self.heart_min_label, self.heart_max_label],
+        output_calibration_input_keypoints_type='learned_interior',
+    )
+    # Construct and train final model
+    model = premade.CalibratedLattice(model_config)
+    model.compile(
+        loss=tf.keras.losses.BinaryCrossentropy(),
+        metrics=tf.keras.metrics.AUC(),
+        optimizer=tf.keras.optimizers.Adam(0.01))
+    model.fit(
+        self.heart_train_x[:5],
+        self.heart_train_y,
+        batch_size=100,
+        epochs=200,
+        verbose=False)
+    results = model.evaluate(
+        self.heart_test_x[:5], self.heart_test_y, verbose=False)
+    logging.info('Calibrated lattice classifier results:')
+    logging.info(results)
+    self.assertGreater(results[1], 0.79)
 
   @parameterized.parameters(
       ('all_vertices', 0),

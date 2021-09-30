@@ -224,8 +224,13 @@ def _materialize_locally(tensors, max_elements=1e6):
       pass
     concatenated_tensors = {}
     for k in tensors:
-      concatenated_tensors[k] = np.concatenate(
-          [split[k] for split in splits if split[k].size > 0])
+      k_tensors = [split[k] for split in splits if split[k].size > 0]
+      # If k_tensors is empty, the np.concat call below would raise
+      # an exception below. So we test this condition here to provide
+      # a better error message.
+      if not k_tensors:
+        raise ValueError("Did not find any values for key: {}".format(k))
+      concatenated_tensors[k] = np.concatenate(k_tensors)
     return concatenated_tensors
 
 
@@ -253,7 +258,10 @@ def _finalize_keypoints(model_config, config, feature_columns,
   if ((config is None or config.is_chief) and
       not tf.io.gfile.exists(keypoints_filename)):
     with tf.Graph().as_default():
-      features, label = feature_analysis_input_fn()
+      ds = feature_analysis_input_fn()
+      if isinstance(ds, tf.data.Dataset):
+        ds = tf.compat.v1.data.make_one_shot_iterator(ds).get_next()
+      features, label = ds
       features = transform_features(features, feature_columns)
       features[_LABEL_FEATURE_NAME] = label
       features = _materialize_locally(features)
@@ -955,11 +963,16 @@ class CannedClassifier(estimator_lib.EstimatorV2):
         classification. Must be > 1.
       weight_column: A string or a `_NumericColumn` created by
         `tf.feature_column.numeric_column` defining feature column representing
-        weights. It is used to down weight or boost examples during training. It
-        will be multiplied by the loss of the example. If it is a string, it is
-        used as a key to fetch weight tensor from the `features`. If it is a
-        `_NumericColumn`, raw tensor is fetched by key `weight_column.key`, then
-        weight_column.normalizer_fn is applied on it to get weight tensor.
+        weights. It is only used by the estimator head to down weight or boost
+        examples during training. It will be multiplied by the loss of the
+        example. If it is a string, it is used as a key to fetch the weight
+        tensor from the `features` dictionary output of the input function.
+        If it is a `_NumericColumn`, a raw tensor is fetched by key
+        `weight_column.key`, then weight_column.normalizer_fn is applied on it
+        to get the weight tensor. Note that in both cases 'weight_column'
+        should *not* be a member of the 'feature_columns'  parameter
+        to the constructor since these will be used for both serving and
+        training.
       label_vocabulary: A list of strings represents possible label values. If
         given, labels must be string type and have any value in
         `label_vocabulary`. If it is not given, that means labels are already
@@ -1111,11 +1124,16 @@ class CannedRegressor(estimator_lib.EstimatorV2):
         (typically, these have shape `[batch_size, label_dimension]`).
       weight_column: A string or a `_NumericColumn` created by
         `tf.feature_column.numeric_column` defining feature column representing
-        weights. It is used to down weight or boost examples during training. It
-        will be multiplied by the loss of the example. If it is a string, it is
-        used as a key to fetch weight tensor from the `features`. If it is a
-        `_NumericColumn`, raw tensor is fetched by key `weight_column.key`, then
-        weight_column.normalizer_fn is applied on it to get weight tensor.
+        weights. It is only used by the estimator head to down weight or boost
+        examples during training. It will be multiplied by the loss of the
+        example. If it is a string, it is used as a key to fetch the weight
+        tensor from the `features` dictionary output of the input function.
+        If it is a `_NumericColumn`, a raw tensor is fetched by key
+        `weight_column.key`, then weight_column.normalizer_fn is applied on it
+        to get the weight tensor. Note that in both cases 'weight_column'
+        should *not* be a member of the 'feature_columns'  parameter
+        to the constructor since these will be used for both serving and
+        training.
       optimizer: An instance of `tf.Optimizer` used to train the model. Can also
         be a string (one of 'Adagrad', 'Adam', 'Ftrl', 'RMSProp', 'SGD'), or
         callable. Defaults to Adagrad optimizer.
@@ -1203,10 +1221,22 @@ def _create_feature_nodes(sess, ops, graph):
   # Extract list of features from the graph.
   # {FEATURES_SCOPE}/{feature_name}
   feature_nodes = {}
-  feature_op_re = '{}/(.*)'.format(FEATURES_SCOPE)
+  feature_op_re = r'^{}/(.*)'.format(re.escape(FEATURES_SCOPE))
   for (_, feature_name) in _match_op(ops, feature_op_re):
-    category_table_op = 'transform/{}_lookup/Const'.format(feature_name)
-    if category_table_op in ops:
+    is_categorical = False
+    vocabulary_list = None
+
+    # Check to see if there is a categorical mapping defined for this feature
+    # (i.e. lookup table for categorical feature column). Note that there can be
+    # at most one such mapping either under transform or transform_1 namespace.
+    # transform(_\d)?/{feature_name}_lookup/Const
+    category_table_re = r'transform(_\d)?/{}_lookup/Const'.format(
+        re.escape(feature_name))
+    for (category_table_op, _) in _match_op(ops, category_table_re):
+      if is_categorical:
+        raise ValueError(
+            'Model graph has multiple category mappings for feature {}'
+            .format(feature_name))
       is_categorical = True
       vocabulary_list = sess.run(
           graph.get_operation_by_name(category_table_op).outputs[0])
@@ -1215,9 +1245,6 @@ def _create_feature_nodes(sess, ops, graph):
           str(x.decode()) if isinstance(x, bytes) else str(x)
           for x in vocabulary_list
       ]
-    else:
-      is_categorical = False
-      vocabulary_list = None
 
     feature_node = model_info.InputFeatureNode(
         name=feature_name,
@@ -1302,9 +1329,23 @@ def _create_pwl_calibration_nodes(sess, ops, graph, feature_nodes):
          graph.get_operation_by_name(kernel_op).outputs[0]))
     output_keypoints = np.cumsum(kernel, axis=0)
 
-    # Add the last keypoint to the keypoint list.
+    # For calibrators with fixed input keypoints, the shape of 'keypoints'
+    # and 'lengths' is (num_keypoints - 1,). For calibrators with keypoint_type
+    # set to learned_interior the shape is (num_units, num_keypoints - 1).
+    # Change the shape to (num_units, num_keypoints - 1).
+    # If needed, repeat the keypoints for each output unit.
+    if keypoints.ndim == 1:
+      keypoints = np.expand_dims(keypoints, axis=0)
+      lengths = np.expand_dims(lengths, axis=0)
+    if keypoints.shape[0] == 1:
+      keypoints = np.tile(keypoints, [output_keypoints.shape[1], 1])
+      lengths = np.tile(lengths, [output_keypoints.shape[1], 1])
+
+    # Add the last keypoint to the keypoint list. The resulting shape is
+    # (num_units, num_keypoints).
     # TODO: handle cyclic PWL layers.
-    input_keypoints = np.append(keypoints, keypoints[-1] + lengths[-1])
+    input_keypoints = np.concatenate(
+        [keypoints, keypoints[:, -1:] + lengths[:, -1:]], axis=-1)
 
     # Get missing/default input value if present:
     # {CALIB_LAYER_NAME}_{feature_name}/{MISSING_INPUT_VALUE_NAME}
@@ -1336,7 +1377,7 @@ def _create_pwl_calibration_nodes(sess, ops, graph, feature_nodes):
     for calibration_output_idx in range(output_keypoints.shape[1]):
       pwl_calibration_node = model_info.PWLCalibrationNode(
           input_node=feature_nodes[feature_name],
-          input_keypoints=input_keypoints,
+          input_keypoints=input_keypoints[calibration_output_idx, :],
           output_keypoints=output_keypoints[:, calibration_output_idx],
           default_input=default_input,
           default_output=(None if default_output is None else

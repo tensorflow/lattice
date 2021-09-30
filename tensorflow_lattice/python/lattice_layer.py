@@ -58,8 +58,10 @@ class Lattice(keras.layers.Layer):
   There are several types of constraints on the shape of the learned function
   that are either 1 or 2 dimensional:
 
-  * **Monotonicity:** constrains the function to be either increasing or
-    decreasing in that dimension.
+  * **Monotonicity:** constrains the function to be increasing in the
+    corresponding dimension. To achieve decreasing monotonicity, either pass the
+    inputs through a `tfl.layers.PWLCalibration` with `decreasing` monotonicity,
+    or manually reverse the inputs as `lattice_size - 1 - inputs`.
   * **Unimodality:** constrains the function to be unimodal in that dimension
     with minimum being in the center lattice vertex of that dimension. Single
     dimension can not be constrained to be both monotonic and unimodal.

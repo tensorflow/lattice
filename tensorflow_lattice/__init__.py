@@ -24,6 +24,7 @@ import tensorflow_lattice.layers
 from tensorflow_lattice.python import aggregation_layer
 from tensorflow_lattice.python import categorical_calibration_layer
 from tensorflow_lattice.python import categorical_calibration_lib
+from tensorflow_lattice.python import cdf_layer
 from tensorflow_lattice.python import configs
 from tensorflow_lattice.python import estimators
 from tensorflow_lattice.python import kronecker_factored_lattice_layer
