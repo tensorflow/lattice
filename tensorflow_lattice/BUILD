@@ -35,6 +35,7 @@ py_library(
         "//tensorflow_lattice/python:aggregation_layer",
         "//tensorflow_lattice/python:categorical_calibration_layer",
         "//tensorflow_lattice/python:categorical_calibration_lib",
+        "//tensorflow_lattice/python:cdf_layer",
         "//tensorflow_lattice/python:configs",
         "//tensorflow_lattice/python:estimators",
         "//tensorflow_lattice/python:kronecker_factored_lattice_layer",

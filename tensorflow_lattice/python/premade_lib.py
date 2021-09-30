@@ -266,6 +266,8 @@ def build_multi_unit_calibration_layers(calibration_input_layer,
               monotonicity=monotonicity,
               convexity=feature_config.pwl_calibration_convexity,
               split_outputs=(units > 1 and not output_single_tensor),
+              input_keypoints_type=feature_config
+              .pwl_calibration_input_keypoints_type,
               dtype=dtype,
               name=layer_name)(calibration_input))
     if output_single_tensor:
@@ -395,6 +397,8 @@ def build_aggregation_layer(aggregation_input_layer, model_config,
           monotonicity=utils.canonicalize_monotonicity(
               model_config.middle_monotonicity),
           kernel_regularizer=_middle_calibration_regularizers(model_config),
+          input_keypoints_type=model_config
+          .middle_calibration_input_keypoints_type,
           dtype=dtype,
       )(
           agg_output)
@@ -870,6 +874,7 @@ def build_output_calibration_layer(output_calibration_input, model_config,
       kernel_initializer=kernel_initializer,
       kernel_regularizer=kernel_regularizer,
       monotonicity=1,
+      input_keypoints_type=model_config.output_calibration_input_keypoints_type,
       dtype=dtype,
       name=OUTPUT_CALIB_LAYER_NAME)(
           output_calibration_input)

@@ -68,7 +68,9 @@ class KroneckerFactoredLattice(keras.layers.Layer):
   function.
 
   * **Monotonicity:** constrains the function to be increasing in the
-    corresponding dimension.
+    corresponding dimension. To achieve decreasing monotonicity, either pass the
+    inputs through a `tfl.layers.PWLCalibration` with `decreasing` monotonicity,
+    or manually reverse the inputs as `lattice_size - 1 - inputs`.
 
   There are upper and lower bound constraints on the output.
 

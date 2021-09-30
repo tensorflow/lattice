@@ -83,6 +83,34 @@ py_test(
 )
 
 py_library(
+    name = "cdf_layer",
+    srcs = ["cdf_layer.py"],
+    srcs_version = "PY3",
+    deps = [
+        ":utils",
+        # tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "cdf_test",
+    size = "large",
+    srcs = ["cdf_test.py"],
+    python_version = "PY3",
+    # shard_count = 12,
+    srcs_version = "PY3",
+    deps = [
+        ":cdf_layer",
+        ":test_utils",
+        ":utils",
+        # absl/logging dep,
+        # absl/testing:parameterized dep,
+        # numpy dep,
+        # tensorflow dep,
+    ],
+)
+
+py_library(
     name = "configs",
     srcs = ["configs.py"],
     srcs_version = "PY2AND3",
@@ -520,7 +548,6 @@ py_library(
         ":model_info",
         # graphviz dep,
         # matplotlib dep,
-        # mpl_toolkits/mplot3d dep,
         # numpy dep,
     ],
 )

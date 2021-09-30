@@ -198,7 +198,8 @@ class PWLCalibration(keras.layers.Layer):
         output_max=output_max,
         monotonicity=monotonicity,
         convexity=convexity,
-        is_cyclic=is_cyclic)
+        is_cyclic=is_cyclic,
+        input_keypoints_type=input_keypoints_type)
     if missing_input_value is not None and not impute_missing:
       raise ValueError("'missing_input_value' is specified, but "
                        "'impute_missing' is set to False. "

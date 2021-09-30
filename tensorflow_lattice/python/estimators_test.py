@@ -259,14 +259,22 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
     tf.keras.backend.clear_session()
     tf.compat.v1.reset_default_graph()
 
-  def _GetInputFn(self, x, y, num_epochs=1, batch_size=100):
-    return tf.compat.v1.estimator.inputs.pandas_input_fn(
-        x=x,
-        y=y,
-        batch_size=batch_size,
-        shuffle=False,
-        num_epochs=num_epochs,
-        num_threads=1)
+  def _GetInputFn(self, x, y, num_epochs=1, batch_size=100, tfds=False):
+    if tfds:
+
+      def _input_fn():
+        return tf.data.Dataset.from_tensor_slices(
+            (x.to_dict('list'), y.values)).batch(batch_size).repeat(num_epochs)
+
+      return _input_fn
+    else:
+      return tf.compat.v1.estimator.inputs.pandas_input_fn(
+          x=x,
+          y=y,
+          batch_size=batch_size,
+          shuffle=False,
+          num_epochs=num_epochs,
+          num_threads=1)
 
   def _GetHeartTrainInputFn(self, **kwargs):
     return self._GetInputFn(self.heart_train_x, self.heart_train_y, **kwargs)
@@ -707,6 +715,26 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
     self.assertLen(lattices, len(expected_lattices))
     for lattice, expected_lattice in zip(lattices, expected_lattices):
       self.assertCountEqual(lattice, expected_lattice)
+
+  @parameterized.parameters((True,), (False,))
+  def testDatasetAPI(self, tfds):
+    self._ResetAllBackends()
+    feature_columns = self.heart_feature_columns
+    feature_configs = self.heart_feature_configs
+    model_config = configs.CalibratedLinearConfig(
+        feature_configs=feature_configs)
+    estimator = estimators.CannedClassifier(
+        feature_columns=feature_columns,
+        model_config=model_config,
+        feature_analysis_input_fn=self._GetHeartTrainInputFn(
+            num_epochs=1, tfds=tfds),
+        optimizer=tf.keras.optimizers.Adam(0.01))
+    estimator.train(
+        input_fn=self._GetHeartTrainInputFn(num_epochs=200, tfds=tfds))
+    results = estimator.evaluate(input_fn=self._GetHeartTestInputFn(tfds=tfds))
+    logging.info('Calibrated linear classifier results:')
+    logging.info(results)
+    self.assertGreater(results['auc'], 0.7)
 
   @parameterized.parameters(
       ('linear', None, True),

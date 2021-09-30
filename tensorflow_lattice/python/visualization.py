@@ -17,10 +17,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import base64
 import math
 import os
 import sys
 import tempfile
+import xml.etree.cElementTree as cElementTree
 
 from . import model_info
 import matplotlib.pyplot as plt
@@ -29,7 +31,61 @@ from mpl_toolkits.mplot3d import Axes3D as _  # pylint: disable=unused-import
 import numpy as np
 
 
-def draw_model_graph(model_graph, calibrator_dpi=30):
+def _inline_svg_images(image_path):
+  """Inline IMAGE tag refs in graphviz SVG generated files."""
+  # Adaptation of:
+  # https://github.com/parrt/dtreeviz/blob/23518dc9a931eb6b1bef63f1c823db8e76ca94a6/dtreeviz/utils.py
+  with open(image_path, encoding='UTF-8') as f:
+    svg = f.read()
+  ns = {'svg': 'http://www.w3.org/2000/svg'}
+  root = cElementTree.fromstring(svg)
+  tree = cElementTree.ElementTree(root)
+  parent_map = {}
+  for p in tree.iter():
+    for c in p:
+      parent_map[c] = p
+
+  # Find all image tags in document (must use SVG namespace)
+  image_tags = tree.findall('.//svg:g/svg:image', ns)
+  for img in image_tags:
+    # Load ref'd image and get SVG root
+    svgfilename = img.attrib['{http://www.w3.org/1999/xlink}href']
+    with open(svgfilename, encoding='UTF-8') as f:
+      imgsvg = f.read()
+    imgroot = cElementTree.fromstring(imgsvg)
+    # Copy IMAGE tag attributes (width, height, etc) to SVG from image file
+    for k, v in img.attrib.items():
+      if k not in {'{http://www.w3.org/1999/xlink}href'}:
+        imgroot.attrib[k] = v
+    # Replace IMAGE with SVG tag
+    p = parent_map[img]
+    p.append(imgroot)
+    p.remove(img)
+
+  cElementTree.register_namespace('', 'http://www.w3.org/2000/svg')
+  cElementTree.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
+  xml_str = cElementTree.tostring(root).decode()
+  return xml_str
+
+
+def _display(image_path, image_format):
+  """Displays the given image with the given format."""
+  import IPython.display  # pylint: disable=g-import-not-at-top
+  if image_format == 'svg':
+    # Inline embedded SVG data and wrap inside an HTML display object.
+    svg = _inline_svg_images(image_path)
+    svg_base64 = base64.b64encode(svg.encode('utf-8')).decode()
+    html = '<img width="100%" src="data:image/svg+xml;base64,{}" >'.format(
+        svg_base64)
+    IPython.display.display(IPython.display.HTML(html))
+  else:
+    IPython.display.display(IPython.display.Image(image_path))
+
+
+def draw_model_graph(model_graph,
+                     calibrator_dpi=30,
+                     calibrator_figsize=None,
+                     image_format='png'):
   """Draws the model graph.
 
   This function requires IPython and graphviz packages.
@@ -42,11 +98,13 @@ def draw_model_graph(model_graph, calibrator_dpi=30):
   Args:
     model_graph: a `model_info.ModelInfo` objects to plot.
     calibrator_dpi: The DPI for calibrator plots inside the graph nodes.
+    calibrator_figsize: The figsize parameter for calibrator plots.
+    image_format: Format of the image to produce. Using 'svg' format can help
+      with font rendering issues.
   """
   import graphviz  # pylint: disable=g-import-not-at-top
-  import IPython.display  # pylint: disable=g-import-not-at-top
 
-  dot = graphviz.Digraph(format='png', engine='dot')
+  dot = graphviz.Digraph(format=image_format, engine='dot')
   dot.graph_attr['ranksep'] = '0.75'
 
   # Check if we need split nodes for shared calibration
@@ -63,11 +121,12 @@ def draw_model_graph(model_graph, calibrator_dpi=30):
     if (isinstance(node, model_info.PWLCalibrationNode) or
         isinstance(node, model_info.CategoricalCalibrationNode)):
       # Add node for calibrator with calibrator plot inside.
-      fig = plot_calibrator_nodes([node])
-      filename = os.path.join(tempfile.tempdir, 'i{}.png'.format(node_id))
+      fig = plot_calibrator_nodes([node], figsize=calibrator_figsize)
+      filename = os.path.join(tempfile.tempdir,
+                              'i{}.{}'.format(node_id, image_format))
       plt.savefig(filename, dpi=calibrator_dpi)
       plt.close(fig)
-      dot.node(node_id, '', image=filename, shape='box')
+      dot.node(node_id, '', image=filename, imagescale='true', shape='box')
 
       # Add input feature node.
       node_is_feature_calibration = isinstance(node.input_node,
@@ -108,8 +167,8 @@ def draw_model_graph(model_graph, calibrator_dpi=30):
 
   filename = os.path.join(tempfile.tempdir, 'dot')
   try:
-    dot.render(filename)
-    IPython.display.display(IPython.display.Image('{}.png'.format(filename)))
+    image_path = dot.render(filename)
+    _display(image_path=image_path, image_format=image_format)
   except graphviz.backend.ExecutableNotFound as e:
     if 'IPython.core.magics.namespace' in sys.modules:
       # Similar to Keras visualization lib, we don't raise an exception here to
@@ -206,7 +265,7 @@ def plot_feature_calibrator(model_graph,
                                font_size, axis_label_font_size, figsize)
 
 
-def plot_all_calibrators(model_graph, num_cols=4, **kwargs):
+def plot_all_calibrators(model_graph, num_cols=4, image_format='png', **kwargs):
   """Plots all feature calibrator(s) extracted from a TFL canned estimator.
 
   The generated plots are arranged in a grid.
@@ -220,10 +279,10 @@ def plot_all_calibrators(model_graph, num_cols=4, **kwargs):
   Args:
     model_graph: a `model_info.ModelGraph` objects to plot.
     num_cols: Number of columns in the grid view.
-    **kwargs: args passed to `analysis.plot_calibrators`.
+    image_format: Format of the image to produce.
+    **kwargs: args passed to plot_feature_calibrator and plot_calibrator_nodes.
   """
   import google.colab.widgets  # pylint: disable=g-import-not-at-top
-  import IPython.display  # pylint: disable=g-import-not-at-top
 
   feature_infos = _input_feature_nodes(model_graph)
   feature_names = sorted([feature_info.name for feature_info in feature_infos])
@@ -258,13 +317,14 @@ def plot_all_calibrators(model_graph, num_cols=4, **kwargs):
       if index < len(feature_names):
         plot_feature_calibrator(model_graph, feature_name, **kwargs)
       else:
-        plot_calibrator_nodes([output_calibrator_node])
-      filename = os.path.join(tempfile.tempdir, '{}.png'.format(feature_name))
+        plot_calibrator_nodes([output_calibrator_node], **kwargs)
+      image_path = os.path.join(tempfile.tempdir,
+                                '{}.{}'.format(feature_name, image_format))
       # Save a larger temporary copy to be shown in a second tab.
-      plt.savefig(filename, dpi=200)
+      plt.savefig(image_path, dpi=200)
       plt.show()
     with tb.output_to(1, select=False):
-      IPython.display.display(IPython.display.Image(filename))
+      _display(image_path=image_path, image_format=image_format)
 
 
 def _input_feature_nodes(model_graph):
@@ -413,10 +473,10 @@ def _plot_pwl_calibrator(pwl_calibrator_nodes, axes, plot_submodel_calibration):
       constructed from `configs.CalibratedLatticeEnsembleConfig`.
   """
 
-  pwl_calibrator_node = pwl_calibrator_nodes[0]
-  if isinstance(pwl_calibrator_node.input_node, model_info.InputFeatureNode):
-    assert not pwl_calibrator_node.input_node.is_categorical
-    input_name = pwl_calibrator_node.input_node.name
+  if isinstance(pwl_calibrator_nodes[0].input_node,
+                model_info.InputFeatureNode):
+    assert not pwl_calibrator_nodes[0].input_node.is_categorical
+    input_name = pwl_calibrator_nodes[0].input_node.name
     output_name = 'calibrated {}'.format(input_name)
   else:
     # Output PWL calibration.
@@ -431,7 +491,7 @@ def _plot_pwl_calibrator(pwl_calibrator_nodes, axes, plot_submodel_calibration):
       ],
       axis=0,
   )
-  if pwl_calibrator_node.default_output:
+  if pwl_calibrator_nodes[0].default_output:
     mean_default_output = np.mean([
         pwl_calibrator_node.default_output
         for pwl_calibrator_node in pwl_calibrator_nodes
@@ -445,7 +505,7 @@ def _plot_pwl_calibrator(pwl_calibrator_nodes, axes, plot_submodel_calibration):
           pwl_calibrator_node.input_keypoints,
           pwl_calibrator_node.output_keypoints,
           '--',
-          linewidth=0.25,
+          linewidth=0.5,
           color=_CALIBRATOR_COLOR)
       if pwl_calibrator_node.default_output is not None:
         plt.plot(
@@ -454,18 +514,23 @@ def _plot_pwl_calibrator(pwl_calibrator_nodes, axes, plot_submodel_calibration):
             len(pwl_calibrator_node.input_keypoints),
             '--',
             color=_MISSING_COLOR,
-            linewidth=0.25)
+            linewidth=0.5)
 
-  plt.plot(
-      pwl_calibrator_node.input_keypoints,
-      mean_output_keypoints,
-      _CALIBRATOR_COLOR,
-      linewidth=3,
-      label='calibrated')
+  # Skip plotting average keypoint outputs if input keypoints are not aligned.
+  all_input_keypoints = np.stack(
+      [node.input_keypoints for node in pwl_calibrator_nodes])
+  input_keypoints_match = (all_input_keypoints == all_input_keypoints[0]).all()
+  if input_keypoints_match:
+    plt.plot(
+        pwl_calibrator_nodes[0].input_keypoints,
+        mean_output_keypoints,
+        _CALIBRATOR_COLOR,
+        linewidth=3,
+        label='calibrated')
   if mean_default_output is not None:
     plt.plot(
-        pwl_calibrator_node.input_keypoints,
-        [mean_default_output] * len(pwl_calibrator_node.input_keypoints),
+        pwl_calibrator_nodes[0].input_keypoints,
+        [mean_default_output] * len(pwl_calibrator_nodes[0].input_keypoints),
         color=_MISSING_COLOR,
         linewidth=3,
         label=_MISSING_NAME)

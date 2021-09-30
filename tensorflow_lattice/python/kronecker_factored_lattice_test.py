@@ -377,7 +377,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.209862, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.612165, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = [1, 0]
@@ -396,7 +396,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
     }  # pyformat: disable
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.417009, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.399913, delta=self.loss_eps)
     self._TestEnsemble(config)
 
     monotonicities = [1, 1]
@@ -559,7 +559,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     config["monotonicities"] = monotonicities
     config["kernel_initializer"] = kernel_initializer
     loss = self._TrainModel(config)
-    self.assertAlmostEqual(loss, 0.194174, delta=self.loss_eps)
+    self.assertAlmostEqual(loss, 0.190762, delta=self.loss_eps)
 
   @parameterized.parameters(
       # Custom TFL initializer:

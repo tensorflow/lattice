@@ -278,6 +278,7 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
                output_calibration=False,
                output_calibration_num_keypoints=10,
                output_initialization='quantiles',
+               output_calibration_input_keypoints_type='fixed',
                fix_ensemble_for_2d_constraints=True,
                random_seed=0):
     # pyformat: disable
@@ -360,6 +361,11 @@ class CalibratedLatticeEnsembleConfig(_Config, _HasFeatureConfigs,
           - String `'uniform'`: Output is initliazed uniformly in label range.
           - A list of numbers: To be used for initialization of the output
             lattice or output calibrator.
+      output_calibration_input_keypoints_type: One of "fixed" or
+        "learned_interior". If "learned_interior", keypoints are initialized to
+        the values in `pwl_calibration_input_keypoints` but then allowed to vary
+        during training, with the exception of the first and last keypoint
+        location which are fixed.
       fix_ensemble_for_2d_constraints: A boolean indicating whether to add
         missing features to some lattices to resolve potential 2d constraint
         violations which require lattices from ensemble to either contain both
@@ -413,6 +419,7 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
                output_calibration=False,
                output_calibration_num_keypoints=10,
                output_initialization='quantiles',
+               output_calibration_input_keypoints_type='fixed',
                random_seed=0):
     """Initializes a `CalibratedLatticeConfig` instance.
 
@@ -471,6 +478,11 @@ class CalibratedLatticeConfig(_Config, _HasFeatureConfigs,
           - String `'uniform'`: Output is initliazed uniformly in label range.
           - A list of numbers: To be used for initialization of the output
             lattice or output calibrator.
+      output_calibration_input_keypoints_type: One of "fixed" or
+        "learned_interior". If "learned_interior", keypoints are initialized to
+        the values in `pwl_calibration_input_keypoints` but then allowed to vary
+        during training, with the exception of the first and last keypoint
+        location which are fixed.
       random_seed: Random seed to use for initialization of a lattice with
         `'kronecker_factored'` parameterization. Ignored if parameterization is
         set to `'all_vertices'`.
@@ -518,7 +530,8 @@ class CalibratedLinearConfig(_Config, _HasFeatureConfigs,
                output_max=None,
                output_calibration=False,
                output_calibration_num_keypoints=10,
-               output_initialization='quantiles'):
+               output_initialization='quantiles',
+               output_calibration_input_keypoints_type='fixed'):
     """Initializes a `CalibratedLinearConfig` instance.
 
     Args:
@@ -544,6 +557,11 @@ class CalibratedLinearConfig(_Config, _HasFeatureConfigs,
           - String `'uniform'`: Output is initliazed uniformly in label range.
           - A list of numbers: To be used for initialization of the output
             lattice or output calibrator.
+      output_calibration_input_keypoints_type: One of "fixed" or
+        "learned_interior". If "learned_interior", keypoints are initialized to
+        the values in `pwl_calibration_input_keypoints` but then allowed to vary
+        during training, with the exception of the first and last keypoint
+        location which are fixed.
     """
     super(CalibratedLinearConfig, self).__init__(locals())
 
@@ -584,6 +602,7 @@ class AggregateFunctionConfig(_Config, _HasFeatureConfigs,
                middle_lattice_size=2,
                middle_calibration=False,
                middle_calibration_num_keypoints=10,
+               middle_calibration_input_keypoints_type='fixed',
                middle_monotonicity=None,
                middle_lattice_interpolation='hypercube',
                aggregation_lattice_interpolation='hypercube',
@@ -591,7 +610,8 @@ class AggregateFunctionConfig(_Config, _HasFeatureConfigs,
                output_max=None,
                output_calibration=False,
                output_calibration_num_keypoints=10,
-               output_initialization='uniform'):
+               output_initialization='uniform',
+               output_calibration_input_keypoints_type='fixed'):
     """Initializes an `AggregateFunctionConfig` instance.
 
     Args:
@@ -609,6 +629,11 @@ class AggregateFunctionConfig(_Config, _HasFeatureConfigs,
         the inputs to the middle lattice.
       middle_calibration_num_keypoints: Number of keypoints to use for the
         middle piecewise-linear calibration.
+      middle_calibration_input_keypoints_type: One of "fixed" or
+        "learned_interior". If "learned_interior", keypoints are initialized to
+        the values in `pwl_calibration_input_keypoints` but then allowed to vary
+        during training, with the exception of the first and last keypoint
+        location which are fixed.
       middle_monotonicity: Specifies if the middle calibrators should be
         monotonic, using 'increasing' or 1 to indicate increasing monotonicity,
         'decreasing' or -1 to indicate decreasing monotonicity, and 'none' or 0
@@ -637,6 +662,11 @@ class AggregateFunctionConfig(_Config, _HasFeatureConfigs,
           - String `'uniform'`: Output is initliazed uniformly in label range.
           - A list of numbers: To be used for initialization of the output
             lattice or output calibrator.
+      output_calibration_input_keypoints_type: One of "fixed" or
+        "learned_interior". If "learned_interior", keypoints are initialized to
+        the values in `pwl_calibration_input_keypoints` but then allowed to vary
+        during training, with the exception of the first and last keypoint
+        location which are fixed.
     """
     super(AggregateFunctionConfig, self).__init__(locals())
 
@@ -716,6 +746,7 @@ class FeatureConfig(_Config, _HasRegularizerConfigs):
                pwl_calibration_convexity=0,
                pwl_calibration_num_keypoints=10,
                pwl_calibration_input_keypoints='quantiles',
+               pwl_calibration_input_keypoints_type='fixed',
                pwl_calibration_clip_min=None,
                pwl_calibration_clip_max=None,
                pwl_calibration_clamp_min=False,
@@ -771,6 +802,11 @@ class FeatureConfig(_Config, _HasRegularizerConfigs):
           - String `'uniform'`: Input keypoints are uniformly spaced in feature
             range.
           - A list of numbers: Explicitly specifies the keypoints.
+      pwl_calibration_input_keypoints_type: One of "fixed" or
+        "learned_interior". If "learned_interior", keypoints are initialized to
+        the values in `pwl_calibration_input_keypoints` but then allowed to vary
+        during training, with the exception of the first and last keypoint
+        location which are fixed. Convexity can only be imposed with "fixed".
       pwl_calibration_clip_min: Input values are lower clipped by this value.
       pwl_calibration_clip_max: Input values are upper clipped by this value.
       pwl_calibration_clamp_min: for monotonic calibrators ensures that the

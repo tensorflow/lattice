@@ -64,6 +64,7 @@ def main(_):
       'tfl': ['python'],
       'tfl.aggregation_layer': ['Aggregation'],
       'tfl.categorical_calibration_layer': ['CategoricalCalibration'],
+      'tfl.cdf_layer': ['CDF'],
       'tfl.kronecker_factored_lattice_layer': ['KroneckerFactoredLattice'],
       'tfl.lattice_layer': ['Lattice'],
       'tfl.linear_layer': ['Linear'],

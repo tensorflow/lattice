@@ -893,7 +893,8 @@ def verify_hyperparameters(input_keypoints=None,
                            convexity=None,
                            is_cyclic=False,
                            lengths=None,
-                           weights_shape=None):
+                           weights_shape=None,
+                           input_keypoints_type=None):
   """Verifies that all given hyperparameters are consistent.
 
   See PWLCalibration class level comment for detailed description of arguments.
@@ -907,6 +908,7 @@ def verify_hyperparameters(input_keypoints=None,
     is_cyclic: `is_cyclic` hyperparameter of PWLCalibration layer.
     lengths: Lengths of pieces of piecewise linear function.
     weights_shape: Shape of weights of PWLCalibration layer.
+    input_keypoints_type: The type of input keypoints of a PWLCalibration layer.
 
   Raises:
     ValueError: If something is inconsistent.
@@ -954,3 +956,9 @@ def verify_hyperparameters(input_keypoints=None,
       raise ValueError("Number of lengths must be equal to number of weights "
                        "minus one. Lengths: %s, weights_shape: %s" %
                        (lengths, weights_shape))
+
+  if (input_keypoints_type is not None and input_keypoints_type != "fixed" and
+      input_keypoints_type != "learned_interior"):
+    raise ValueError(
+        "input_keypoints_type must be one of 'fixed' or 'learned_interior': %s"
+        % input_keypoints_type)
