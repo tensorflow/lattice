@@ -59,7 +59,6 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":internal_utils",
-        # enum dep,
         # tensorflow:tensorflow_no_contrib dep,
     ],
 )
@@ -319,7 +318,6 @@ py_library(
     name = "model_info",
     srcs = ["model_info.py"],
     srcs_version = "PY2AND3",
-    deps = [],
 )
 
 py_library(
@@ -386,7 +384,6 @@ py_library(
         ":rtl_layer",
         ":utils",
         # absl/logging dep,
-        # enum dep,
         # numpy dep,
         # six dep,
         # tensorflow dep,
@@ -429,7 +426,6 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":utils",
-        # enum dep,
         # tensorflow:tensorflow_no_contrib dep,
     ],
 )

@@ -460,6 +460,17 @@ def _dominance_constraints_from_feature_configs(feature_configs):
   return monotonic_dominances
 
 
+def _canonical_feature_names(model_config, feature_names=None):
+  if feature_names is not None:
+    return feature_names
+  if model_config.feature_configs is None:
+    raise ValueError(
+        'Feature configs must be specified if feature names are not provided.')
+  return [
+      feature_config.name for feature_config in model_config.feature_configs
+  ]
+
+
 def build_linear_layer(linear_input, feature_configs, model_config,
                        weighted_average, submodel_index, dtype):
   """Creates a `tfl.layers.Linear` layer initialized to be an average.
@@ -937,15 +948,7 @@ def set_random_lattice_ensemble(model_config, feature_names=None):
         .format(type(model_config)))
   if model_config.lattices != 'random':
     raise ValueError('model_config.lattices must be set to \'random\'.')
-  # Extract feature names
-  if feature_names is None:
-    if model_config.feature_configs is None:
-      raise ValueError(
-          'Feature configs must be specified if feature names are not provided.'
-      )
-    feature_names = [
-        feature_config.name for feature_config in model_config.feature_configs
-    ]
+  feature_names = _canonical_feature_names(model_config, feature_names)
   # Start by using each feature once.
   np.random.seed(model_config.random_seed)
   model_config.lattices = [[] for _ in range(model_config.num_lattices)]
@@ -1032,15 +1035,7 @@ def construct_prefitting_model_config(model_config, feature_names=None):
         .format(type(model_config)))
   if model_config.lattices != 'crystals':
     raise ValueError('model_config.lattices must be set to \'crystals\'.')
-  # Extract feature names from model_config if not provided.
-  if feature_names is None:
-    if model_config.feature_configs is None:
-      raise ValueError(
-          'Feature configs must be specified if feature names are not provided.'
-      )
-    feature_names = [
-        feature_config.name for feature_config in model_config.feature_configs
-    ]
+  feature_names = _canonical_feature_names(model_config, feature_names)
 
   # Make a copy of the model config provided and set all pairs covered.
   prefitting_model_config = copy.deepcopy(model_config)
@@ -1330,14 +1325,7 @@ def set_crystals_lattice_ensemble(model_config,
   # the proper type will have undefined behavior.
   # To perform this check, we must first extract feature names if they are not
   # provided, which we need for later steps anyway.
-  if feature_names is None:
-    if model_config.feature_configs is None:
-      raise ValueError(
-          'Feature configs must be specified if feature names are not provided.'
-      )
-    feature_names = [
-        feature_config.name for feature_config in model_config.feature_configs
-    ]
+  feature_names = _canonical_feature_names(model_config, feature_names)
   _verify_prefitting_model(prefitting_model, feature_names)
 
   # Now we can extract the crystals and finalize model_config.
@@ -1349,6 +1337,232 @@ def set_crystals_lattice_ensemble(model_config,
   model_config.lattices = [[
       feature_names[features_index] for features_index in lattice
   ] for lattice in lattices]
+
+
+def _weighted_quantile(sorted_values, quantiles, weights):
+  """Calculates weighted quantiles of the given sorted and unique values."""
+  if len(sorted_values) < len(quantiles):
+    raise ValueError(
+        'Not enough unique values ({}) to calculate {} quantiles.'.format(
+            len(sorted_values), len(quantiles)))
+  # Weighted quantiles of the observed (sorted) values.
+  # Weights are spread equaly before and after the observed values.
+  weighted_quantiles = (np.cumsum(weights) - 0.5 * weights) / np.sum(weights)
+
+  # Use linear interpolation to find index of the quantile values.
+  index_values = np.arange(len(sorted_values))
+  quantiles_idx = np.interp(x=quantiles, xp=weighted_quantiles, fp=index_values)
+  quantiles_idx = np.rint(quantiles_idx).astype(int)
+
+  # Replace repeated quantile values with neighbouring values.
+  unique_idx, first_use = np.unique(quantiles_idx, return_index=True)
+  used_idx = set(unique_idx)
+  num_values = len(sorted_values)
+  for i in range(len(quantiles_idx)):
+    if i not in first_use:
+      # Since this is not the first use of a (repeated) quantile value, we will
+      # need to find an unused neighbouring value.
+      for delta, direction in itertools.product(range(1, num_values), [-1, 1]):
+        candidate_idx = quantiles_idx[i] + direction * delta
+        if (candidate_idx >= 0 and candidate_idx < num_values and
+            candidate_idx not in used_idx):
+          used_idx.add(candidate_idx)
+          quantiles_idx[i] = candidate_idx
+          break
+  quantiles_idx = np.sort(quantiles_idx)
+
+  return sorted_values[quantiles_idx]
+
+
+def compute_keypoints(values,
+                      num_keypoints,
+                      keypoints='quantiles',
+                      clip_min=None,
+                      clip_max=None,
+                      default_value=None,
+                      weights=None,
+                      weight_reduction='mean',
+                      feature_name=''):
+  """Calculates keypoints for the given set of values.
+
+  Args:
+    values: Values to use for quantile calculation.
+    num_keypoints: Number of keypoints to compute.
+    keypoints: String `'quantiles'` or `'uniform'`.
+    clip_min: Input values are lower clipped by this value.
+    clip_max: Input values are upper clipped by this value.
+    default_value: If provided, occurances will be removed from values.
+    weights: Weights to be used for quantile calculation.
+    weight_reduction: Reduction applied to weights for repeated values. Must be
+      either 'mean' or 'sum'.
+    feature_name: Name to use for error logs.
+
+  Returns:
+    A list of keypoints of `num_keypoints` length.
+  """
+  # Remove default values before calculating stats.
+  non_default_idx = values != default_value
+  values = values[non_default_idx]
+  if weights is not None:
+    weights = weights[non_default_idx]
+
+  # Clip min and max if requested. Note that we add clip bounds to the values
+  # so that the first and last keypoints are set to those values.
+  if clip_min is not None:
+    values = np.maximum(values, clip_min)
+    values = np.append(values, clip_min)
+    if weights is not None:
+      weights = np.append(weights, 0)
+  if clip_max is not None:
+    values = np.minimum(values, clip_max)
+    values = np.append(values, clip_max)
+    if weights is not None:
+      weights = np.append(weights, 0)
+
+  # We do not allow nans in the data, even as default_value.
+  if np.isnan(values).any():
+    raise ValueError(
+        'NaN values were observed for numeric feature `{}`. '
+        'Consider replacing the values in transform or input_fn.'.format(
+            feature_name))
+
+  # Remove duplicates and sort value before calculating stats.
+  # This is emperically useful as we use of keypoints more efficiently.
+  if weights is None:
+    sorted_values = np.unique(values)
+  else:
+    # First sort the values and reorder weights.
+    idx = np.argsort(values)
+    values = values[idx]
+    weights = weights[idx]
+
+    # Set the weight of each unique element to be the sum or average of the
+    # weights of repeated instances. Using 'mean' reduction results in parity
+    # between unweighted calculation and having equal weights for all values.
+    sorted_values, idx, counts = np.unique(
+        values, return_index=True, return_counts=True)
+    weights = np.add.reduceat(weights, idx)
+    if weight_reduction == 'mean':
+      weights = weights / counts
+    elif weight_reduction != 'sum':
+      raise ValueError('Invalid weight reduction: {}'.format(weight_reduction))
+
+  if keypoints == 'quantiles':
+    if sorted_values.size < num_keypoints:
+      logging.info(
+          'Not enough unique values observed for feature `%s` to '
+          'construct %d keypoints for pwl calibration. Using %d unique '
+          'values as keypoints.', feature_name, num_keypoints,
+          sorted_values.size)
+      return sorted_values.astype(float)
+
+    quantiles = np.linspace(0., 1., num_keypoints)
+    if weights is not None:
+      return _weighted_quantile(
+          sorted_values=sorted_values, quantiles=quantiles,
+          weights=weights).astype(float)
+    else:
+      return np.quantile(
+          sorted_values, quantiles, interpolation='nearest').astype(float)
+
+  elif keypoints == 'uniform':
+    return np.linspace(sorted_values[0], sorted_values[-1], num_keypoints)
+  else:
+    raise ValueError('Invalid keypoint generation mode: {}'.format(keypoints))
+
+
+def _feature_config_by_name(feature_configs, feature_name, add_if_missing):
+  """Returns feature_config with the given name."""
+  for feature_config in feature_configs:
+    if feature_config.name == feature_name:
+      return feature_config
+  # Use the default FeatureConfig if not present.
+  feature_config = configs.FeatureConfig(feature_name)
+  if add_if_missing:
+    feature_configs.append(feature_config)
+  return feature_config
+
+
+def compute_feature_keypoints(feature_configs,
+                              features,
+                              weights=None,
+                              weight_reduction='mean'):
+  """Computes feature keypoints with the data provide in `features` dict."""
+  # Calculate feature keypoitns.
+  feature_keypoints = {}
+  for feature_name, values in six.iteritems(features):
+    feature_config = _feature_config_by_name(
+        feature_configs=feature_configs,
+        feature_name=feature_name,
+        add_if_missing=False)
+
+    if feature_config.num_buckets:
+      # Skip categorical features.
+      continue
+    if isinstance(feature_config.pwl_calibration_input_keypoints, str):
+      feature_keypoints[feature_name] = compute_keypoints(
+          values,
+          num_keypoints=feature_config.pwl_calibration_num_keypoints,
+          keypoints=feature_config.pwl_calibration_input_keypoints,
+          clip_min=feature_config.pwl_calibration_clip_min,
+          clip_max=feature_config.pwl_calibration_clip_max,
+          weights=weights,
+          weight_reduction=weight_reduction,
+          feature_name=feature_name,
+      )
+    else:
+      # User-specified keypoint values.
+      feature_keypoints[
+          feature_name] = feature_config.pwl_calibration_input_keypoints
+  return feature_keypoints
+
+
+def set_feature_keypoints(feature_configs, feature_keypoints,
+                          add_missing_feature_configs):
+  """Updates the feature configs with provided keypoints."""
+  for feature_name, keypoints in six.iteritems(feature_keypoints):
+    feature_config = _feature_config_by_name(
+        feature_configs=feature_configs,
+        feature_name=feature_name,
+        add_if_missing=add_missing_feature_configs)
+    feature_config.pwl_calibration_input_keypoints = keypoints
+
+
+def compute_label_keypoints(model_config,
+                            labels,
+                            logits_output,
+                            weights=None,
+                            weight_reduction='mean'):
+  """Computes label keypoints with the data provide in `lables` array."""
+  if not np.issubdtype(labels[0], np.number):
+    # Default feature_values to [0, ... n_class-1] for string labels.
+    labels = np.arange(len(set(labels)))
+    weights = None
+
+  if isinstance(model_config.output_initialization, str):
+    # If model is expected to produce logits, initialize linearly in the
+    # range [-2, 2], ignoring the label distribution.
+    if logits_output:
+      return np.linspace(-2, 2, model_config.output_calibration_num_keypoints)
+
+    return compute_keypoints(
+        labels,
+        num_keypoints=model_config.output_calibration_num_keypoints,
+        keypoints=model_config.output_initialization,
+        clip_min=model_config.output_min,
+        clip_max=model_config.output_max,
+        weights=weights,
+        weight_reduction=weight_reduction,
+        feature_name='label',
+    )
+  else:
+    # User-specified keypoint values.
+    return model_config.output_initialization
+
+
+def set_label_keypoints(model_config, label_keypoints):
+  """Updates the label keypoints in the `model_config`."""
+  model_config.output_initialization = label_keypoints
 
 
 def _verify_ensemble_config(model_config):

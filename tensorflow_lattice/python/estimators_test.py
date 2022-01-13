@@ -392,14 +392,23 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
     self.assertGreater(results['auc'], auc)
 
   @parameterized.parameters(
-      (['age', 'sex', 'fbs', 'restecg', 'ca', 'thal'], False, False, 0.7),
+      (['age', 'sex', 'fbs', 'restecg', 'ca', 'thal'
+       ], False, False, None, None, 'mean', 0.7),
       ([
           'age', 'sex', 'cp', 'trestbps', 'chol', 'fbs', 'restecg', 'thalach',
           'exang', 'oldpeak', 'slope', 'ca', 'thal'
-      ], True, True, 0.8),
+      ], True, True, None, None, 'mean', 0.8),
+      (['age', 'sex', 'fbs', 'restecg', 'ca', 'thal'
+       ], False, False, 'thalach', None, 'mean', 0.7),
+      (['age', 'sex', 'fbs', 'restecg', 'ca', 'thal'
+       ], False, False, 'thalach', 'thalach', 'mean', 0.7),
+      (['age', 'sex', 'fbs', 'restecg', 'ca', 'thal'
+       ], False, False, 'thalach', 'thalach', 'sum', 0.7),
   )
   def testCalibratedLinearClassifier(self, feature_names, output_calibration,
-                                     use_bias, auc):
+                                     use_bias, weight_column,
+                                     feature_analysis_weight_column,
+                                     feature_analysis_weight_reduction, auc):
     self._ResetAllBackends()
     feature_columns = [
         feature_column for feature_column in self.heart_feature_columns
@@ -420,6 +429,9 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         feature_columns=feature_columns,
         model_config=model_config,
         feature_analysis_input_fn=self._GetHeartTrainInputFn(num_epochs=1),
+        weight_column=weight_column,
+        feature_analysis_weight_column=feature_analysis_weight_column,
+        feature_analysis_weight_reduction=feature_analysis_weight_reduction,
         optimizer=tf.keras.optimizers.Adam(0.01))
     estimator.train(input_fn=self._GetHeartTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetHeartTestInputFn())
