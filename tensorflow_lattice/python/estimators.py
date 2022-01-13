@@ -229,13 +229,15 @@ def _materialize_locally(tensors, max_elements=1e6):
       # an exception below. So we test this condition here to provide
       # a better error message.
       if not k_tensors:
-        raise ValueError("Did not find any values for key: {}".format(k))
+        raise ValueError('Did not find any values for key: {}'.format(k))
       concatenated_tensors[k] = np.concatenate(k_tensors)
     return concatenated_tensors
 
 
 def _finalize_keypoints(model_config, config, feature_columns,
-                        feature_analysis_input_fn, logits_output):
+                        feature_analysis_input_fn,
+                        feature_analysis_weight_column,
+                        feature_analysis_weight_reduction, logits_output):
   """Calculates and sets keypoints for input and output calibration.
 
   Input and label keypoints are calculated, stored in a file and also set in the
@@ -246,6 +248,9 @@ def _finalize_keypoints(model_config, config, feature_columns,
     config: A `tf.RunConfig` to indicate if worker is chief.
     feature_columns: A list of FeatureColumn's to use for feature parsing.
     feature_analysis_input_fn: An input_fn used to collect feature statistics.
+    feature_analysis_weight_column: None or weight column to use.
+    feature_analysis_weight_reduction: Reduction applied to weights for repeated
+      values. Must be either 'mean' or 'sum'.
     logits_output: A boolean indicating if model outputs logits.
 
   Raises:
@@ -257,113 +262,69 @@ def _finalize_keypoints(model_config, config, feature_columns,
   keypoints_filename = os.path.join(config.model_dir, _KEYPOINTS_FILE)
   if ((config is None or config.is_chief) and
       not tf.io.gfile.exists(keypoints_filename)):
+    # As the chief worker, calculate and store the keypoints.
     with tf.Graph().as_default():
       ds = feature_analysis_input_fn()
       if isinstance(ds, tf.data.Dataset):
         ds = tf.compat.v1.data.make_one_shot_iterator(ds).get_next()
-      features, label = ds
-      features = transform_features(features, feature_columns)
-      features[_LABEL_FEATURE_NAME] = label
-      features = _materialize_locally(features)
+      features, labels = ds
 
-    feature_keypoints = {}
-    for feature_name, feature_values in six.iteritems(features):
-      feature_values = feature_values.flatten()
+      # Add weights and labels to the feature list to be materialized.
+      if feature_analysis_weight_column is not None:
+        if isinstance(feature_analysis_weight_column, str):
+          feature_analysis_weight_column = tf.feature_column.numeric_column(
+              feature_analysis_weight_column)
+        feature_columns = feature_columns + [feature_analysis_weight_column]
 
-      if feature_name == _LABEL_FEATURE_NAME:
-        # Default feature_values to [0, ... n_class-1] if string label.
-        if label.dtype == tf.string:
-          feature_values = np.arange(len(set(feature_values)))
-        num_keypoints = model_config.output_calibration_num_keypoints
-        keypoints = model_config.output_initialization
-        clip_min = model_config.output_min
-        clip_max = model_config.output_max
-        default_value = None
+      values = transform_features(features, feature_columns)
+      values[_LABEL_FEATURE_NAME] = labels
+      values = _materialize_locally(values)
+      for feature_name in values:
+        values[feature_name] = values[feature_name].flatten()
+
+      # Pop out label and weight values.
+      labels = values.pop(_LABEL_FEATURE_NAME)
+      if feature_analysis_weight_column is not None:
+        weights = values.pop(feature_analysis_weight_column.name)
       else:
-        feature_config = model_config.feature_config_by_name(feature_name)
-        if feature_config.num_buckets:
-          # Skip categorical features.
-          continue
-        num_keypoints = feature_config.pwl_calibration_num_keypoints
-        keypoints = feature_config.pwl_calibration_input_keypoints
-        clip_min = feature_config.pwl_calibration_clip_min
-        clip_max = feature_config.pwl_calibration_clip_max
-        default_value = feature_config.default_value
+        weights = None
 
-      # Remove default values before calculating stats.
-      feature_values = feature_values[feature_values != default_value]
+    keypoints = premade_lib.compute_feature_keypoints(
+        feature_configs=model_config.feature_configs,
+        features=values,
+        weights=weights,
+        weight_reduction=feature_analysis_weight_reduction)
+    keypoints[_LABEL_FEATURE_NAME] = premade_lib.compute_label_keypoints(
+        model_config=model_config,
+        labels=labels,
+        logits_output=logits_output,
+        weights=weights,
+        weight_reduction=feature_analysis_weight_reduction)
 
-      if np.isnan(feature_values).any():
-        raise ValueError(
-            'NaN values were observed for numeric feature `{}`. '
-            'Consider replacing the values in transform or input_fn.'.format(
-                feature_name))
-
-      # Before calculating keypoints, clip values as requested.
-      # Add min and max to the value list to make sure min/max in values match
-      # the requested range.
-      if clip_min is not None:
-        feature_values = np.maximum(feature_values, clip_min)
-        feature_values = np.append(feature_values, clip_min)
-      if clip_max is not None:
-        feature_values = np.minimum(feature_values, clip_max)
-        feature_values = np.append(feature_values, clip_max)
-
-      # Remove duplicate values before calculating stats.
-      feature_values = np.unique(feature_values)
-
-      if isinstance(keypoints, str):
-        if keypoints == 'quantiles':
-          if (feature_name != _LABEL_FEATURE_NAME and
-              feature_values.size < num_keypoints):
-            logging.info(
-                'Not enough unique values observed for feature `%s` to '
-                'construct %d keypoints for pwl calibration. Using %d unique '
-                'values as keypoints.', feature_name, num_keypoints,
-                feature_values.size)
-            num_keypoints = feature_values.size
-          quantiles = np.quantile(
-              feature_values,
-              np.linspace(0., 1., num_keypoints),
-              interpolation='nearest')
-          feature_keypoints[feature_name] = [float(x) for x in quantiles]
-        elif keypoints == 'uniform':
-          linspace = np.linspace(
-              np.min(feature_values), np.max(feature_values), num_keypoints)
-          feature_keypoints[feature_name] = [float(x) for x in linspace]
-        else:
-          raise ValueError(
-              'Invalid keypoint generation mode: {}'.format(keypoints))
-      else:
-        # Keypoints are explicitly provided in the config.
-        feature_keypoints[feature_name] = [float(x) for x in keypoints]
+    # Convert to python float type for serialization.
+    keypoints = {
+        k: [float(v) for v in vs] for k, vs in six.iteritems(keypoints)
+    }
 
     # Save keypoints to file as the chief worker.
     tmp_keypoints_filename = keypoints_filename + 'tmp'
     with tf.io.gfile.GFile(tmp_keypoints_filename, 'w') as keypoints_file:
-      keypoints_file.write(json.dumps(feature_keypoints, indent=2))
+      keypoints_file.write(json.dumps(keypoints, indent=2))
     tf.io.gfile.rename(tmp_keypoints_filename, keypoints_filename)
   else:
     # Non-chief workers read the keypoints from file.
     _poll_for_file(keypoints_filename)
     with tf.io.gfile.GFile(keypoints_filename) as keypoints_file:
-      feature_keypoints = json.loads(keypoints_file.read())
+      keypoints = json.loads(keypoints_file.read())
 
-  if _LABEL_FEATURE_NAME in feature_keypoints:
-    output_init = feature_keypoints.pop(_LABEL_FEATURE_NAME)
-    if logits_output and isinstance(model_config.output_initialization, str):
-      # If model is expected to produce logits, initialize linearly in the
-      # range [-2, 2], ignoring the label distribution.
-      model_config.output_initialization = [
-          float(x) for x in np.linspace(
-              -2, 2, model_config.output_calibration_num_keypoints)
-      ]
-    else:
-      model_config.output_initialization = output_init
-
-  for feature_name, keypoints in feature_keypoints.items():
-    model_config.feature_config_by_name(
-        feature_name).pwl_calibration_input_keypoints = keypoints
+  # Set the keypoint values in the model config.
+  label_keypoints = keypoints.pop(_LABEL_FEATURE_NAME)
+  premade_lib.set_feature_keypoints(
+      feature_configs=model_config.feature_configs,
+      feature_keypoints=keypoints,
+      add_missing_feature_configs=True)
+  premade_lib.set_label_keypoints(
+      model_config=model_config, label_keypoints=label_keypoints)
 
 
 def _fix_ensemble_for_2d_constraints(model_config, feature_names):
@@ -807,6 +768,8 @@ class CannedEstimator(estimator_lib.EstimatorV2):
                model_config,
                feature_columns,
                feature_analysis_input_fn=None,
+               feature_analysis_weight_column=None,
+               feature_analysis_weight_reduction='mean',
                prefitting_input_fn=None,
                model_dir=None,
                label_dimension=1,
@@ -827,6 +790,13 @@ class CannedEstimator(estimator_lib.EstimatorV2):
         the model.
       feature_analysis_input_fn: An input_fn used to calculate statistics about
         features and labels in order to setup calibration keypoint and values.
+      feature_analysis_weight_column: A string or a `_NumericColumn` created by
+        `tf.feature_column.numeric_column` defining feature column representing
+        weights used for calculating weighted feature statistics (quantiles).
+        Can be the same as `weight_column`.
+      feature_analysis_weight_reduction: Reduction used on weights when
+        aggregating repeated values during feature analysis. Can be either 'sum'
+        or 'mean'.
       prefitting_input_fn: An input_fn used in the pre fitting stage to estimate
         non-linear feature interactions. Required for crystals models.
         Prefitting typically uses the same dataset as the main training, but
@@ -868,6 +838,8 @@ class CannedEstimator(estimator_lib.EstimatorV2):
         config=config,
         feature_columns=feature_columns,
         feature_analysis_input_fn=feature_analysis_input_fn,
+        feature_analysis_weight_column=feature_analysis_weight_column,
+        feature_analysis_weight_reduction=feature_analysis_weight_reduction,
         logits_output=True)
 
     _verify_config(model_config, feature_columns)
@@ -930,6 +902,8 @@ class CannedClassifier(estimator_lib.EstimatorV2):
                model_config,
                feature_columns,
                feature_analysis_input_fn=None,
+               feature_analysis_weight_column=None,
+               feature_analysis_weight_reduction='mean',
                prefitting_input_fn=None,
                model_dir=None,
                n_classes=2,
@@ -952,6 +926,13 @@ class CannedClassifier(estimator_lib.EstimatorV2):
         the model.
       feature_analysis_input_fn: An input_fn used to calculate statistics about
         features and labels in order to setup calibration keypoint and values.
+      feature_analysis_weight_column: A string or a `_NumericColumn` created by
+        `tf.feature_column.numeric_column` defining feature column representing
+        weights used for calculating weighted feature statistics (quantiles).
+        Can be the same as `weight_column`.
+      feature_analysis_weight_reduction: Reduction used on weights when
+        aggregating repeated values during feature analysis. Can be either 'sum'
+        or 'mean'.
       prefitting_input_fn: An input_fn used in the pre fitting stage to estimate
         non-linear feature interactions. Required for crystals models.
         Prefitting typically uses the same dataset as the main training, but
@@ -966,13 +947,12 @@ class CannedClassifier(estimator_lib.EstimatorV2):
         weights. It is only used by the estimator head to down weight or boost
         examples during training. It will be multiplied by the loss of the
         example. If it is a string, it is used as a key to fetch the weight
-        tensor from the `features` dictionary output of the input function.
-        If it is a `_NumericColumn`, a raw tensor is fetched by key
+        tensor from the `features` dictionary output of the input function. If
+        it is a `_NumericColumn`, a raw tensor is fetched by key
         `weight_column.key`, then weight_column.normalizer_fn is applied on it
-        to get the weight tensor. Note that in both cases 'weight_column'
-        should *not* be a member of the 'feature_columns'  parameter
-        to the constructor since these will be used for both serving and
-        training.
+        to get the weight tensor. Note that in both cases 'weight_column' should
+        *not* be a member of the 'feature_columns'  parameter to the constructor
+        since these will be used for both serving and training.
       label_vocabulary: A list of strings represents possible label values. If
         given, labels must be string type and have any value in
         `label_vocabulary`. If it is not given, that means labels are already
@@ -1030,6 +1010,8 @@ class CannedClassifier(estimator_lib.EstimatorV2):
         config=config,
         feature_columns=feature_columns,
         feature_analysis_input_fn=feature_analysis_input_fn,
+        feature_analysis_weight_column=feature_analysis_weight_column,
+        feature_analysis_weight_reduction=feature_analysis_weight_reduction,
         logits_output=True)
 
     _verify_config(model_config, feature_columns)
@@ -1091,6 +1073,8 @@ class CannedRegressor(estimator_lib.EstimatorV2):
                model_config,
                feature_columns,
                feature_analysis_input_fn=None,
+               feature_analysis_weight_column=None,
+               feature_analysis_weight_reduction='mean',
                prefitting_input_fn=None,
                model_dir=None,
                label_dimension=1,
@@ -1112,6 +1096,13 @@ class CannedRegressor(estimator_lib.EstimatorV2):
         the model.
       feature_analysis_input_fn: An input_fn used to calculate statistics about
         features and labels in order to setup calibration keypoint and values.
+      feature_analysis_weight_column: A string or a `_NumericColumn` created by
+        `tf.feature_column.numeric_column` defining feature column representing
+        weights used for calculating weighted feature statistics (quantiles).
+        Can be the same as `weight_column`.
+      feature_analysis_weight_reduction: Reduction used on weights when
+        aggregating repeated values during feature analysis. Can be either 'sum'
+        or 'mean'.
       prefitting_input_fn: An input_fn used in the pre fitting stage to estimate
         non-linear feature interactions. Required for crystals models.
         Prefitting typically uses the same dataset as the main training, but
@@ -1127,13 +1118,12 @@ class CannedRegressor(estimator_lib.EstimatorV2):
         weights. It is only used by the estimator head to down weight or boost
         examples during training. It will be multiplied by the loss of the
         example. If it is a string, it is used as a key to fetch the weight
-        tensor from the `features` dictionary output of the input function.
-        If it is a `_NumericColumn`, a raw tensor is fetched by key
+        tensor from the `features` dictionary output of the input function. If
+        it is a `_NumericColumn`, a raw tensor is fetched by key
         `weight_column.key`, then weight_column.normalizer_fn is applied on it
-        to get the weight tensor. Note that in both cases 'weight_column'
-        should *not* be a member of the 'feature_columns'  parameter
-        to the constructor since these will be used for both serving and
-        training.
+        to get the weight tensor. Note that in both cases 'weight_column' should
+        *not* be a member of the 'feature_columns'  parameter to the constructor
+        since these will be used for both serving and training.
       optimizer: An instance of `tf.Optimizer` used to train the model. Can also
         be a string (one of 'Adagrad', 'Adam', 'Ftrl', 'RMSProp', 'SGD'), or
         callable. Defaults to Adagrad optimizer.
@@ -1173,7 +1163,9 @@ class CannedRegressor(estimator_lib.EstimatorV2):
         config=config,
         feature_columns=feature_columns,
         feature_analysis_input_fn=feature_analysis_input_fn,
-        logits_output=True)
+        feature_analysis_weight_column=feature_analysis_weight_column,
+        feature_analysis_weight_reduction=feature_analysis_weight_reduction,
+        logits_output=False)
 
     _verify_config(model_config, feature_columns)
 
@@ -1235,8 +1227,8 @@ def _create_feature_nodes(sess, ops, graph):
     for (category_table_op, _) in _match_op(ops, category_table_re):
       if is_categorical:
         raise ValueError(
-            'Model graph has multiple category mappings for feature {}'
-            .format(feature_name))
+            'Model graph has multiple category mappings for feature {}'.format(
+                feature_name))
       is_categorical = True
       vocabulary_list = sess.run(
           graph.get_operation_by_name(category_table_op).outputs[0])
@@ -1509,22 +1501,19 @@ def _create_kronecker_factored_lattice_nodes(sess, ops, graph,
                                               submodel_idx,
                                               kfll.LATTICE_SIZES_NAME)
     lattice_sizes = sess.run(
-        graph.get_operation_by_name(
-            lattice_sizes_op_name).outputs[0])
+        graph.get_operation_by_name(lattice_sizes_op_name).outputs[0])
 
     # Units.
     # {KFL_LAYER_NAME}_{submodel_idx}/{UNITS_NAME}
-    units_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME,
-                                      submodel_idx, kfll.UNITS_NAME)
-    units = sess.run(
-        graph.get_operation_by_name(units_op_name).outputs[0])
+    units_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME, submodel_idx,
+                                      kfll.UNITS_NAME)
+    units = sess.run(graph.get_operation_by_name(units_op_name).outputs[0])
 
     # Dims.
     # {KFL_LAYER_NAME}_{submodel_idx}/{DIMS_NAME}
-    dims_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME,
-                                     submodel_idx, kfll.DIMS_NAME)
-    dims = sess.run(
-        graph.get_operation_by_name(dims_op_name).outputs[0])
+    dims_op_name = '{}_{}/{}'.format(premade_lib.KFL_LAYER_NAME, submodel_idx,
+                                     kfll.DIMS_NAME)
+    dims = sess.run(graph.get_operation_by_name(dims_op_name).outputs[0])
 
     # Num terms.
     # {KFL_LAYER_NAME}_{submodel_idx}/{NUM_TERMS_NAME}

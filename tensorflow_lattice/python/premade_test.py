@@ -107,9 +107,14 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         'heart.csv',
         'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv')
     heart_df = pd.read_csv(heart_csv_file)
+    thal_vocab_list = ['normal', 'fixed', 'reversible']
+    heart_df['thal'] = heart_df['thal'].map(
+        {v: i for i, v in enumerate(thal_vocab_list)})
+    heart_df = heart_df.astype(float)
+
     heart_train_size = int(len(heart_df) * 0.8)
-    heart_train_dataframe = heart_df[:heart_train_size]
-    heart_test_dataframe = heart_df[heart_train_size:]
+    heart_train_dict = dict(heart_df[:heart_train_size])
+    heart_test_dict = dict(heart_df[heart_train_size:])
 
     # Features:
     # - age
@@ -124,85 +129,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # - oldpeak   ST depression induced by exercise relative to rest
     # - slope     the slope of the peak exercise ST segment
     # - ca        number of major vessels (0-3) colored by flourosopy
-    # - thal      3 = normal; 6 = fixed defect; 7 = reversable defect
-    #
-    # This ordering of feature names will be the exact same order that we
-    # construct our model to expect.
-    self.heart_feature_names = [
-        'age', 'sex', 'cp', 'chol', 'fbs', 'trestbps', 'thalach', 'restecg',
-        'exang', 'oldpeak', 'slope', 'ca', 'thal'
-    ]
-    feature_name_indices = {
-        name: index for index, name in enumerate(self.heart_feature_names)
-    }
-    # This is the vocab list and mapping we will use for the 'thal' categorical
-    # feature.
-    thal_vocab_list = ['normal', 'fixed', 'reversible']
-    thal_map = {category: i for i, category in enumerate(thal_vocab_list)}
-
-    # Custom function for converting thal categories to buckets
-    def convert_thal_features(thal_features):
-      # Note that two examples in the test set are already converted.
-      return np.array([
-          thal_map[feature] if feature in thal_vocab_list else feature
-          for feature in thal_features
-      ])
-
-    # Custom function for extracting each feature.
-    def extract_features(dataframe, label_name='target'):
-      features = []
-      for feature_name in self.heart_feature_names:
-        if feature_name == 'thal':
-          features.append(
-              convert_thal_features(
-                  dataframe[feature_name].values).astype(float))
-        else:
-          features.append(dataframe[feature_name].values.astype(float))
-      labels = dataframe[label_name].values.astype(float)
-      return features, labels
-
-    self.heart_train_x, self.heart_train_y = extract_features(
-        heart_train_dataframe)
-    self.heart_test_x, self.heart_test_y = extract_features(
-        heart_test_dataframe)
-
-    # TODO: determine the cause of numerical issues resulting in
-    # predictions outside the range (likely PWL --> Lattice connection).
-    # Our lattice models may have predictions above 1.0  or below 0.0 due to
-    # numerical errors. We can subtract this small epsilon value from our
-    # output_max and add it to our output_min to make sure we do not predict
-    # values outside of our label bound.
-    self.numerical_error_epsilon = 1e-5
-    # Let's define our label minimum and maximum.
-    self.heart_min_label = float(np.min(
-        self.heart_train_y)) + self.numerical_error_epsilon
-    self.heart_max_label = float(np.max(
-        self.heart_train_y)) - self.numerical_error_epsilon
-
-    def compute_quantiles(features,
-                          num_keypoints=10,
-                          clip_min=None,
-                          clip_max=None,
-                          missing_value=None):
-      # Clip min and max if desired.
-      if clip_min is not None:
-        features = np.maximum(features, clip_min)
-        features = np.append(features, clip_min)
-      if clip_max is not None:
-        features = np.minimum(features, clip_max)
-        features = np.append(features, clip_max)
-      # Make features unique.
-      unique_features = np.unique(features)
-      # Remove missing values if specified.
-      if missing_value is not None:
-        unique_features = np.delete(unique_features,
-                                    np.where(unique_features == missing_value))
-      # Compute and return quantiles over unique non-missing feature values.
-      return np.quantile(
-          unique_features,
-          np.linspace(0., 1., num=num_keypoints),
-          interpolation='nearest').astype(float)
-
+    # - thal      normal; fixed defect; reversable defect
     self.heart_feature_configs = [
         configs.FeatureConfig(
             name='age',
@@ -210,10 +137,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
             monotonicity='increasing',
             # We must set the keypoints manually.
             pwl_calibration_num_keypoints=5,
-            pwl_calibration_input_keypoints=compute_quantiles(
-                self.heart_train_x[feature_name_indices['age']],
-                num_keypoints=5,
-                clip_max=100),
+            pwl_calibration_input_keypoints='quantiles',
+            pwl_calibration_clip_max=100.,
             # Per feature regularization.
             regularizer_configs=[
                 configs.RegularizerConfig(name='calib_wrinkle', l2=0.1),
@@ -228,10 +153,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
             monotonicity='increasing',
             # Keypoints that are uniformly spaced.
             pwl_calibration_num_keypoints=4,
-            pwl_calibration_input_keypoints=np.linspace(
-                np.min(self.heart_train_x[feature_name_indices['cp']]),
-                np.max(self.heart_train_x[feature_name_indices['cp']]),
-                num=4),
+            pwl_calibration_input_keypoints='uniform',
         ),
         configs.FeatureConfig(
             name='chol',
@@ -257,17 +179,13 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
             name='trestbps',
             monotonicity='decreasing',
             pwl_calibration_num_keypoints=5,
-            pwl_calibration_input_keypoints=compute_quantiles(
-                self.heart_train_x[feature_name_indices['trestbps']],
-                num_keypoints=5),
+            pwl_calibration_input_keypoints='quantiles',
         ),
         configs.FeatureConfig(
             name='thalach',
             monotonicity='decreasing',
             pwl_calibration_num_keypoints=5,
-            pwl_calibration_input_keypoints=compute_quantiles(
-                self.heart_train_x[feature_name_indices['thalach']],
-                num_keypoints=5),
+            pwl_calibration_input_keypoints='quantiles',
         ),
         configs.FeatureConfig(
             name='restecg',
@@ -286,9 +204,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
             name='oldpeak',
             monotonicity='increasing',
             pwl_calibration_num_keypoints=5,
-            pwl_calibration_input_keypoints=compute_quantiles(
-                self.heart_train_x[feature_name_indices['oldpeak']],
-                num_keypoints=5),
+            pwl_calibration_input_keypoints='quantiles',
         ),
         configs.FeatureConfig(
             name='slope',
@@ -301,9 +217,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
             name='ca',
             monotonicity='increasing',
             pwl_calibration_num_keypoints=4,
-            pwl_calibration_input_keypoints=compute_quantiles(
-                self.heart_train_x[feature_name_indices['ca']],
-                num_keypoints=4),
+            pwl_calibration_input_keypoints='quantiles',
         ),
         configs.FeatureConfig(
             name='thal',
@@ -318,6 +232,28 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         ),
     ]
     premade_lib.set_categorical_monotonicities(self.heart_feature_configs)
+
+    # This ordering of input features should match the feature configs.
+    feature_names = [
+        feature_config.name for feature_config in self.heart_feature_configs
+    ]
+    label_name = 'target'
+    self.heart_train_x = [
+        heart_train_dict[feature_name] for feature_name in feature_names
+    ]
+    self.heart_test_x = [
+        heart_test_dict[feature_name] for feature_name in feature_names
+    ]
+    self.heart_train_y = heart_train_dict[label_name]
+    self.heart_test_y = heart_test_dict[label_name]
+
+    # Construct feature map for keypoint calculation.
+    feature_keypoints = premade_lib.compute_feature_keypoints(
+        feature_configs=self.heart_feature_configs, features=heart_train_dict)
+    premade_lib.set_feature_keypoints(
+        feature_configs=self.heart_feature_configs,
+        feature_keypoints=feature_keypoints,
+        add_missing_feature_configs=False)
 
   def _ResetAllBackends(self):
     tf.keras.backend.clear_session()
@@ -415,7 +351,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_max=1.0,
         output_calibration=True,
         output_calibration_num_keypoints=5,
-        output_initialization=[-1.0, 1.0])
+        output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.CalibratedLatticeEnsemble(model_config)
     loaded_model = premade.CalibratedLatticeEnsemble.from_config(
         model.get_config(), custom_objects=premade.get_custom_objects())
@@ -433,8 +369,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_min=0.0,
         output_max=1.0,
         output_calibration=True,
-        output_calibration_num_keypoints=6,
-        output_initialization=[0.0, 1.0])
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.CalibratedLattice(model_config)
     loaded_model = premade.CalibratedLattice.from_config(
         model.get_config(), custom_objects=premade.get_custom_objects())
@@ -453,8 +389,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_max=1.0,
         interpolation='simplex',
         output_calibration=True,
-        output_calibration_num_keypoints=6,
-        output_initialization=[0.0, 1.0])
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.CalibratedLattice(model_config)
     loaded_model = premade.CalibratedLattice.from_config(
         model.get_config(), custom_objects=premade.get_custom_objects())
@@ -473,8 +409,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_min=0.0,
         output_max=1.0,
         output_calibration=True,
-        output_calibration_num_keypoints=6,
-        output_initialization=[0.0, 1.0])
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.CalibratedLinear(model_config)
     loaded_model = premade.CalibratedLinear.from_config(
         model.get_config(), custom_objects=premade.get_custom_objects())
@@ -494,8 +430,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_min=0.0,
         output_max=1.0,
         output_calibration=True,
-        output_calibration_num_keypoints=8,
-        output_initialization=[0.0, 1.0])
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.AggregateFunction(model_config)
     loaded_model = premade.AggregateFunction.from_config(
         model.get_config(), custom_objects=premade.get_custom_objects())
@@ -529,9 +465,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         num_terms=num_terms,
         separate_calibrators=True,
         output_calibration=False,
-        output_min=self.heart_min_label,
-        output_max=self.heart_max_label,
-        output_initialization=[self.heart_min_label, self.heart_max_label],
+        output_initialization=[-2, 2],
     )
     if parameterization == 'kronecker_factored':
       model_config.regularizer_configs = None
@@ -547,7 +481,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     prefitting_model = premade.CalibratedLatticeEnsemble(
         prefitting_model_config)
     prefitting_model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(),
+        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(0.01))
     prefitting_model.fit(
         self.heart_train_x,
@@ -561,8 +495,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLatticeEnsemble(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(),
-        metrics=tf.keras.metrics.AUC(),
+        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=tf.keras.metrics.AUC(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(0.01))
     model.fit(
         self.heart_train_x,
@@ -579,8 +513,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.parameters(
       ('hypercube', 'all_vertices', 0, 0.85),
       ('simplex', 'all_vertices', 0, 0.88),
-      ('hypercube', 'kronecker_factored', 2, 0.86),
-      ('hypercube', 'kronecker_factored', 4, 0.9),
+      ('hypercube', 'kronecker_factored', 2, 0.85),
+      ('hypercube', 'kronecker_factored', 4, 0.85),
   )
   def testCalibratedLatticeEnsembleRTL(self, interpolation, parameterization,
                                        num_terms, expected_minimum_auc):
@@ -607,9 +541,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         num_terms=num_terms,
         separate_calibrators=True,
         output_calibration=False,
-        output_min=self.heart_min_label,
-        output_max=self.heart_max_label,
-        output_initialization=[self.heart_min_label, self.heart_max_label],
+        output_initialization=[-2, 2],
     )
     # We must remove all regularization if using 'kronecker_factored'.
     if parameterization == 'kronecker_factored':
@@ -617,8 +549,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLatticeEnsemble(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(),
-        metrics=tf.keras.metrics.AUC(),
+        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=tf.keras.metrics.AUC(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(0.01))
     model.fit(
         self.heart_train_x,
@@ -635,8 +567,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.parameters(
       ('hypercube', 'all_vertices', 0, 0.81),
       ('simplex', 'all_vertices', 0, 0.81),
-      ('hypercube', 'kronecker_factored', 2, 0.79),
-      ('hypercube', 'kronecker_factored', 4, 0.8),
+      ('hypercube', 'kronecker_factored', 2, 0.77),
+      ('hypercube', 'kronecker_factored', 4, 0.77),
   )
   def testCalibratedLattice(self, interpolation, parameterization, num_terms,
                             expected_minimum_auc):
@@ -652,10 +584,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
             configs.RegularizerConfig(name='torsion', l2=1e-4),
             configs.RegularizerConfig(name='output_calib_hessian', l2=1e-4),
         ],
-        output_min=self.heart_min_label,
-        output_max=self.heart_max_label,
         output_calibration=False,
-        output_initialization=[self.heart_min_label, self.heart_max_label],
+        output_initialization=[-2, 2],
     )
     if parameterization == 'kronecker_factored':
       model_config.regularizer_configs = None
@@ -668,8 +598,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLattice(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(),
-        metrics=tf.keras.metrics.AUC(),
+        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=tf.keras.metrics.AUC(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(0.01))
     model.fit(
         self.heart_train_x[:5],
@@ -702,17 +632,16 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         interpolation='hypercube',
         separate_calibrators=True,
         output_calibration=True,
-        output_min=self.heart_min_label,
-        output_max=self.heart_max_label,
-        output_initialization=[self.heart_min_label, self.heart_max_label],
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.],
         output_calibration_input_keypoints_type='learned_interior',
     )
     premade_lib.set_random_lattice_ensemble(model_config)
     # Construct and train final model
     model = premade.CalibratedLatticeEnsemble(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(),
-        metrics=tf.keras.metrics.AUC(),
+        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=tf.keras.metrics.AUC(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(0.01))
     model.fit(
         self.heart_train_x,
@@ -735,17 +664,15 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
             configs.RegularizerConfig(name='torsion', l2=1e-4),
             configs.RegularizerConfig(name='output_calib_hessian', l2=1e-4),
         ],
-        output_min=self.heart_min_label,
-        output_max=self.heart_max_label,
-        output_calibration=True,
-        output_initialization=[self.heart_min_label, self.heart_max_label],
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.],
         output_calibration_input_keypoints_type='learned_interior',
     )
     # Construct and train final model
     model = premade.CalibratedLattice(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(),
-        metrics=tf.keras.metrics.AUC(),
+        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=tf.keras.metrics.AUC(from_logits=True),
         optimizer=tf.keras.optimizers.Adam(0.01))
     model.fit(
         self.heart_train_x[:5],
@@ -781,7 +708,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_max=1.0,
         output_calibration=True,
         output_calibration_num_keypoints=5,
-        output_initialization=[-1.0, 1.0])
+        output_initialization=[-2., -1., 0., 1., 2.])
     if parameterization == 'kronecker_factored':
       model_config.regularizer_configs = None
       for feature_config in model_config.feature_configs:
@@ -831,7 +758,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_max=1.0,
         output_calibration=True,
         output_calibration_num_keypoints=5,
-        output_initialization=[-1.0, 1.0])
+        output_initialization=[-2., -1., 0., 1., 2.])
     if parameterization == 'kronecker_factored':
       model_config.regularizer_configs = None
     model = premade.CalibratedLatticeEnsemble(model_config)
@@ -863,8 +790,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_min=0.0,
         output_max=1.0,
         output_calibration=True,
-        output_calibration_num_keypoints=6,
-        output_initialization=[0.0, 1.0])
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.])
     if parameterization == 'kronecker_factored':
       model_config.regularizer_configs = None
       for feature_config in model_config.feature_configs:
@@ -897,8 +824,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_min=0.0,
         output_max=1.0,
         output_calibration=True,
-        output_calibration_num_keypoints=6,
-        output_initialization=[0.0, 1.0])
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.CalibratedLinear(model_config)
     # Compile and fit model.
     model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
@@ -924,8 +851,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_min=0.0,
         output_max=1.0,
         output_calibration=True,
-        output_calibration_num_keypoints=8,
-        output_initialization=[0.0, 1.0])
+        output_calibration_num_keypoints=5,
+        output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.AggregateFunction(model_config)
     # Compile and fit model.
     model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
