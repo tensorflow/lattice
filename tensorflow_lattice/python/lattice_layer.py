@@ -58,7 +58,7 @@ class Lattice(keras.layers.Layer):
   There are several types of constraints on the shape of the learned function
   that are either 1 or 2 dimensional:
 
-  ![Shape constraint visual example images](https://www.tensorflow.org/lattice/images/2d_shape_constraints_picture_color.png)
+  ![Shape constraint visual example images](https://www.tensorflow.org/lattice/images/2D_shape_constraints_picture_color.png)
 
   * **Monotonicity:** constrains the function to be increasing in the
     corresponding dimension. To achieve decreasing monotonicity, either pass the
