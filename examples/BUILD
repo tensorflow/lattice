@@ -27,6 +27,8 @@ py_binary(
     python_version = "PY3",
     deps = [
         # tensorflow dep,
+        # tensorflow:tensorflow_compat_v1_estimator dep,
+        # tensorflow:tensorflow_estimator dep,
         "//tensorflow_lattice",
     ],
 )
@@ -57,6 +59,8 @@ py_binary(
     python_version = "PY3",
     deps = [
         # tensorflow dep,
+        # tensorflow:tensorflow_compat_v1_estimator dep,
+        # tensorflow:tensorflow_estimator dep,
         "//tensorflow_lattice",
     ],
 )

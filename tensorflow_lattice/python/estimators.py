@@ -86,6 +86,7 @@ from absl import logging
 import numpy as np
 import six
 import tensorflow as tf
+from tensorflow import estimator as tf_estimator
 
 from tensorflow.python.feature_column import feature_column as fc  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.feature_column import feature_column_v2 as fc2  # pylint: disable=g-direct-tensorflow-import
@@ -389,13 +390,13 @@ def _set_crystals_lattice_ensemble(model_config, feature_names, label_dimension,
         config=config,
         dtype=dtype)
 
-  config = tf.estimator.RunConfig(
+  config = tf_estimator.RunConfig(
       keep_checkpoint_max=1,
       save_summary_steps=0,
       save_checkpoints_steps=10000000,
       tf_random_seed=config.tf_random_seed if config is not None else 42)
   logging.info('Creating the prefitting estimator.')
-  prefitting_estimator = tf.estimator.Estimator(
+  prefitting_estimator = tf_estimator.Estimator(
       model_fn=prefitting_model_fn, config=config)
   logging.info('Training the prefitting estimator.')
   prefitting_estimator.train(
@@ -574,7 +575,7 @@ def _calibrated_lattice_ensemble_model_fn(features, labels, label_dimension,
   del model_config.feature_configs[:]
   model_config.feature_configs.extend(feature_configs)
 
-  training = (mode == tf.estimator.ModeKeys.TRAIN)
+  training = (mode == tf_estimator.ModeKeys.TRAIN)
   model = premade.CalibratedLatticeEnsemble(
       model_config=model_config, dtype=dtype)
   logits = tf.identity(
@@ -619,7 +620,7 @@ def _calibrated_lattice_model_fn(features, labels, label_dimension,
   del model_config.feature_configs[:]
   model_config.feature_configs.extend(feature_configs)
 
-  training = (mode == tf.estimator.ModeKeys.TRAIN)
+  training = (mode == tf_estimator.ModeKeys.TRAIN)
   model = premade.CalibratedLattice(model_config=model_config, dtype=dtype)
   logits = tf.identity(
       model(input_tensors, training=training), name=OUTPUT_NAME)
@@ -663,7 +664,7 @@ def _calibrated_linear_model_fn(features, labels, label_dimension,
   del model_config.feature_configs[:]
   model_config.feature_configs.extend(feature_configs)
 
-  training = (mode == tf.estimator.ModeKeys.TRAIN)
+  training = (mode == tf_estimator.ModeKeys.TRAIN)
   model = premade.CalibratedLinear(model_config=model_config, dtype=dtype)
   logits = tf.identity(
       model(input_tensors, training=training), name=OUTPUT_NAME)

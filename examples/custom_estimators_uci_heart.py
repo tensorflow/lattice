@@ -30,7 +30,9 @@ from absl import flags
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tensorflow import estimator as tf_estimator
 from tensorflow import feature_column as fc
+from tensorflow.compat.v1 import estimator as tf_compat_v1_estimator
 import tensorflow_lattice as tfl
 from tensorflow_estimator.python.estimator.canned import optimizers
 from tensorflow_estimator.python.estimator.head import binary_class_head
@@ -54,7 +56,7 @@ def main(_):
   test_x = df[train_size:]
   test_y = target[train_size:]
 
-  train_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+  train_input_fn = tf_compat_v1_estimator.inputs.pandas_input_fn(
       x=train_x,
       y=train_y,
       shuffle=True,
@@ -62,7 +64,7 @@ def main(_):
       num_epochs=FLAGS.num_epochs,
       num_threads=1)
 
-  test_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+  test_input_fn = tf_compat_v1_estimator.inputs.pandas_input_fn(
       x=test_x,
       y=test_y,
       shuffle=False,
@@ -148,7 +150,7 @@ def main(_):
     )(
         lattice_input)
 
-    training = (mode == tf.estimator.ModeKeys.TRAIN)
+    training = (mode == tf_estimator.ModeKeys.TRAIN)
     model = tf.keras.Model(inputs=inputs, outputs=output)
     logits = model(input_tensors, training=training)
 
@@ -168,7 +170,7 @@ def main(_):
         trainable_variables=model.trainable_variables,
         update_ops=model.updates)
 
-  estimator = tf.estimator.Estimator(model_fn=model_fn)
+  estimator = tf_estimator.Estimator(model_fn=model_fn)
   estimator.train(input_fn=train_input_fn)
   results = estimator.evaluate(input_fn=test_input_fn)
   print('Results: {}'.format(results))

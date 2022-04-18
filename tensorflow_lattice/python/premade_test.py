@@ -653,7 +653,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         self.heart_test_x, self.heart_test_y, verbose=False)
     logging.info('Calibrated random lattice ensemble classifier results:')
     logging.info(results)
-    self.assertGreater(results[1], 0.86)
+    self.assertGreater(results[1], 0.85)
 
     # Now let's try a CalibratedLattice
     self._ResetAllBackends()

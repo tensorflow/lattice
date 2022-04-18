@@ -30,7 +30,9 @@ from absl import app
 from absl import flags
 import pandas as pd
 import tensorflow as tf
+from tensorflow import estimator as tf_estimator
 from tensorflow import feature_column as fc
+from tensorflow.compat.v1 import estimator as tf_compat_v1_estimator
 from tensorflow_lattice import configs
 from tensorflow_lattice import estimators
 
@@ -69,7 +71,7 @@ def main(_):
   # feature_analysis_input_fn is required if you have at least one FeatureConfig
   # with "pwl_calibration_input_keypoints='quantiles'". Note that 'quantiles' is
   # default keypoints configuration so most likely you'll need it.
-  feature_analysis_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+  feature_analysis_input_fn = tf_compat_v1_estimator.inputs.pandas_input_fn(
       x=train_x,
       y=train_y,
       shuffle=False,
@@ -83,7 +85,7 @@ def main(_):
   #
   # prefitting_input_fn is only required if your model_config is
   # CalibratedLatticeEnsembleConfig with "lattices='crystals'"
-  prefitting_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+  prefitting_input_fn = tf_compat_v1_estimator.inputs.pandas_input_fn(
       x=train_x,
       y=train_y,
       shuffle=True,
@@ -91,7 +93,7 @@ def main(_):
       num_epochs=FLAGS.prefitting_num_epochs,
       num_threads=1)
 
-  train_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+  train_input_fn = tf_compat_v1_estimator.inputs.pandas_input_fn(
       x=train_x,
       y=train_y,
       shuffle=True,
@@ -99,7 +101,7 @@ def main(_):
       num_epochs=FLAGS.num_epochs,
       num_threads=1)
 
-  test_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+  test_input_fn = tf_compat_v1_estimator.inputs.pandas_input_fn(
       x=test_x,
       y=test_y,
       shuffle=False,
@@ -215,7 +217,7 @@ def main(_):
 
   # Serving input fn is used to create saved models.
   serving_input_fn = (
-      tf.estimator.export.build_parsing_serving_input_receiver_fn(
+      tf_estimator.export.build_parsing_serving_input_receiver_fn(
           feature_spec=fc.make_parse_example_spec(feature_columns)))
 
   # Model config defines the model strcutre for the estimator.
