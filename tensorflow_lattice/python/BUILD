@@ -154,6 +154,7 @@ py_library(
         ":rtl_layer",
         # absl/logging dep,
         # tensorflow dep,
+        # tensorflow:tensorflow_estimator dep,
     ],
 )
 
@@ -171,6 +172,8 @@ py_test(
         # absl/logging dep,
         # sklearn dep,
         # tensorflow dep,
+        # tensorflow:tensorflow_compat_v1_estimator dep,
+        # tensorflow:tensorflow_estimator dep,
     ],
 )
 
@@ -387,6 +390,7 @@ py_library(
         # numpy dep,
         # six dep,
         # tensorflow dep,
+        # tensorflow:tensorflow_estimator dep,
     ],
 )
 

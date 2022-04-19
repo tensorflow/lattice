@@ -39,6 +39,7 @@ import numpy as np
 import six
 
 import tensorflow as tf
+from tensorflow import estimator as tf_estimator
 
 # Layer names used for layers in the premade models.
 AGGREGATION_LAYER_NAME = 'tfl_aggregation'
@@ -1064,7 +1065,7 @@ def _verify_prefitting_model(prefitting_model, feature_names):
   """Checks that prefitting_model has the proper input layer."""
   if isinstance(prefitting_model, tf.keras.Model):
     layer_names = [layer.name for layer in prefitting_model.layers]
-  elif isinstance(prefitting_model, tf.estimator.Estimator):
+  elif isinstance(prefitting_model, tf_estimator.Estimator):
     layer_names = prefitting_model.get_variable_names()
   else:
     raise ValueError('Invalid model type for prefitting_model: {}'.format(

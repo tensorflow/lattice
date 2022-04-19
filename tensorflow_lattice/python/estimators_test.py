@@ -25,7 +25,9 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets import load_boston
 import tensorflow as tf
+from tensorflow import estimator as tf_estimator
 from tensorflow import feature_column as fc
+from tensorflow.compat.v1 import estimator as tf_compat_v1_estimator
 from tensorflow_lattice.python import configs
 from tensorflow_lattice.python import estimators
 from tensorflow_lattice.python import model_info
@@ -268,7 +270,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
 
       return _input_fn
     else:
-      return tf.compat.v1.estimator.inputs.pandas_input_fn(
+      return tf_compat_v1_estimator.inputs.pandas_input_fn(
           x=x,
           y=y,
           batch_size=batch_size,
@@ -654,7 +656,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
 
     # Serving input fn is used to create saved models.
     serving_input_fn = (
-        tf.estimator.export.build_parsing_serving_input_receiver_fn(
+        tf_estimator.export.build_parsing_serving_input_receiver_fn(
             feature_spec=fc.make_parse_example_spec(self.heart_feature_columns))
     )
     saved_model_path = estimator.export_saved_model(estimator.model_dir,
@@ -712,7 +714,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
 
     # Serving input fn is used to create saved models.
     serving_input_fn = (
-        tf.estimator.export.build_parsing_serving_input_receiver_fn(
+        tf_estimator.export.build_parsing_serving_input_receiver_fn(
             feature_spec=fc.make_parse_example_spec(feature_columns)))
     saved_model_path = estimator.export_saved_model(estimator.model_dir,
                                                     serving_input_fn)
@@ -787,7 +789,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
 
     # Serving input fn is used to create saved models.
     serving_input_fn = (
-        tf.estimator.export.build_parsing_serving_input_receiver_fn(
+        tf_estimator.export.build_parsing_serving_input_receiver_fn(
             feature_spec=fc.make_parse_example_spec(self.heart_feature_columns))
     )
     saved_model_path = estimator.export_saved_model(estimator.model_dir,
