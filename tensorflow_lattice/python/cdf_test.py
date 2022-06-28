@@ -93,9 +93,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
     return math.sin(x[0]) + x[0] / 3.0
 
   def _SinPlusXNd(self, x):
-    res = 0.0
-    for y in x:
-      res = res + math.sin(y) + y / 5.0
+    res = np.sum([math.sin(y) + y / 5.0 for y in x])
     return res
 
   def _SinOfSum(self, x):
