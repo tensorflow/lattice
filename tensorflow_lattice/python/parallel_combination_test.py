@@ -30,6 +30,7 @@ class ParallelCombinationTest(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(ParallelCombinationTest, self).setUp()
     self.disable_all = False
+    tf.keras.utils.set_random_seed(42)
 
   def testParallelCombinationSingleInput(self):
     if self.disable_all:

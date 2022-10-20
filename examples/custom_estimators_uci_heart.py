@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Example usage of TFL layers in custom estimators.
 
 This example trains a TFL custom estimators on the UCI heart dataset.

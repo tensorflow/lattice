@@ -33,10 +33,11 @@ from tensorflow_lattice.python import test_utils
 class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
+    super(CategoricalCalibrationLayerTest, self).setUp()
     self._disable_all = False
     self._loss_eps = 1e-2
     self._loss_diff_eps = 1e-4
-    super(CategoricalCalibrationLayerTest, self).setUp()
+    tf.keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()

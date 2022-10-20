@@ -21,7 +21,6 @@ import collections
 import copy
 import enum
 from . import utils
-import six
 import tensorflow as tf
 
 

@@ -26,7 +26,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow_lattice.python import linear_layer as linl
-from tensorflow_lattice.python import linear_lib
 from tensorflow_lattice.python import test_utils
 from tensorflow_lattice.python import utils
 
@@ -37,6 +36,10 @@ _SMALL_EPS = 1e-6
 
 class LinearTest(parameterized.TestCase, tf.test.TestCase):
   """Tests for TFL linear layer."""
+
+  def setUp(self):
+    super(LinearTest, self).setUp()
+    tf.keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()

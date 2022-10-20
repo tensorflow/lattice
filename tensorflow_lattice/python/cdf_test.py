@@ -28,8 +28,9 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(CdfLayerTest, self).setUp()
     self.disable_all = False
-    self.loss_eps = 0.0002
+    self.loss_eps = 0.001
     self.small_eps = 1e-6
+    tf.keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     tf.keras.backend.clear_session()
@@ -93,10 +94,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
     return math.sin(x[0]) + x[0] / 3.0
 
   def _SinPlusXNd(self, x):
-    res = 0.0
-    for y in x:
-      res = res + math.sin(y) + y / 5.0
-    return res
+    return np.sum([math.sin(y) + y / 5.0 for y in x])
 
   def _SinOfSum(self, x):
     return math.sin(sum(x))
@@ -205,7 +203,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 128,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinPlusX,
@@ -237,7 +235,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -270,7 +268,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 200,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._ScaledSum,
@@ -282,12 +280,12 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
       ("relu6", "mean", "fixed", 0.213702),
       ("relu6", "mean", "learned_shared", 0.213702),
       ("relu6", "mean", "learned_per_input", 0.213702),
-      ("relu6", "geometric_mean", "fixed", 0.220125),
-      ("relu6", "geometric_mean", "learned_shared", 0.220122),
-      ("relu6", "geometric_mean", "learned_per_input", 0.220124),
-      ("sigmoid", "mean", "fixed", 0.202649),
-      ("sigmoid", "mean", "learned_shared", 0.202543),
-      ("sigmoid", "mean", "learned_per_input", 0.202625),
+      ("relu6", "geometric_mean", "fixed", 0.215817),
+      ("relu6", "geometric_mean", "learned_shared", 0.215806),
+      ("relu6", "geometric_mean", "learned_per_input", 0.215816),
+      ("sigmoid", "mean", "fixed", 0.205054),
+      ("sigmoid", "mean", "learned_shared", 0.204950),
+      ("sigmoid", "mean", "learned_per_input", 0.205030),
       ("sigmoid", "geometric_mean", "fixed", 0.204511),
       ("sigmoid", "geometric_mean", "learned_shared", 0.204406),
       ("sigmoid", "geometric_mean", "learned_per_input", 0.204488),
@@ -303,7 +301,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 200,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -336,7 +334,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformlyExtendedRange,
         "y_function": self._Sin,
@@ -345,18 +343,18 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
 
   @parameterized.parameters(
-      ("relu6", "mean", "fixed", 0.340598),
-      ("relu6", "mean", "learned_shared", 0.340574),
-      ("relu6", "mean", "learned_per_input", 0.340581),
-      ("relu6", "geometric_mean", "fixed", 0.375162),
-      ("relu6", "geometric_mean", "learned_shared", 0.375231),
-      ("relu6", "geometric_mean", "learned_per_input", 0.375171),
+      ("relu6", "mean", "fixed", 0.339018),
+      ("relu6", "mean", "learned_shared", 0.338988),
+      ("relu6", "mean", "learned_per_input", 0.339002),
+      ("relu6", "geometric_mean", "fixed", 0.370072),
+      ("relu6", "geometric_mean", "learned_shared", 0.370105),
+      ("relu6", "geometric_mean", "learned_per_input", 0.370144),
       ("sigmoid", "mean", "fixed", 0.340095),
       ("sigmoid", "mean", "learned_shared", 0.340094),
       ("sigmoid", "mean", "learned_per_input", 0.340094),
-      ("sigmoid", "geometric_mean", "fixed", 0.370790),
-      ("sigmoid", "geometric_mean", "learned_shared", 0.370794),
-      ("sigmoid", "geometric_mean", "learned_per_input", 0.370792),
+      ("sigmoid", "geometric_mean", "fixed", 0.368851),
+      ("sigmoid", "geometric_mean", "learned_shared", 0.368849),
+      ("sigmoid", "geometric_mean", "learned_per_input", 0.368850),
   )
   def test2DimInputOutOfBounds(self, activation, reduction, input_scaling_type,
                                expected_loss):
@@ -369,7 +367,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGridExtendedRange,
         "y_function": self._SinOfSum,
@@ -378,18 +376,18 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
 
   @parameterized.parameters(
-      (6, 6, "relu6", "mean", "fixed", 3, 0.072880),
-      (8, 8, "relu6", "mean", "learned_shared", 4, 0.080443),
-      (8, 8, "relu6", "mean", "learned_per_input", 4, 0.080553),
-      (3, 3, "relu6", "geometric_mean", "fixed", 3, 0.034602),
+      (6, 6, "relu6", "mean", "fixed", 3, 0.070477),
+      (8, 8, "relu6", "mean", "learned_shared", 4, 0.076625),
+      (8, 8, "relu6", "mean", "learned_per_input", 4, 0.076696),
+      (3, 3, "relu6", "geometric_mean", "fixed", 3, 0.031802),
       (4, 4, "relu6", "geometric_mean", "learned_shared", 2, 0.049083),
-      (5, 5, "relu6", "geometric_mean", "learned_per_input", 2.5, 0.070620),
-      (6, 6, "sigmoid", "mean", "fixed", 3, 0.074043),
+      (5, 5, "relu6", "geometric_mean", "learned_per_input", 2.5, 0.059841),
+      (6, 6, "sigmoid", "mean", "fixed", 3, 0.075446),
       (8, 8, "sigmoid", "mean", "learned_shared", 4, 0.087095),
       (8, 8, "sigmoid", "mean", "learned_per_input", 4, 0.087091),
-      (3, 3, "sigmoid", "geometric_mean", "fixed", 3, 0.034256),
-      (4, 4, "sigmoid", "geometric_mean", "learned_shared", 2, 0.042386),
-      (5, 5, "sigmoid", "geometric_mean", "learned_per_input", 2.5, 0.061064),
+      (3, 3, "sigmoid", "geometric_mean", "fixed", 3, 0.033214),
+      (4, 4, "sigmoid", "geometric_mean", "learned_shared", 2, 0.044370),
+      (5, 5, "sigmoid", "geometric_mean", "learned_per_input", 2.5, 0.056680),
   )
   def testMultiUnitOutputSparsity(self, input_dims, units, activation,
                                   reduction, input_scaling_type,
@@ -408,7 +406,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Square,
@@ -442,7 +440,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": tf.keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -451,30 +449,30 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAlmostEqual(loss, expected_loss, delta=self.loss_eps)
 
   @parameterized.parameters(
-      (2, 10, 5, "relu6", "mean", "fixed", 27),
-      (2, 10, 5, "relu6", "mean", "learned_shared", 32),
-      (2, 10, 5, "relu6", "mean", "learned_per_input", 32),
-      (2, 10, 5, "relu6", "geometric_mean", "fixed", 33),
-      (2, 10, 5, "relu6", "geometric_mean", "learned_shared", 38),
-      (2, 10, 5, "relu6", "geometric_mean", "learned_per_input", 38),
-      (4, 20, 10, "relu6", "mean", "fixed", 27),
-      (4, 20, 10, "relu6", "mean", "learned_shared", 32),
-      (4, 20, 10, "relu6", "mean", "learned_per_input", 32),
-      (4, 20, 10, "relu6", "geometric_mean", "fixed", 33),
-      (4, 20, 10, "relu6", "geometric_mean", "learned_shared", 38),
-      (4, 20, 10, "relu6", "geometric_mean", "learned_per_input", 38),
-      (2, 10, 5, "sigmoid", "mean", "fixed", 25),
-      (2, 10, 5, "sigmoid", "mean", "learned_shared", 30),
-      (2, 10, 5, "sigmoid", "mean", "learned_per_input", 30),
-      (2, 10, 5, "sigmoid", "geometric_mean", "fixed", 31),
-      (2, 10, 5, "sigmoid", "geometric_mean", "learned_shared", 36),
-      (2, 10, 5, "sigmoid", "geometric_mean", "learned_per_input", 36),
-      (4, 20, 10, "sigmoid", "mean", "fixed", 25),
-      (4, 20, 10, "sigmoid", "mean", "learned_shared", 30),
-      (4, 20, 10, "sigmoid", "mean", "learned_per_input", 30),
-      (4, 20, 10, "sigmoid", "geometric_mean", "fixed", 31),
-      (4, 20, 10, "sigmoid", "geometric_mean", "learned_shared", 36),
-      (4, 20, 10, "sigmoid", "geometric_mean", "learned_per_input", 36),
+      (2, 10, 5, "relu6", "mean", "fixed", 30),
+      (2, 10, 5, "relu6", "mean", "learned_shared", 35),
+      (2, 10, 5, "relu6", "mean", "learned_per_input", 35),
+      (2, 10, 5, "relu6", "geometric_mean", "fixed", 36),
+      (2, 10, 5, "relu6", "geometric_mean", "learned_shared", 41),
+      (2, 10, 5, "relu6", "geometric_mean", "learned_per_input", 41),
+      (4, 20, 10, "relu6", "mean", "fixed", 30),
+      (4, 20, 10, "relu6", "mean", "learned_shared", 35),
+      (4, 20, 10, "relu6", "mean", "learned_per_input", 35),
+      (4, 20, 10, "relu6", "geometric_mean", "fixed", 36),
+      (4, 20, 10, "relu6", "geometric_mean", "learned_shared", 41),
+      (4, 20, 10, "relu6", "geometric_mean", "learned_per_input", 41),
+      (2, 10, 5, "sigmoid", "mean", "fixed", 28),
+      (2, 10, 5, "sigmoid", "mean", "learned_shared", 33),
+      (2, 10, 5, "sigmoid", "mean", "learned_per_input", 33),
+      (2, 10, 5, "sigmoid", "geometric_mean", "fixed", 34),
+      (2, 10, 5, "sigmoid", "geometric_mean", "learned_shared", 39),
+      (2, 10, 5, "sigmoid", "geometric_mean", "learned_per_input", 39),
+      (4, 20, 10, "sigmoid", "mean", "fixed", 28),
+      (4, 20, 10, "sigmoid", "mean", "learned_shared", 33),
+      (4, 20, 10, "sigmoid", "mean", "learned_per_input", 33),
+      (4, 20, 10, "sigmoid", "geometric_mean", "fixed", 34),
+      (4, 20, 10, "sigmoid", "geometric_mean", "learned_shared", 39),
+      (4, 20, 10, "sigmoid", "geometric_mean", "learned_per_input", 39),
   )
   def testGraphSize(self, input_dims, num_keypoints, units, activation,
                     reduction, input_scaling_type, expected_graph_size):

@@ -39,6 +39,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(CannedEstimatorsTest, self).setUp()
     self.eps = 0.001
+    tf.keras.utils.set_random_seed(42)
 
     # UCI Statlog (Heart) dataset.
     heart_csv_file = tf.keras.utils.get_file(
@@ -351,8 +352,8 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         model_config=model_config,
         feature_analysis_input_fn=self._GetHeartTrainInputFn(num_epochs=1),
         prefitting_input_fn=self._GetHeartTrainInputFn(num_epochs=50),
-        optimizer=tf.keras.optimizers.Adam(0.01),
-        prefitting_optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01),
+        prefitting_optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetHeartTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetHeartTestInputFn())
     logging.info('Calibrated lattice ensemble classifier results:')
@@ -386,7 +387,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         feature_columns=feature_columns,
         model_config=model_config,
         feature_analysis_input_fn=self._GetHeartTrainInputFn(num_epochs=1),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetHeartTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetHeartTestInputFn())
     logging.info('Calibrated lattice classifier results:')
@@ -434,7 +435,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         weight_column=weight_column,
         feature_analysis_weight_column=feature_analysis_weight_column,
         feature_analysis_weight_reduction=feature_analysis_weight_reduction,
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetHeartTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetHeartTestInputFn())
     logging.info('Calibrated linear classifier results:')
@@ -501,8 +502,8 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         model_config=model_config,
         feature_analysis_input_fn=self._GetBostonTrainInputFn(num_epochs=1),
         prefitting_input_fn=self._GetBostonTrainInputFn(num_epochs=50),
-        optimizer=tf.keras.optimizers.Adam(0.05),
-        prefitting_optimizer=tf.keras.optimizers.Adam(0.05))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.05),
+        prefitting_optimizer=tf.keras.optimizers.legacy.Adam(0.05))
     estimator.train(input_fn=self._GetBostonTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetBostonTestInputFn())
     logging.info('Calibrated lattice ensemble regressor results:')
@@ -536,7 +537,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         feature_columns=feature_columns,
         model_config=model_config,
         feature_analysis_input_fn=self._GetBostonTrainInputFn(num_epochs=1),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetBostonTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetBostonTestInputFn())
     logging.info('Calibrated lattice regressor results:')
@@ -572,7 +573,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         feature_columns=feature_columns,
         model_config=model_config,
         feature_analysis_input_fn=self._GetBostonTrainInputFn(num_epochs=1),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetBostonTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetBostonTestInputFn())
     logging.info('Calibrated linear regressor results:')
@@ -609,7 +610,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         feature_columns=feature_columns,
         model_config=model_config,
         feature_analysis_input_fn=self._GetBostonTrainInputFn(num_epochs=1),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetBostonTrainInputFn(num_epochs=200))
     results = estimator.evaluate(input_fn=self._GetBostonTestInputFn())
     logging.info('Calibrated linear regressor results:')
@@ -650,8 +651,8 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         model_config=model_config,
         feature_analysis_input_fn=self._GetHeartTrainInputFn(num_epochs=1),
         prefitting_input_fn=self._GetHeartTrainInputFn(num_epochs=5),
-        optimizer=tf.keras.optimizers.Adam(0.01),
-        prefitting_optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01),
+        prefitting_optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetHeartTrainInputFn(num_epochs=20))
 
     # Serving input fn is used to create saved models.
@@ -708,8 +709,8 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         model_config=model_config,
         feature_analysis_input_fn=self._GetBostonTrainInputFn(num_epochs=1),
         prefitting_input_fn=self._GetBostonTrainInputFn(num_epochs=50),
-        optimizer=tf.keras.optimizers.Adam(0.05),
-        prefitting_optimizer=tf.keras.optimizers.Adam(0.05))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.05),
+        prefitting_optimizer=tf.keras.optimizers.legacy.Adam(0.05))
     estimator.train(input_fn=self._GetBostonTrainInputFn(num_epochs=200))
 
     # Serving input fn is used to create saved models.
@@ -742,7 +743,7 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         model_config=model_config,
         feature_analysis_input_fn=self._GetHeartTrainInputFn(
             num_epochs=1, tfds=tfds),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(
         input_fn=self._GetHeartTrainInputFn(num_epochs=200, tfds=tfds))
     results = estimator.evaluate(input_fn=self._GetHeartTestInputFn(tfds=tfds))
@@ -783,8 +784,8 @@ class CannedEstimatorsTest(parameterized.TestCase, tf.test.TestCase):
         model_config=model_config,
         feature_analysis_input_fn=self._GetHeartTrainInputFn(num_epochs=1),
         prefitting_input_fn=self._GetHeartTrainInputFn(num_epochs=5),
-        optimizer=tf.keras.optimizers.Adam(0.01),
-        prefitting_optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01),
+        prefitting_optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     estimator.train(input_fn=self._GetHeartTrainInputFn(num_epochs=20))
 
     # Serving input fn is used to create saved models.
