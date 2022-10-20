@@ -33,7 +33,6 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow_lattice.python import parallel_combination_layer as parallel_combination
 from tensorflow_lattice.python import pwl_calibration_layer as keras_layer
-from tensorflow_lattice.python import pwl_calibration_lib as pwl_lib
 from tensorflow_lattice.python import pwl_calibration_sonnet_module as sonnet_module
 from tensorflow_lattice.python import test_utils
 from tensorflow_lattice.python import utils
@@ -60,10 +59,11 @@ class CalibrateWithSeparateMissing(tf.keras.layers.Layer):
 class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
+    super(PwlCalibrationLayerTest, self).setUp()
     self._disable_all = False
     self._loss_eps = 0.0001
     self._small_eps = 1e-6
-    super(PwlCalibrationLayerTest, self).setUp()
+    tf.keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()

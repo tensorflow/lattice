@@ -30,6 +30,7 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(RTLTest, self).setUp()
     self.disable_all = False
+    tf.keras.utils.set_random_seed(42)
 
   def testRTLInputShapes(self):
     if self.disable_all:

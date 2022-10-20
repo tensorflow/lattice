@@ -101,6 +101,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     super(PremadeTest, self).setUp()
+    tf.keras.utils.set_random_seed(42)
 
     # UCI Statlog (Heart) dataset.
     heart_csv_file = tf.keras.utils.get_file(
@@ -261,12 +262,12 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
 
   class Encoder(json.JSONEncoder):
 
-    def default(self, obj):
-      if isinstance(obj, np.int32):
-        return int(obj)
-      if isinstance(obj, np.ndarray):
-        return obj.tolist()
-      return json.JSONEncoder.default(self, obj)
+    def default(self, o):
+      if isinstance(o, np.int32):
+        return int(o)
+      if isinstance(o, np.ndarray):
+        return o.tolist()
+      return json.JSONEncoder.default(self, o)
 
   def testSetRandomLattices(self):
     random_model_config = configs.CalibratedLatticeEnsembleConfig(
@@ -482,7 +483,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         prefitting_model_config)
     prefitting_model.compile(
         loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     prefitting_model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -497,7 +498,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     model.compile(
         loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
         metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -513,8 +514,8 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.parameters(
       ('hypercube', 'all_vertices', 0, 0.85),
       ('simplex', 'all_vertices', 0, 0.88),
-      ('hypercube', 'kronecker_factored', 2, 0.85),
-      ('hypercube', 'kronecker_factored', 4, 0.85),
+      ('hypercube', 'kronecker_factored', 2, 0.82),
+      ('hypercube', 'kronecker_factored', 4, 0.82),
   )
   def testCalibratedLatticeEnsembleRTL(self, interpolation, parameterization,
                                        num_terms, expected_minimum_auc):
@@ -551,7 +552,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     model.compile(
         loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
         metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -600,7 +601,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     model.compile(
         loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
         metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     model.fit(
         self.heart_train_x[:5],
         self.heart_train_y,
@@ -642,7 +643,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     model.compile(
         loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
         metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -653,7 +654,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         self.heart_test_x, self.heart_test_y, verbose=False)
     logging.info('Calibrated random lattice ensemble classifier results:')
     logging.info(results)
-    self.assertGreater(results[1], 0.85)
+    self.assertGreater(results[1], 0.82)
 
     # Now let's try a CalibratedLattice
     self._ResetAllBackends()
@@ -673,7 +674,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     model.compile(
         loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
         metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.Adam(0.01))
+        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
     model.fit(
         self.heart_train_x[:5],
         self.heart_train_y,
@@ -719,7 +720,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         feature_config.regularizer_configs = None
     model = premade.CalibratedLatticeEnsemble(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
@@ -763,7 +764,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
       model_config.regularizer_configs = None
     model = premade.CalibratedLatticeEnsemble(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
@@ -802,7 +803,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         feature_config.regularizer_configs = None
     model = premade.CalibratedLattice(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
@@ -828,7 +829,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.CalibratedLinear(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
@@ -855,7 +856,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.AggregateFunction(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(0.1))
+    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:

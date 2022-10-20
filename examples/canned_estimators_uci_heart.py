@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Example usage of TFL canned estimators.
 
 This example trains several TFL canned estimators on the UCI heart dataset.
@@ -239,7 +238,7 @@ def main(_):
       feature_columns=feature_columns,
       model_config=model_config,
       feature_analysis_input_fn=feature_analysis_input_fn,
-      optimizer=tf.keras.optimizers.Adam(FLAGS.learning_rate))
+      optimizer=tf.keras.optimizers.legacy.Adam(FLAGS.learning_rate))
   estimator.train(input_fn=train_input_fn)
   results = estimator.evaluate(input_fn=test_input_fn)
   print('Calibrated linear results: {}'.format(results))
@@ -260,7 +259,7 @@ def main(_):
       feature_columns=feature_columns,
       model_config=model_config,
       feature_analysis_input_fn=feature_analysis_input_fn,
-      optimizer=tf.keras.optimizers.Adam(FLAGS.learning_rate))
+      optimizer=tf.keras.optimizers.legacy.Adam(FLAGS.learning_rate))
   estimator.train(input_fn=train_input_fn)
   results = estimator.evaluate(input_fn=test_input_fn)
   print('Calibrated lattice results: {}'.format(results))
@@ -285,7 +284,7 @@ def main(_):
       feature_columns=feature_columns,
       model_config=model_config,
       feature_analysis_input_fn=feature_analysis_input_fn,
-      optimizer=tf.keras.optimizers.Adam(FLAGS.learning_rate))
+      optimizer=tf.keras.optimizers.legacy.Adam(FLAGS.learning_rate))
   estimator.train(input_fn=train_input_fn)
   results = estimator.evaluate(input_fn=test_input_fn)
   print('Random ensemble results: {}'.format(results))
@@ -316,7 +315,7 @@ def main(_):
       feature_analysis_input_fn=feature_analysis_input_fn,
       # prefitting_input_fn is required to train the prefitting model.
       prefitting_input_fn=prefitting_input_fn,
-      optimizer=tf.keras.optimizers.Adam(FLAGS.learning_rate))
+      optimizer=tf.keras.optimizers.legacy.Adam(FLAGS.learning_rate))
   estimator.train(input_fn=train_input_fn)
   results = estimator.evaluate(input_fn=test_input_fn)
   print('Crystals ensemble results: {}'.format(results))

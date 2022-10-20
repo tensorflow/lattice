@@ -88,8 +88,8 @@ def evaluate_with_hypercube_interpolation(inputs, scale, bias, kernel, units,
         `(batch_size, dims)`.
     scale: Kronecker-Factored Lattice scale of shape `(units, num_terms)`.
     bias: Kronecker-Factored Lattice bias of shape `(units)`.
-    kernel: Kronecker-Factored Lattice kernel of shape `(1, lattice_sizes, units
-      * dims, num_terms)`.
+    kernel: Kronecker-Factored Lattice kernel of shape
+      `(1, lattice_sizes, units * dims, num_terms)`.
     units: Output dimension of the Kronecker-Factored Lattice.
     num_terms: Number of independently trained submodels per unit, the outputs
       of which are averaged to get the final output.

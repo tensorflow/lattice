@@ -25,9 +25,6 @@ import tempfile
 import xml.etree.cElementTree as cElementTree
 
 from . import model_info
-import matplotlib.pyplot as plt
-# Needed for pyplot 3d projections.
-from mpl_toolkits.mplot3d import Axes3D as _  # pylint: disable=unused-import
 import numpy as np
 
 
@@ -103,6 +100,7 @@ def draw_model_graph(model_graph,
       with font rendering issues.
   """
   import graphviz  # pylint: disable=g-import-not-at-top
+  import matplotlib.pyplot as plt  # pylint: disable=g-import-not-at-top
 
   dot = graphviz.Digraph(format=image_format, engine='dot')
   dot.graph_attr['ranksep'] = '0.75'
@@ -201,6 +199,7 @@ def plot_calibrator_nodes(nodes,
   Returns:
     Pyplot figure object containing the visualisation.
   """
+  import matplotlib.pyplot as plt  # pylint: disable=g-import-not-at-top
 
   with plt.style.context('seaborn-whitegrid'):
     plt.rc('font', size=font_size)
@@ -283,6 +282,7 @@ def plot_all_calibrators(model_graph, num_cols=4, image_format='png', **kwargs):
     **kwargs: args passed to plot_feature_calibrator and plot_calibrator_nodes.
   """
   import google.colab.widgets  # pylint: disable=g-import-not-at-top
+  import matplotlib.pyplot as plt  # pylint: disable=g-import-not-at-top
 
   feature_infos = _input_feature_nodes(model_graph)
   feature_names = sorted([feature_info.name for feature_info in feature_infos])
@@ -392,6 +392,8 @@ def _plot_categorical_calibrator(categorical_calibrator_nodes, axes,
       individual calibration layers for each lattice in a lattice ensemble
       constructed from `configs.CalibratedLatticeEnsembleConfig`.
   """
+  import matplotlib.pyplot as plt  # pylint: disable=g-import-not-at-top
+
   feature_info = categorical_calibrator_nodes[0].input_node
   assert feature_info.is_categorical
 
@@ -472,6 +474,7 @@ def _plot_pwl_calibrator(pwl_calibrator_nodes, axes, plot_submodel_calibration):
       individual calibration layers for each lattice in a lattice ensemble
       constructed from `configs.CalibratedLatticeEnsembleConfig`.
   """
+  import matplotlib.pyplot as plt  # pylint: disable=g-import-not-at-top
 
   if isinstance(pwl_calibrator_nodes[0].input_node,
                 model_info.InputFeatureNode):
@@ -569,10 +572,16 @@ def plot_outputs(inputs, outputs_map, file_path=None, figsize=(20, 20)):
   Returns:
     Pyplot object containing visualisation.
   """
+  # pylint: disable=g-import-not-at-top
+  import matplotlib.pyplot as plt
+  # Needed for pyplot 3d projections.
+  from mpl_toolkits.mplot3d import Axes3D as _  # pylint: disable=unused-import
+  # pylint: enable=g-import-not-at-top
+
   legend = []
   if isinstance(inputs, tuple):
     figure = plt.figure(figsize=figsize)
-    axes = figure.gca(projection='3d')
+    axes = figure.add_subplot(projection='3d')
     # 4 colors is enough because no one would ever think of drawing 5 or more
     # 3-d surfaces on same graph due to them looking like fabulous mess anyway.
     colors = ['dodgerblue', 'forestgreen', 'saddiebrown', 'lightsalmon']

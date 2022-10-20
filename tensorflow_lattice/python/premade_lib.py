@@ -774,6 +774,7 @@ def build_calibrated_lattice_ensemble_layer(calibration_input_layer,
     if model_config.separate_calibrators:
       num_inputs = model_config.num_lattices * model_config.lattice_rank
       # We divide the number of inputs semi-evenly by the number of features.
+      # TODO: support setting number of calibration units.
       for i in range(num_features):
         units[i] = ((i + 1) * num_inputs // num_features -
                     i * num_inputs // num_features)
@@ -1037,6 +1038,12 @@ def construct_prefitting_model_config(model_config, feature_names=None):
   if model_config.lattices != 'crystals':
     raise ValueError('model_config.lattices must be set to \'crystals\'.')
   feature_names = _canonical_feature_names(model_config, feature_names)
+
+  if len(feature_names) <= model_config.lattice_rank:
+    raise ValueError(
+        'model_config.lattice_rank must be less than the number of features '
+        'when using \'crystals\' algorithm. If you want to use all features in '
+        'every lattice, set model_config.lattices to \'random\'.')
 
   # Make a copy of the model config provided and set all pairs covered.
   prefitting_model_config = copy.deepcopy(model_config)
