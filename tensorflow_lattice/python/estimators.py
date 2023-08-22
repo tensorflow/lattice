@@ -90,7 +90,6 @@ from tensorflow import estimator as tf_estimator
 
 from tensorflow.python.feature_column import feature_column as fc  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.feature_column import feature_column_v2 as fc2  # pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.keras.utils import losses_utils  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.training import training_util  # pylint: disable=g-direct-tensorflow-import
 from tensorflow_estimator.python.estimator import estimator as estimator_lib
 from tensorflow_estimator.python.estimator.canned import optimizers
@@ -915,7 +914,7 @@ class CannedClassifier(estimator_lib.EstimatorV2):
                prefitting_steps=None,
                config=None,
                warm_start_from=None,
-               loss_reduction=losses_utils.ReductionV2.SUM_OVER_BATCH_SIZE,
+               loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
                loss_fn=None,
                dtype=tf.float32):
     """Initializes a `CannedClassifier` instance.
@@ -1085,7 +1084,7 @@ class CannedRegressor(estimator_lib.EstimatorV2):
                prefitting_steps=None,
                config=None,
                warm_start_from=None,
-               loss_reduction=losses_utils.ReductionV2.SUM_OVER_BATCH_SIZE,
+               loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
                loss_fn=None,
                dtype=tf.float32):
     """Initializes a `CannedRegressor` instance.

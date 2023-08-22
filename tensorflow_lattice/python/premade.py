@@ -137,25 +137,21 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
 
   def get_config(self):
     """Returns a configuration dictionary."""
-    config = super(CalibratedLatticeEnsemble, self).get_config()
-    config['model_config'] = tf.keras.utils.serialize_keras_object(
-        self.model_config)
+    config = {'name': self.name, 'trainable': self.trainable}
+    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+        self.model_config
+    )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model = super(CalibratedLatticeEnsemble, cls).from_config(
-        config, custom_objects=custom_objects)
-    try:
-      model_config = tf.keras.utils.deserialize_keras_object(
-          config.get('model_config'), custom_objects=custom_objects)
-      premade_lib.verify_config(model_config)
-      model.model_config = model_config
-    except ValueError:
-      logging.warning(
-          'Could not load model_config. Constructing model without it: %s',
-          str(config.get('model_config')))
-    return model
+    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+        config.get('model_config'), custom_objects=custom_objects
+    )
+    premade_lib.verify_config(model_config)
+    return cls(model_config,
+               name=config.get('name', None),
+               trainable=config.get('trainable', True))
 
 
 class CalibratedLattice(tf.keras.Model):
@@ -251,25 +247,21 @@ class CalibratedLattice(tf.keras.Model):
 
   def get_config(self):
     """Returns a configuration dictionary."""
-    config = super(CalibratedLattice, self).get_config()
-    config['model_config'] = tf.keras.utils.serialize_keras_object(
-        self.model_config)
+    config = {'name': self.name, 'trainable': self.trainable}
+    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+        self.model_config
+    )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model = super(CalibratedLattice, cls).from_config(
-        config, custom_objects=custom_objects)
-    try:
-      model_config = tf.keras.utils.deserialize_keras_object(
-          config.get('model_config'), custom_objects=custom_objects)
-      premade_lib.verify_config(model_config)
-      model.model_config = model_config
-    except ValueError:
-      logging.warning(
-          'Could not load model_config. Constructing model without it: %s',
-          str(config.get('model_config')))
-    return model
+    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+        config.get('model_config'), custom_objects=custom_objects
+    )
+    premade_lib.verify_config(model_config)
+    return cls(model_config,
+               name=config.get('name', None),
+               trainable=config.get('trainable', True))
 
 
 class CalibratedLinear(tf.keras.Model):
@@ -368,25 +360,21 @@ class CalibratedLinear(tf.keras.Model):
 
   def get_config(self):
     """Returns a configuration dictionary."""
-    config = super(CalibratedLinear, self).get_config()
-    config['model_config'] = tf.keras.utils.serialize_keras_object(
-        self.model_config)
+    config = {'name': self.name, 'trainable': self.trainable}
+    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+        self.model_config
+    )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model = super(CalibratedLinear, cls).from_config(
-        config, custom_objects=custom_objects)
-    try:
-      model_config = tf.keras.utils.deserialize_keras_object(
-          config.get('model_config'), custom_objects=custom_objects)
-      premade_lib.verify_config(model_config)
-      model.model_config = model_config
-    except ValueError:
-      logging.warning(
-          'Could not load model_config. Constructing model without it: %s',
-          str(config.get('model_config')))
-    return model
+    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+        config.get('model_config'), custom_objects=custom_objects
+    )
+    premade_lib.verify_config(model_config)
+    return cls(model_config,
+               name=config.get('name', None),
+               trainable=config.get('trainable', True))
 
 
 # TODO: add support for tf.map_fn and inputs of shape (B, ?, input_dim)
@@ -490,25 +478,21 @@ class AggregateFunction(tf.keras.Model):
 
   def get_config(self):
     """Returns a configuration dictionary."""
-    config = super(AggregateFunction, self).get_config()
-    config['model_config'] = tf.keras.utils.serialize_keras_object(
-        self.model_config)
+    config = {'name': self.name, 'trainable': self.trainable}
+    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+        self.model_config
+    )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model = super(AggregateFunction, cls).from_config(
-        config, custom_objects=custom_objects)
-    try:
-      model_config = tf.keras.utils.deserialize_keras_object(
-          config.get('model_config'), custom_objects=custom_objects)
-      premade_lib.verify_config(model_config)
-      model.model_config = model_config
-    except ValueError:
-      logging.warning(
-          'Could not load model_config. Constructing model without it: %s',
-          str(config.get('model_config')))
-    return model
+    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+        config.get('model_config'), custom_objects=custom_objects
+    )
+    premade_lib.verify_config(model_config)
+    return cls(model_config,
+               name=config.get('name', None),
+               trainable=config.get('trainable', True))
 
 
 def get_custom_objects(custom_objects=None):

@@ -28,7 +28,6 @@ py_library(
     srcs = [
         "__init__.py",
         "layers/__init__.py",
-        "sonnet_modules/__init__.py",
     ],
     srcs_version = "PY2AND3",
     deps = [
@@ -36,6 +35,8 @@ py_library(
         "//tensorflow_lattice/python:categorical_calibration_layer",
         "//tensorflow_lattice/python:categorical_calibration_lib",
         "//tensorflow_lattice/python:cdf_layer",
+        "//tensorflow_lattice/python:conditional_cdf",
+        "//tensorflow_lattice/python:conditional_pwl_calibration",
         "//tensorflow_lattice/python:configs",
         "//tensorflow_lattice/python:estimators",
         "//tensorflow_lattice/python:kronecker_factored_lattice_layer",
@@ -50,7 +51,6 @@ py_library(
         "//tensorflow_lattice/python:premade_lib",
         "//tensorflow_lattice/python:pwl_calibration_layer",
         "//tensorflow_lattice/python:pwl_calibration_lib",
-        "//tensorflow_lattice/python:pwl_calibration_sonnet_module",
         "//tensorflow_lattice/python:rtl_layer",
         "//tensorflow_lattice/python:test_utils",
         "//tensorflow_lattice/python:utils",

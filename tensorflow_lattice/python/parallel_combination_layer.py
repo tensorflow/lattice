@@ -101,7 +101,10 @@ class ParallelCombination(keras.layers.Layer):
                 categorical_calibration_layer.CategoricalCalibration,
         }):
           self.calibration_layers.append(
-              keras.layers.deserialize(calibration_layer))
+              keras.layers.deserialize(
+                  calibration_layer, use_legacy_format=True
+              )
+          )
     self.single_output = single_output
 
   def append(self, calibration_layer):
@@ -152,8 +155,10 @@ class ParallelCombination(keras.layers.Layer):
   def get_config(self):
     """Standard Keras config for serialization."""
     config = {
-        "calibration_layers": [keras.layers.serialize(layer)
-                               for layer in self.calibration_layers],
+        "calibration_layers": [
+            keras.layers.serialize(layer, use_legacy_format=True)
+            for layer in self.calibration_layers
+        ],
         "single_output": self.single_output,
     }  # pyformat: disable
     config.update(super(ParallelCombination, self).get_config())

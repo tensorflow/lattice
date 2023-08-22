@@ -231,8 +231,15 @@ class KroneckerFactoredLattice(keras.layers.Layer):
     # of the initializer using partial functions if it accepts scale.
     parameters = inspect.signature(self.kernel_initializer).parameters.keys()
     if "scale" in parameters:
+      # initial_value needs the lambda because it is a class property and the
+      # second and third arguments to tf.cond should be functions,
+      # but read_value is already a function, so the lambda is not needed.
       kernel_initializer = functools.partial(
-          self.kernel_initializer, scale=self.scale.initialized_value())
+          self.kernel_initializer,
+          scale=tf.cond(
+              tf.compat.v1.is_variable_initialized(self.scale),
+              self.scale.read_value,
+              lambda: self.scale.initial_value))
     else:
       kernel_initializer = self.kernel_initializer
     self.kernel = self.add_weight(
@@ -297,9 +304,11 @@ class KroneckerFactoredLattice(keras.layers.Layer):
         "output_max": self.output_max,
         "clip_inputs": self.clip_inputs,
         "kernel_initializer":
-            keras.initializers.serialize(self.kernel_initializer),
+            keras.initializers.serialize(
+                self.kernel_initializer, use_legacy_format=True),
         "scale_initializer":
-            keras.initializers.serialize(self.scale_initializer),
+            keras.initializers.serialize(
+                self.scale_initializer, use_legacy_format=True),
     }  # pyformat: disable
     config.update(super(KroneckerFactoredLattice, self).get_config())
     return config

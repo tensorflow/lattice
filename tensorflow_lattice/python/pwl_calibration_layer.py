@@ -515,9 +515,11 @@ class PWLCalibration(keras.layers.Layer):
         "convexity": self.convexity,
         "is_cyclic": self.is_cyclic,
         "kernel_initializer":
-            keras.initializers.serialize(self.kernel_initializer),
+            keras.initializers.serialize(
+                self.kernel_initializer, use_legacy_format=True),
         "kernel_regularizer":
-            [keras.regularizers.serialize(r) for r in self.kernel_regularizer],
+            [keras.regularizers.serialize(r, use_legacy_format=True)
+             for r in self.kernel_regularizer],
         "impute_missing": self.impute_missing,
         "missing_input_value": self.missing_input_value,
         "num_projection_iterations": self.num_projection_iterations,
@@ -633,8 +635,7 @@ class UniformOutputInitializer(keras.initializers.Initializer):
           will have equal heights (i.e. `y[i+1] - y[i]` is constant).
         - if provided, all pieces of returned function will have equal slopes
           (i.e. `(y[i+1] - y[i]) / (x[i+1] - x[i])` is constant).
-    """
-    # pyformat: enable
+    """  # pyformat: enable
     pwl_calibration_lib.verify_hyperparameters(
         input_keypoints=keypoints,
         output_min=output_min,
@@ -687,8 +688,7 @@ class PWLCalibrationConstraints(keras.constraints.Constraint):
 
   Attributes:
     - All `__init__` arguments.
-  """
-  # pyformat: enable
+  """  # pyformat: enable
 
   def __init__(
       self,
@@ -778,8 +778,7 @@ class NaiveBoundsConstraints(keras.constraints.Constraint):
 
   Attributes:
     - All `__init__` arguments.
-  """
-  # pyformat: enable
+  """  # pyformat: enable
 
   def __init__(self, lower_bound=None, upper_bound=None):
     """Initializes an instance of `NaiveBoundsConstraints`.
@@ -822,8 +821,7 @@ class LaplacianRegularizer(keras.regularizers.Regularizer):
 
   Attributes:
     - All `__init__` arguments.
-  """
-  # pyformat: enable
+  """  # pyformat: enable
 
   def __init__(self, l1=0.0, l2=0.0, is_cyclic=False):
     """Initializes an instance of `LaplacianRegularizer`.
@@ -895,8 +893,7 @@ class HessianRegularizer(keras.regularizers.Regularizer):
 
   Attributes:
     - All `__init__` arguments.
-  """
-  # pyformat: enable
+  """  # pyformat: enable
 
   def __init__(self, l1=0.0, l2=0.0, is_cyclic=False):
     """Initializes an instance of `HessianRegularizer`.
@@ -976,8 +973,7 @@ class WrinkleRegularizer(keras.regularizers.Regularizer):
 
   Attributes:
     - All `__init__` arguments.
-  """
-  # pyformat: enable
+  """  # pyformat: enable
 
   def __init__(self, l1=0.0, l2=0.0, is_cyclic=False):
     """Initializes an instance of `WrinkleRegularizer`.
