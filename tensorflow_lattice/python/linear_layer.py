@@ -297,16 +297,20 @@ class Linear(keras.layers.Layer):
         "input_min": self.input_min,
         "input_max": self.input_max,
         "kernel_initializer":
-            keras.initializers.serialize(self.kernel_initializer),
+            keras.initializers.serialize(
+                self.kernel_initializer, use_legacy_format=True),
         "kernel_regularizer": [
-            keras.regularizers.serialize(r) for r in self.kernel_regularizer
+            keras.regularizers.serialize(r, use_legacy_format=True)
+            for r in self.kernel_regularizer
         ],
     }  # pyformat: disable
     if self.use_bias:
       config["bias_initializer"] = keras.initializers.serialize(
-          self.bias_initializer)
+          self.bias_initializer, use_legacy_format=True
+      )
       config["bias_regularizer"] = [
-          keras.regularizers.serialize(r) for r in self.bias_regularizer
+          keras.regularizers.serialize(r, use_legacy_format=True)
+          for r in self.bias_regularizer
       ]
 
     config.update(super(Linear, self).get_config())

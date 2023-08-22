@@ -92,24 +92,24 @@ class _Config(object):
       config.pop('__class__')
     if 'feature_configs' in config and config['feature_configs'] is not None:
       config['feature_configs'] = [
-          tf.keras.utils.serialize_keras_object(feature_config)
+          tf.keras.utils.legacy.serialize_keras_object(feature_config)
           for feature_config in config['feature_configs']
       ]
     if 'regularizer_configs' in config and config[
         'regularizer_configs'] is not None:
       config['regularizer_configs'] = [
-          tf.keras.utils.serialize_keras_object(regularizer_config)
+          tf.keras.utils.legacy.serialize_keras_object(regularizer_config)
           for regularizer_config in config['regularizer_configs']
       ]
     if ('reflects_trust_in' in config and
         config['reflects_trust_in'] is not None):
       config['reflects_trust_in'] = [
-          tf.keras.utils.serialize_keras_object(trust_config)
+          tf.keras.utils.legacy.serialize_keras_object(trust_config)
           for trust_config in config['reflects_trust_in']
       ]
     if 'dominates' in config and config['dominates'] is not None:
       config['dominates'] = [
-          tf.keras.utils.serialize_keras_object(dominance_config)
+          tf.keras.utils.legacy.serialize_keras_object(dominance_config)
           for dominance_config in config['dominates']
       ]
     return config
@@ -120,28 +120,32 @@ class _Config(object):
     config = copy.deepcopy(config)
     if 'feature_configs' in config and config['feature_configs'] is not None:
       config['feature_configs'] = [
-          tf.keras.utils.deserialize_keras_object(
-              feature_config, custom_objects=custom_objects)
+          tf.keras.utils.legacy.deserialize_keras_object(
+              feature_config, custom_objects=custom_objects
+          )
           for feature_config in config['feature_configs']
       ]
     if 'regularizer_configs' in config and config[
         'regularizer_configs'] is not None:
       config['regularizer_configs'] = [
-          tf.keras.utils.deserialize_keras_object(
-              regularizer_config, custom_objects=custom_objects)
+          tf.keras.utils.legacy.deserialize_keras_object(
+              regularizer_config, custom_objects=custom_objects
+          )
           for regularizer_config in config['regularizer_configs']
       ]
     if ('reflects_trust_in' in config and
         config['reflects_trust_in'] is not None):
       config['reflects_trust_in'] = [
-          tf.keras.utils.deserialize_keras_object(
-              trust_config, custom_objects=custom_objects)
+          tf.keras.utils.legacy.deserialize_keras_object(
+              trust_config, custom_objects=custom_objects
+          )
           for trust_config in config['reflects_trust_in']
       ]
     if 'dominates' in config and config['dominates'] is not None:
       config['dominates'] = [
-          tf.keras.utils.deserialize_keras_object(
-              dominance_config, custom_objects=custom_objects)
+          tf.keras.utils.legacy.deserialize_keras_object(
+              dominance_config, custom_objects=custom_objects
+          )
           for dominance_config in config['dominates']
       ]
     return config

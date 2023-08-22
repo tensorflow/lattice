@@ -487,9 +487,11 @@ class Lattice(keras.layers.Layer):
         "clip_inputs": self.clip_inputs,
         "interpolation": self.interpolation,
         "kernel_initializer":
-            keras.initializers.serialize(self.kernel_initializer),
+            keras.initializers.serialize(
+                self.kernel_initializer, use_legacy_format=True),
         "kernel_regularizer":
-            [keras.regularizers.serialize(r) for r in self.kernel_regularizer],
+            [keras.regularizers.serialize(r, use_legacy_format=True)
+             for r in self.kernel_regularizer],
     }  # pyformat: disable
     config.update(super(Lattice, self).get_config())
     return config

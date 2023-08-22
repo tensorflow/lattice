@@ -76,11 +76,14 @@ class Aggregation(keras.layers.Layer):
   def get_config(self):
     """Standard Keras get_config() method."""
     config = super(Aggregation, self).get_config().copy()
-    config.update({'model': tf.keras.utils.serialize_keras_object(self.model)})
+    config.update(
+        {'model': tf.keras.utils.legacy.serialize_keras_object(self.model)}
+    )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model = tf.keras.utils.deserialize_keras_object(
-        config.pop('model'), custom_objects=custom_objects)
+    model = tf.keras.utils.legacy.deserialize_keras_object(
+        config.pop('model'), custom_objects=custom_objects
+    )
     return cls(model, **config)

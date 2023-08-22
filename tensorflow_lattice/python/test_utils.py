@@ -19,11 +19,11 @@ from __future__ import division
 from __future__ import print_function
 
 import time
-from . import visualization
+
 from absl import logging
 import numpy as np
-import sonnet as snt
-import tensorflow as tf
+
+from . import visualization
 
 
 class TimeTracker(object):
@@ -125,98 +125,6 @@ def run_training_loop(config,
                                outputs_map=plots,
                                file_path=plot_path)
   return loss
-
-
-def assert_sonnet_equivalent_to_keras(
-    test, sonnet_module_ctor, keras_layer_ctor,
-    training_inputs, training_labels,
-    epsilon=1e-4):
-  """Asserts that a Sonnet module is "equivalent" to a Keras layer.
-
-  Creates a Sonnet module and a Keras layer using the given constructors. It
-  then uses both models to evaluate the given 'training_inputs' tensor and
-  asserts that the results are equal. It then trains both models and asserts
-  that the final loss (w.r.t the given 'training_labels') and the post-training
-  predictions of both models on 'training_inputs' are also equal.
-
-  Args:
-    test: a tf.test.TestCase whose 'assert...' methods to use for assertion.
-    sonnet_module_ctor: A callable that takes no arguments and returns the
-      Sonnet module to use.
-    keras_layer_ctor: A callable that takes no arguments and returns the
-      Keras layer to use.
-    training_inputs: Tensor of shape (batch_size, ....) tensor containing the
-      training inputs.
-    training_labels: Tensor of shape (batch_size, ....). tensor containing the
-      training labels.
-    epsilon: float. Sensitivity of comparison. Comparison of model predictions
-      and losses are done using test.assertNear and test.assertNDArrayNear.
-      This is the value to pass as the 'err' parameter to these assertion
-      methods.
-  """
-  # This function assumes we're executing eagerly.
-  test.assertTrue(tf.executing_eagerly())
-
-  num_training_epochs = 10
-  num_training_inputs = training_inputs.shape[0]
-
-  # Create Keras model.
-  keras_model = tf.keras.models.Sequential(layers=[keras_layer_ctor()])
-  keras_model.compile(
-      loss=tf.keras.losses.mean_squared_error,
-      optimizer=tf.keras.optimizers.SGD(learning_rate=0.1))
-
-  keras_preds_pre_training = keras_model.predict(
-      x=training_inputs, batch_size=num_training_inputs)
-
-  # Train the Keras model.
-  keras_model.fit(x=training_inputs, y=training_labels,
-                  batch_size=num_training_inputs,
-                  epochs=num_training_epochs,
-                  verbose=0)
-  keras_loss = keras_model.evaluate(x=training_inputs, y=training_labels,
-                                    batch_size=num_training_inputs,
-                                    verbose=0)
-  keras_preds_post_training = keras_model.predict(
-      x=training_inputs, batch_size=num_training_inputs)
-
-  # Create the Sonnet model
-  sonnet_module = sonnet_module_ctor()
-
-  sonnet_preds_pre_training = sonnet_module(training_inputs).numpy()
-
-  # Train the Sonnet model
-  sonnet_optimizer = snt.optimizers.SGD(learning_rate=0.1)
-  mse_loss = tf.keras.losses.MeanSquaredError()
-  for _ in range(num_training_epochs):
-    with tf.GradientTape() as tape:
-      preds = sonnet_module(training_inputs)
-      sonnet_loss = mse_loss(training_labels, preds)
-
-    params = sonnet_module.trainable_variables
-    grads = tape.gradient(sonnet_loss, params)
-    sonnet_optimizer.apply(grads, params)
-    # We need to apply constraints explicitly in Sonnet
-    for var in params:
-      if var.constraint:
-        var.assign(var.constraint(var))
-
-  sonnet_preds_post_training = sonnet_module(training_inputs).numpy()
-  sonnet_loss = mse_loss(training_labels, sonnet_preds_post_training).numpy()
-  # Note that corresponding initializers between Sonnet and Keras may have
-  # different default values for their construction arguments. E.g.
-  # https://sonnet.readthedocs.io/en/latest/api.html#randomuniform
-  # https://www.tensorflow.org/api_docs/python/tf/keras/initializers/RandomUniform
-  # which may cause these assertions to fail. When comparing models make
-  # sure th initializers behave the same.
-  test.assertNDArrayNear(sonnet_preds_pre_training,
-                         keras_preds_pre_training,
-                         err=epsilon)
-  test.assertNear(sonnet_loss, keras_loss, err=epsilon)
-  test.assertNDArrayNear(
-      sonnet_preds_post_training,
-      keras_preds_post_training,
-      err=epsilon)
 
 
 def two_dim_mesh_grid(num_points, x_min, y_min, x_max, y_max):

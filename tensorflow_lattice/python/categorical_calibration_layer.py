@@ -249,9 +249,11 @@ class CategoricalCalibration(keras.layers.Layer):
         "output_max": self.output_max,
         "monotonicities": self.monotonicities,
         "kernel_initializer":
-            keras.initializers.serialize(self.kernel_initializer),
+            keras.initializers.serialize(
+                self.kernel_initializer, use_legacy_format=True),
         "kernel_regularizer":
-            [keras.regularizers.serialize(r) for r in self.kernel_regularizer],
+            [keras.regularizers.serialize(r, use_legacy_format=True)
+             for r in self.kernel_regularizer],
         "default_input_value": self.default_input_value,
         "split_outputs": self.split_outputs,
     }  # pyformat: disable

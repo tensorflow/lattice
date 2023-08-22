@@ -204,6 +204,7 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     model = tf.keras.Model(
         inputs=[input_c, input_d, input_e, input_f], outputs=outputs)
     model.compile(loss="mse")
+    model.use_legacy_config = True
 
     with tempfile.NamedTemporaryFile(suffix=".h5") as f:
       model.save(f.name)

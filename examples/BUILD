@@ -13,6 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
+load("//third_party/bazel_rules/rules_python/python:py_binary.bzl", "py_binary")
+
 licenses(["notice"])
 
 package(

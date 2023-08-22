@@ -255,7 +255,8 @@ class CDF(tf.keras.layers.Layer):
         "sparsity_factor":
             self.sparsity_factor,
         "kernel_initializer":
-            tf.keras.initializers.serialize(self.kernel_initializer),
+            tf.keras.initializers.serialize(
+                self.kernel_initializer, use_legacy_format=True),
     }
     config.update(super(CDF, self).get_config())
     return config

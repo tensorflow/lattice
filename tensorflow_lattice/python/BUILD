@@ -13,6 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 
+load("//third_party/bazel_rules/rules_python/python:py_library.bzl", "py_library")
+load("//third_party/bazel_rules/rules_python/python:py_test.bzl", "py_test")
+
 package(
     default_visibility = [
         "//tensorflow_lattice:__subpackages__",
@@ -434,19 +437,6 @@ py_library(
     ],
 )
 
-py_library(
-    name = "pwl_calibration_sonnet_module",
-    srcs = ["pwl_calibration_sonnet_module.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":pwl_calibration_lib",
-        ":utils",
-        # absl/logging dep,
-        # sonnet dep,
-        # tensorflow:tensorflow_no_contrib dep,
-    ],
-)
-
 py_test(
     name = "pwl_calibration_test",
     size = "large",
@@ -457,14 +447,13 @@ py_test(
     deps = [
         ":parallel_combination_layer",
         ":pwl_calibration_layer",
-        ":pwl_calibration_sonnet_module",
         ":test_utils",
         ":utils",
         # absl/logging dep,
         # absl/testing:parameterized dep,
         # numpy dep,
-        # sonnet dep,
         # tensorflow dep,
+        # tensorflow:tensorflow_no_contrib dep,
     ],
 )
 
@@ -514,8 +503,6 @@ py_library(
         ":visualization",
         # absl/logging dep,
         # numpy dep,
-        # sonnet dep,
-        # tensorflow dep,
     ],
 )
 
@@ -525,6 +512,42 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         # six dep,
+    ],
+)
+
+py_library(
+    name = "conditional_pwl_calibration",
+    srcs = ["conditional_pwl_calibration.py"],
+    deps = [
+        # numpy dep,
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_library(
+    name = "conditional_cdf",
+    srcs = ["conditional_cdf.py"],
+    deps = [
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_test(
+    name = "conditional_cdf_test",
+    srcs = ["conditional_cdf_test.py"],
+    deps = [
+        ":conditional_cdf",
+        # absl/testing:parameterized dep,
+        # tensorflow:tensorflow_no_contrib dep,
+    ],
+)
+
+py_test(
+    name = "conditional_pwl_calibration_test",
+    srcs = ["conditional_pwl_calibration_test.py"],
+    deps = [
+        ":conditional_pwl_calibration",
+        # tensorflow:tensorflow_no_contrib dep,
     ],
 )
 

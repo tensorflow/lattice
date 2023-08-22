@@ -27,7 +27,7 @@ from setuptools import setup
 # This version number should always be that of the *next* (unreleased) version.
 # Immediately after uploading a package to PyPI, you should increment the
 # version number and push to gitHub.
-__version__ = "2.0.11"
+__version__ = "2.0.12"
 
 if "--release" in sys.argv:
   sys.argv.remove("--release")
@@ -45,7 +45,6 @@ _install_requires = [
     "scikit-learn",
     "matplotlib",
     "graphviz",
-    "dm-sonnet",
 ]
 
 # Part of the visualization code uses colabtools and IPython libraries. These

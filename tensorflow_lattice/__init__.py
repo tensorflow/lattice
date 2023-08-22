@@ -20,11 +20,12 @@ This package provides functions and classes for lattice modeling.
 from __future__ import absolute_import
 
 import tensorflow_lattice.layers
-
 from tensorflow_lattice.python import aggregation_layer
 from tensorflow_lattice.python import categorical_calibration_layer
 from tensorflow_lattice.python import categorical_calibration_lib
 from tensorflow_lattice.python import cdf_layer
+from tensorflow_lattice.python import conditional_cdf
+from tensorflow_lattice.python import conditional_pwl_calibration
 from tensorflow_lattice.python import configs
 from tensorflow_lattice.python import estimators
 from tensorflow_lattice.python import kronecker_factored_lattice_layer
@@ -39,9 +40,6 @@ from tensorflow_lattice.python import premade
 from tensorflow_lattice.python import premade_lib
 from tensorflow_lattice.python import pwl_calibration_layer
 from tensorflow_lattice.python import pwl_calibration_lib
-from tensorflow_lattice.python import pwl_calibration_sonnet_module
 from tensorflow_lattice.python import test_utils
 from tensorflow_lattice.python import utils
 from tensorflow_lattice.python import visualization
-
-import tensorflow_lattice.sonnet_modules
