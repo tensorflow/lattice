@@ -201,7 +201,7 @@ def plot_calibrator_nodes(nodes,
   """
   import matplotlib.pyplot as plt  # pylint: disable=g-import-not-at-top
 
-  with plt.style.context('seaborn-whitegrid'):
+  with plt.style.context('seaborn-v0_8-whitegrid'):
     plt.rc('font', size=font_size)
     plt.rc('axes', titlesize=font_size)
     plt.rc('xtick', labelsize=font_size)
