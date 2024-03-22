@@ -23,6 +23,13 @@ import tensorflow as tf
 from tensorflow_lattice.python import linear_layer
 from tensorflow_lattice.python import pwl_calibration_layer
 from tensorflow_lattice.python import rtl_layer
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 class RTLTest(parameterized.TestCase, tf.test.TestCase):
@@ -30,7 +37,7 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(RTLTest, self).setUp()
     self.disable_all = False
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def testRTLInputShapes(self):
     if self.disable_all:
@@ -43,13 +50,13 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     target_ab = (
         np.max(a, axis=1, keepdims=True) + np.min(b, axis=1, keepdims=True))
 
-    input_a = tf.keras.layers.Input(shape=(10,))
-    input_b = tf.keras.layers.Input(shape=(20,))
+    input_a = keras.layers.Input(shape=(10,))
+    input_b = keras.layers.Input(shape=(20,))
 
     rtl_0 = rtl_layer.RTL(num_lattices=6, lattice_rank=5)
     rtl_outputs = rtl_0({"unconstrained": input_a, "increasing": input_b})
-    outputs = tf.keras.layers.Dense(1)(rtl_outputs)
-    model = tf.keras.Model(inputs=[input_a, input_b], outputs=outputs)
+    outputs = keras.layers.Dense(1)(rtl_outputs)
+    model = keras.Model(inputs=[input_a, input_b], outputs=outputs)
     model.compile(loss="mse")
     model.fit([a, b], target_ab)
     model.predict([a, b])
@@ -61,10 +68,10 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     f = np.random.random_sample(size=(data_size, 1))
     target_cdef = np.sin(np.pi * c) * np.cos(np.pi * d) - e * f
 
-    input_c = tf.keras.layers.Input(shape=(1,))
-    input_d = tf.keras.layers.Input(shape=(1,))
-    input_e = tf.keras.layers.Input(shape=(1,))
-    input_f = tf.keras.layers.Input(shape=(1,))
+    input_c = keras.layers.Input(shape=(1,))
+    input_d = keras.layers.Input(shape=(1,))
+    input_e = keras.layers.Input(shape=(1,))
+    input_f = keras.layers.Input(shape=(1,))
 
     input_keypoints = np.linspace(0.0, 1.0, 10)
     calib_c = pwl_calibration_layer.PWLCalibration(
@@ -102,8 +109,9 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     outputs = linear_layer.Linear(
         num_input_dims=10, monotonicities=[1] * 10)(
             rtl_0_outputs)
-    model = tf.keras.Model(
-        inputs=[input_c, input_d, input_e, input_f], outputs=outputs)
+    model = keras.Model(
+        inputs=[input_c, input_d, input_e, input_f], outputs=outputs
+    )
     model.compile(loss="mse")
     model.fit([c, d, e, f], target_cdef)
     model.predict([c, d, e, f])
@@ -124,8 +132,9 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     outputs = linear_layer.Linear(
         num_input_dims=3, monotonicities=[1] * 3)(
             rtl_1_outputs)
-    model = tf.keras.Model(
-        inputs=[input_c, input_d, input_e, input_f], outputs=outputs)
+    model = keras.Model(
+        inputs=[input_c, input_d, input_e, input_f], outputs=outputs
+    )
     model.compile(loss="mse")
     model.fit([c, d, e, f], target_cdef)
     model.predict([c, d, e, f])
@@ -136,7 +145,7 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
 
     # Multiple Outputs Per Lattice
     input_shape, output_shape = (30,), (None, 6)
-    input_a = tf.keras.layers.Input(shape=input_shape)
+    input_a = keras.layers.Input(shape=input_shape)
     rtl_0 = rtl_layer.RTL(num_lattices=6, lattice_rank=5)
     output = rtl_0(input_a)
     self.assertAllEqual(output_shape, rtl_0.compute_output_shape(input_a.shape))
@@ -153,10 +162,10 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     if self.disable_all:
       return
 
-    input_c = tf.keras.layers.Input(shape=(1,))
-    input_d = tf.keras.layers.Input(shape=(1,))
-    input_e = tf.keras.layers.Input(shape=(1,))
-    input_f = tf.keras.layers.Input(shape=(1,))
+    input_c = keras.layers.Input(shape=(1,))
+    input_d = keras.layers.Input(shape=(1,))
+    input_e = keras.layers.Input(shape=(1,))
+    input_f = keras.layers.Input(shape=(1,))
 
     input_keypoints = np.linspace(0.0, 1.0, 10)
     calib_c = pwl_calibration_layer.PWLCalibration(
@@ -201,20 +210,22 @@ class RTLTest(parameterized.TestCase, tf.test.TestCase):
     outputs = linear_layer.Linear(
         num_input_dims=3, monotonicities=[1] * 3)(
             rtl_1_outputs)
-    model = tf.keras.Model(
-        inputs=[input_c, input_d, input_e, input_f], outputs=outputs)
+    model = keras.Model(
+        inputs=[input_c, input_d, input_e, input_f], outputs=outputs
+    )
     model.compile(loss="mse")
     model.use_legacy_config = True
 
     with tempfile.NamedTemporaryFile(suffix=".h5") as f:
       model.save(f.name)
-      _ = tf.keras.models.load_model(
+      _ = keras.models.load_model(
           f.name,
           custom_objects={
               "RTL": rtl_layer.RTL,
               "PWLCalibration": pwl_calibration_layer.PWLCalibration,
               "Linear": linear_layer.Linear,
-          })
+          },
+      )
 
 
 if __name__ == "__main__":

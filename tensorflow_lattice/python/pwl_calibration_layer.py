@@ -23,14 +23,20 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import pwl_calibration_lib
-from . import utils
-
 from absl import logging
 import numpy as np
 import six
 import tensorflow as tf
-from tensorflow import keras
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+
+from . import pwl_calibration_lib
+from . import utils
 
 INTERPOLATION_KEYPOINTS_NAME = "interpolation_keypoints"
 LENGTHS_NAME = "lengths"
@@ -184,7 +190,7 @@ class PWLCalibration(keras.layers.Layer):
         `input_keypoints` but then allowed to vary during training, with the
         exception of the first and last keypoint location which are fixed.
         Convexity can only be imposed with "fixed".
-      **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
+      **kwargs: Other args passed to `keras.layers.Layer` initializer.
 
     Raises:
       ValueError: If layer hyperparameters are invalid.

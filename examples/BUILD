@@ -24,18 +24,6 @@ package(
 )
 
 py_binary(
-    name = "canned_estimators_uci_heart",
-    srcs = ["canned_estimators_uci_heart.py"],
-    python_version = "PY3",
-    deps = [
-        # tensorflow dep,
-        # tensorflow:tensorflow_compat_v1_estimator dep,
-        # tensorflow:tensorflow_estimator dep,
-        "//tensorflow_lattice",
-    ],
-)
-
-py_binary(
     name = "keras_sequential_uci_heart",
     srcs = ["keras_sequential_uci_heart.py"],
     python_version = "PY3",
@@ -51,18 +39,6 @@ py_binary(
     python_version = "PY3",
     deps = [
         # tensorflow dep,
-        "//tensorflow_lattice",
-    ],
-)
-
-py_binary(
-    name = "custom_estimators_uci_heart",
-    srcs = ["custom_estimators_uci_heart.py"],
-    python_version = "PY3",
-    deps = [
-        # tensorflow dep,
-        # tensorflow:tensorflow_compat_v1_estimator dep,
-        # tensorflow:tensorflow_estimator dep,
         "//tensorflow_lattice",
     ],
 )

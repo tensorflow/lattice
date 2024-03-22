@@ -19,6 +19,14 @@ from __future__ import print_function
 
 import tensorflow as tf
 from tensorflow_lattice.python import aggregation_layer
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, 'version', None)
+if version_fn and version_fn().startswith('3.'):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+
 
 test_input = [
     tf.ragged.constant([[1, 2], [1, 2, 3], [3]]),
@@ -32,14 +40,14 @@ expected_output = tf.constant([32, 40, 162])
 class AggregationTest(tf.test.TestCase):
 
   def testAggregationLayer(self):
-    # First we test our assertion that the model must be a tf.keras.Model
+    # First we test our assertion that the model must be a keras.Model
     with self.assertRaisesRegex(ValueError,
-                                'Model must be a tf.keras.Model instance.'):
+                                'Model must be a keras.Model instance.'):
       aggregation_layer.Aggregation(None)
     # Now let's make sure our layer aggregates properly.
-    inputs = [tf.keras.Input(shape=()) for _ in range(len(test_input))]
-    output = tf.keras.layers.multiply(inputs)
-    model = tf.keras.Model(inputs=inputs, outputs=output)
+    inputs = [keras.Input(shape=()) for _ in range(len(test_input))]
+    output = keras.layers.multiply(inputs)
+    model = keras.Model(inputs=inputs, outputs=output)
     agg_layer = aggregation_layer.Aggregation(model)
     self.assertAllEqual(agg_layer(test_input), expected_output)
 

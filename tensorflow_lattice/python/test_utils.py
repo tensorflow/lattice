@@ -23,8 +23,6 @@ import time
 from absl import logging
 import numpy as np
 
-from . import visualization
-
 
 class TimeTracker(object):
   """Tracks time.
@@ -56,7 +54,6 @@ class TimeTracker(object):
 def run_training_loop(config,
                       training_data,
                       keras_model,
-                      plot_path=None,
                       input_dtype=np.float32,
                       label_dtype=np.float32):
   """Trains models and prints debug info.
@@ -64,15 +61,10 @@ def run_training_loop(config,
   Args:
     config: dictionary of test case parameters. See tests for TensorFlow Lattice
       layers.
-    training_data: tripple: (training_inputs, labels, raw_training_inputs) where
+    training_data: tuple: (training_inputs, labels) where
       training_inputs and labels are proper data to train models passed via
-      other parameters and raw_training_inputs are representation of
-      training_inputs for visualization.
+      other parameters.
     keras_model: Keras model to train on training_data.
-    plot_path: if specified it should be a string which represents file
-      name where to save model output vs ground truth visualization as png.
-      Supported only for 1-d and 2-d inputs. For visualisation of 2-d inputs
-      to work - raw_training_data must be a mesh grid.
     input_dtype: dtype for input conversion.
     label_dtype: dtype for label conversion.
 
@@ -80,7 +72,7 @@ def run_training_loop(config,
     Loss measured on training data and tf.session() if one was initialized
     explicitly during training.
   """
-  (training_inputs, training_labels, raw_training_inputs) = training_data
+  (training_inputs, training_labels) = training_data
   np_training_inputs = np.asarray(training_inputs).astype(input_dtype)
   np_training_labels = np.asarray(training_labels).astype(label_dtype)
 
@@ -115,15 +107,6 @@ def run_training_loop(config,
     logging.info("Median training step time: %f",
                  np.median(training_step_times))
 
-  if plot_path:
-    predictions = keras_model.predict(np_training_inputs)
-    plots = {
-        "Ground truth": training_labels,
-        "Model": predictions
-    }
-    visualization.plot_outputs(inputs=raw_training_inputs,
-                               outputs_map=plots,
-                               file_path=plot_path)
   return loss
 
 

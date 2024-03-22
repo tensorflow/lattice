@@ -65,6 +65,13 @@ import copy
 
 from absl import logging
 import tensorflow as tf
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 _HPARAM_FEATURE_PREFIX = 'feature'
 _HPARAM_REGULARIZER_PREFIX = 'regularizer'
@@ -92,24 +99,24 @@ class _Config(object):
       config.pop('__class__')
     if 'feature_configs' in config and config['feature_configs'] is not None:
       config['feature_configs'] = [
-          tf.keras.utils.legacy.serialize_keras_object(feature_config)
+          keras.utils.legacy.serialize_keras_object(feature_config)
           for feature_config in config['feature_configs']
       ]
     if 'regularizer_configs' in config and config[
         'regularizer_configs'] is not None:
       config['regularizer_configs'] = [
-          tf.keras.utils.legacy.serialize_keras_object(regularizer_config)
+          keras.utils.legacy.serialize_keras_object(regularizer_config)
           for regularizer_config in config['regularizer_configs']
       ]
     if ('reflects_trust_in' in config and
         config['reflects_trust_in'] is not None):
       config['reflects_trust_in'] = [
-          tf.keras.utils.legacy.serialize_keras_object(trust_config)
+          keras.utils.legacy.serialize_keras_object(trust_config)
           for trust_config in config['reflects_trust_in']
       ]
     if 'dominates' in config and config['dominates'] is not None:
       config['dominates'] = [
-          tf.keras.utils.legacy.serialize_keras_object(dominance_config)
+          keras.utils.legacy.serialize_keras_object(dominance_config)
           for dominance_config in config['dominates']
       ]
     return config
@@ -120,7 +127,7 @@ class _Config(object):
     config = copy.deepcopy(config)
     if 'feature_configs' in config and config['feature_configs'] is not None:
       config['feature_configs'] = [
-          tf.keras.utils.legacy.deserialize_keras_object(
+          keras.utils.legacy.deserialize_keras_object(
               feature_config, custom_objects=custom_objects
           )
           for feature_config in config['feature_configs']
@@ -128,7 +135,7 @@ class _Config(object):
     if 'regularizer_configs' in config and config[
         'regularizer_configs'] is not None:
       config['regularizer_configs'] = [
-          tf.keras.utils.legacy.deserialize_keras_object(
+          keras.utils.legacy.deserialize_keras_object(
               regularizer_config, custom_objects=custom_objects
           )
           for regularizer_config in config['regularizer_configs']
@@ -136,14 +143,14 @@ class _Config(object):
     if ('reflects_trust_in' in config and
         config['reflects_trust_in'] is not None):
       config['reflects_trust_in'] = [
-          tf.keras.utils.legacy.deserialize_keras_object(
+          keras.utils.legacy.deserialize_keras_object(
               trust_config, custom_objects=custom_objects
           )
           for trust_config in config['reflects_trust_in']
       ]
     if 'dominates' in config and config['dominates'] is not None:
       config['dominates'] = [
-          tf.keras.utils.legacy.deserialize_keras_object(
+          keras.utils.legacy.deserialize_keras_object(
               dominance_config, custom_objects=custom_objects
           )
           for dominance_config in config['dominates']

@@ -22,11 +22,18 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import linear_lib
-from . import utils
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+
+from . import linear_lib
+from . import utils
 
 LINEAR_LAYER_KERNEL_NAME = "linear_layer_kernel"
 LINEAR_LAYER_BIAS_NAME = "linear_layer_bias"
@@ -107,11 +114,10 @@ class Linear(keras.layers.Layer):
         model output should be monotonic in corresponding feature, using
         'increasing' or 1 to indicate increasing monotonicity, 'decreasing' or
         -1 to indicate decreasing monotonicity and 'none' or 0 to indicate no
-        monotonicity constraints..
-        In case of decreasing monotonicity corresponding weight will be
-        constrained to be non positive, in case of increasing non-negative.
-        Instead of a list or tuple single value can be specified to indicate the
-        monotonicity constraint across all dimensions.
+        monotonicity constraints. In case of decreasing monotonicity
+        corresponding weight will be constrained to be non positive, in case of
+        increasing non-negative. Instead of a list or tuple single value can be
+        specified to indicate the monotonicity constraint across all dimensions.
       monotonic_dominances: None or list of two-element tuples. First element is
         the index of the dominant dimension. Second element is the index of the
         weak dimension.
@@ -128,7 +134,7 @@ class Linear(keras.layers.Layer):
       use_bias: Whether linear function has bias.
       normalization_order: If specified learned weights will be adjusted to have
         norm 1. Norm will be computed by: `tf.norm(tensor,
-          ord=normalization_order)`.
+        ord=normalization_order)`.
       kernel_initializer: Any keras initializer to be applied to kernel.
       bias_initializer: Any keras initializer to be applied to bias. Only valid
         if `use_bias == True`.
@@ -136,7 +142,7 @@ class Linear(keras.layers.Layer):
         regularizer objects.
       bias_regularizer: None or single element or list of any Keras regularizer
         objects.
-      **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
+      **kwargs: Other args passed to `keras.layers.Layer` initializer.
 
     Raises:
       ValueError: if monotonicity specified incorrectly.

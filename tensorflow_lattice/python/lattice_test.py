@@ -22,9 +22,15 @@ from absl import logging
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow_lattice.python import lattice_layer as ll
 from tensorflow_lattice.python import test_utils
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 class LatticeTest(parameterized.TestCase, tf.test.TestCase):
@@ -35,7 +41,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.disable_ensembles = False
     self.loss_eps = 0.0001
     self.small_eps = 1e-6
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()
@@ -174,10 +180,8 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
       config: Dictionary with config for this unit test.
 
     Returns:
-      Tuple `(training_inputs, training_labels, raw_training_inputs)` where
-        `training_inputs` and `training_labels` are data for training and
-        `raw_training_inputs` are representation of training_inputs for
-        visualisation.
+      Tuple `(training_inputs, training_labels)` where
+        `training_inputs` and `training_labels` are data for training.
     """
     raw_training_inputs = config["x_generator"](
         num_points=config["num_training_records"],
@@ -191,7 +195,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
       training_inputs = raw_training_inputs
 
     training_labels = [config["y_function"](x) for x in training_inputs]
-    return training_inputs, training_labels, raw_training_inputs
+    return training_inputs, training_labels
 
   def _SetDefaults(self, config):
     config.setdefault("monotonicities", None)
@@ -231,13 +235,13 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
       losses.append(self._TrainModel(config))
     self.assertAlmostEqual(min(losses), max(losses), delta=self.loss_eps)
 
-  def _TrainModel(self, config, plot_path=None):
+  def _TrainModel(self, config):
     logging.info("Testing config:")
     logging.info(config)
     config = self._SetDefaults(config)
     self._ResetAllBackends()
 
-    training_inputs, training_labels, raw_training_inputs = (
+    training_inputs, training_labels = (
         self._GetTrainingInputsAndLabels(config))
 
     units = config["units"]
@@ -287,12 +291,10 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     optimizer = config["optimizer"](learning_rate=config["learning_rate"])
     model.compile(loss=keras.losses.mean_squared_error, optimizer=optimizer)
 
-    training_data = (training_inputs, training_labels, raw_training_inputs)
+    training_data = (training_inputs, training_labels)
     loss = test_utils.run_training_loop(
-        config=config,
-        training_data=training_data,
-        keras_model=model,
-        plot_path=plot_path)
+        config=config, training_data=training_data, keras_model=model
+    )
 
     if tf.executing_eagerly():
       tf.print("final weights: ", keras_layer.kernel)
@@ -310,7 +312,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [20],
         "num_training_records": 128,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinPlusX,
@@ -326,7 +328,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [20],
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": lambda x: -self._SinPlusX(x),
@@ -342,7 +344,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [5],
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinPlusLargeX,
@@ -362,7 +364,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [21, 6],
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -378,7 +380,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [6, 21],
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -394,7 +396,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [6, 21],
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -410,7 +412,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [6, 21],
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -426,7 +428,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": lambda x: -self._ScaledSum(x),
@@ -443,7 +445,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2, 2, 2, 2],
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._ScaledSum,
@@ -460,7 +462,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2, 2, 2, 2],
         "num_training_records": 100,
         "num_training_epoch": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": lambda x: -self._ScaledSum(x),
@@ -474,7 +476,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [3, 3, 3, 3],
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -497,7 +499,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "monotonicities": monotonicities,
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._SameValueForAllDims,
         "y_function": self._SinOfSum,
@@ -521,7 +523,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2] * 10,
         "num_training_records": 1000,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 100.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": test_utils.get_hypercube_interpolation_fn(weights),
@@ -543,7 +545,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2] * 10,
         "num_training_records": 1000,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 100.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -576,7 +578,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._Max,
@@ -605,7 +607,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [4, 3],
         "num_training_records": 150,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._PseudoLinear,
@@ -635,7 +637,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2, 2, 2],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Max,
@@ -664,7 +666,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [3, 3, 3, 3],
         "num_training_records": 1000,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -695,7 +697,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "edgeworth_trusts": edgeworth_trusts,
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._SameValueForAllDims,
         "y_function": self._PseudoLinear,
@@ -719,7 +721,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._WeightedSum,
@@ -747,7 +749,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_records": 100,
         "num_training_epoch": 20,
         "num_projection_iterations": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._WeightedSum,
@@ -774,7 +776,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_records": 100,
         "num_training_epoch": 300,
         "num_projection_iterations": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WeightedSum,
@@ -801,7 +803,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.1,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._WeightedSum,
@@ -829,7 +831,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_records": 100,
         "num_training_epoch": 40,
         "num_projection_iterations": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.1,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._WeightedSum,
@@ -856,7 +858,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_records": 100,
         "num_training_epoch": 300,
         "num_projection_iterations": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WeightedSum,
@@ -883,7 +885,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._MixedSignWeightedSum,
@@ -918,7 +920,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [15],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": _Sin,
@@ -940,7 +942,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [3, 3],
         "num_training_records": 36*9,
         "num_training_epoch": 150,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.1,
         "x_generator": self._TwoDMeshGrid,
         "y_function": lambda x: -math.sin(sum(x) * 2.0),
@@ -978,7 +980,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [coordinate * 2 + 1 for coordinate in center],
         "num_training_records": 36 * 9,
         "num_training_epoch": 18,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": WShaped2dFunction,
@@ -1043,7 +1045,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": lattice_sizes,
         "num_training_records": 1,  # Not used by x_generator for this test.
         "num_training_epoch": 10,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": _DistributeXUniformly,
         "y_function": WShaped2dFunction,
@@ -1064,7 +1066,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [3, 3, 3, 3],
         "num_training_records": 100,
         "num_training_epoch": 30,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -1091,7 +1093,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_records": 100,
         "num_training_epoch": 40,
         "num_projection_iterations": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._MixedSignWeightedSum,
@@ -1116,7 +1118,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_records": 100,
         "num_training_epoch": 100,
         "num_projection_iterations": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._MixedSignWeightedSum,
@@ -1146,7 +1148,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 3],
         "num_training_records": 98,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._Max,
@@ -1171,7 +1173,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 96,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
     }  # pyformat: disable
@@ -1252,7 +1254,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": "linear_initializer",
         "num_training_records": 96,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._Max,
@@ -1330,7 +1332,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._ScaledSum,
@@ -1355,7 +1357,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [20],
         "num_training_records": 100,
         "num_training_epoch": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Sin,
@@ -1370,7 +1372,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [11, 4],
         "num_training_records": 270,
         "num_training_epoch": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -1386,7 +1388,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2] * 5,
         "num_training_records": 100,
         "num_training_epoch": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -1405,7 +1407,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [6],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformlyExtendedRange,
         "y_function": self._Sin,
@@ -1419,7 +1421,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGridExtendedRange,
         "y_function": self._SinOfSum,
@@ -1450,7 +1452,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": test_utils.get_hypercube_interpolation_fn(
@@ -1484,7 +1486,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [3, 4, 3, 4],
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -1511,7 +1513,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "output_max": 1.0,
         "num_training_records": 100,
         "num_training_epoch": 3,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1000.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -1551,7 +1553,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [11],
         "num_training_records": 128,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": WShaped1dFunction,
@@ -1593,7 +1595,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [11, 11],
         "num_training_records": 900,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "y_function": WShaped2dFunction,
@@ -1614,7 +1616,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [20],
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Sin,
@@ -1628,7 +1630,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2],
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Square,
@@ -1641,7 +1643,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": test_utils.get_hypercube_interpolation_fn(
@@ -1655,7 +1657,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2] * 3,
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": test_utils.get_hypercube_interpolation_fn(
@@ -1669,7 +1671,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2] * 5,
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScatterXUniformly,
         "y_function": test_utils.get_hypercube_interpolation_fn(
@@ -1683,7 +1685,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 2],
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Max,
@@ -1696,7 +1698,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2] * 6,
         "num_training_records": 100,
         "num_training_epoch": 300,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 30.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._PseudoLinear,
@@ -1709,7 +1711,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 3, 4],
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._PseudoLinear,
@@ -1722,7 +1724,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [4, 5],
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WeightedSum,
@@ -1735,7 +1737,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 3, 4, 5],
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 30.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Max,
@@ -1748,7 +1750,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": [2, 3, 4, 5],
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 30.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WeightedSum,
@@ -1762,7 +1764,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Sin,
@@ -1777,7 +1779,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Square,
@@ -1791,7 +1793,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Max,
@@ -1805,7 +1807,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 300,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 30.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._PseudoLinear,
@@ -1819,7 +1821,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._PseudoLinear,
@@ -1833,7 +1835,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WeightedSum,
@@ -1847,7 +1849,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 30.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Max,
@@ -1861,7 +1863,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "interpolation": "simplex",
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 30.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WeightedSum,
@@ -1887,7 +1889,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         "lattice_sizes": lattice_sizes,
         "num_training_records": 100,
         "num_training_epoch": 1,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WeightedSum,
@@ -1920,24 +1922,49 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.assertLessEqual(graph_size, expected_graph_size)
 
   @parameterized.parameters(
-      ("random_uniform_or_linear_initializer", [3, 3, 3], [
-          ([0, 1, 2], "peak")
-      ], tf.keras.initializers.RandomUniform),
-      ("random_uniform_or_linear_initializer", [3, 3, 3], [
-          ([0, 1, 2], "valley")
-      ], tf.keras.initializers.RandomUniform),
-      ("random_uniform_or_linear_initializer", [3, 3, 3], [
-          ([0, 1], "valley")
-      ], ll.LinearInitializer),
-      ("random_uniform_or_linear_initializer", [3, 3, 3], [
-          ([0, 1], "valley"), ([2], "peak")
-      ], ll.LinearInitializer), ("random_uniform_or_linear_initializer",
-                                 [3, 3, 3], None, ll.LinearInitializer),
-      ("linear_initializer", [3, 3, 3], [
-          ([0, 1], "valley")
-      ], ll.LinearInitializer), ("random_monotonic_initializer", [3, 3, 3], [
-          ([0, 1], "valley")
-      ], ll.RandomMonotonicInitializer))
+      (
+          "random_uniform_or_linear_initializer",
+          [3, 3, 3],
+          [([0, 1, 2], "peak")],
+          keras.initializers.RandomUniform,
+      ),
+      (
+          "random_uniform_or_linear_initializer",
+          [3, 3, 3],
+          [([0, 1, 2], "valley")],
+          keras.initializers.RandomUniform,
+      ),
+      (
+          "random_uniform_or_linear_initializer",
+          [3, 3, 3],
+          [([0, 1], "valley")],
+          ll.LinearInitializer,
+      ),
+      (
+          "random_uniform_or_linear_initializer",
+          [3, 3, 3],
+          [([0, 1], "valley"), ([2], "peak")],
+          ll.LinearInitializer,
+      ),
+      (
+          "random_uniform_or_linear_initializer",
+          [3, 3, 3],
+          None,
+          ll.LinearInitializer,
+      ),
+      (
+          "linear_initializer",
+          [3, 3, 3],
+          [([0, 1], "valley")],
+          ll.LinearInitializer,
+      ),
+      (
+          "random_monotonic_initializer",
+          [3, 3, 3],
+          [([0, 1], "valley")],
+          ll.RandomMonotonicInitializer,
+      ),
+  )
   def testCreateKernelInitializer(self, kernel_initializer_id, lattice_sizes,
                                   joint_unimodalities, expected_type):
     self.assertEqual(
@@ -2038,12 +2065,12 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
     kernel = tf.constant(kernel, dtype=tf.float32)
     inputs = tf.constant(inputs, dtype=tf.float32)
     units = int(kernel.shape[1])
-    model = tf.keras.models.Sequential([
+    model = keras.models.Sequential([
         ll.Lattice(
             lattice_sizes,
             units=units,
             interpolation="simplex",
-            kernel_initializer=tf.keras.initializers.Constant(kernel),
+            kernel_initializer=keras.initializers.Constant(kernel),
         ),
     ])
     outputs = model.predict(inputs)
@@ -2103,7 +2130,7 @@ class LatticeTest(parameterized.TestCase, tf.test.TestCase):
         trapezoid_trusts=trapezoid_trusts,
         output_min=output_min,
         output_max=output_max,
-        kernel_initializer=tf.keras.initializers.Constant(kernel),
+        kernel_initializer=keras.initializers.Constant(kernel),
     )
     layer.build(input_shape=(None, units, len(lattice_sizes)))
     output = layer.finalize_constraints()

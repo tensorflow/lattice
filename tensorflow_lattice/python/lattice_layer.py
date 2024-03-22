@@ -22,11 +22,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import lattice_lib
-from . import utils
 import six
 import tensorflow as tf
-from tensorflow import keras
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+from . import lattice_lib
+from . import utils
 
 LATTICE_KERNEL_NAME = "lattice_kernel"
 LATTICE_SIZES_NAME = "lattice_sizes"
@@ -270,7 +276,7 @@ class Lattice(keras.layers.Layer):
           either be single floats or lists of floats to specify different
           regularization amount for every dimension.
         - Any Keras regularizer object.
-      **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
+      **kwargs: Other args passed to `keras.layers.Layer` initializer.
 
     Raises:
       ValueError: If layer hyperparameters are invalid.

@@ -24,7 +24,13 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-from tensorflow import keras
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, 'version', None)
+if version_fn and version_fn().startswith('3.'):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 class Aggregation(keras.layers.Layer):
@@ -46,7 +52,7 @@ class Aggregation(keras.layers.Layer):
   Example:
 
   ```python
-  model = tf.keras.Model(inputs=inputs, outputs=outputs)
+  model = keras.Model(inputs=inputs, outputs=outputs)
   layer = tfl.layers.Aggregation(model)
   ```
   """
@@ -56,14 +62,14 @@ class Aggregation(keras.layers.Layer):
     """initializes an instance of `Aggregation`.
 
     Args:
-      model: A tf.keras.Model instance.
-      **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
+      model: A keras.Model instance.
+      **kwargs: Other args passed to `keras.layers.Layer` initializer.
 
     Raises:
-      ValueError: if model is not at `tf.keras.Model` instance.
+      ValueError: if model is not at `keras.Model` instance.
     """
-    if not isinstance(model, tf.keras.Model):
-      raise ValueError('Model must be a tf.keras.Model instance.')
+    if not isinstance(model, keras.Model):
+      raise ValueError('Model must be a keras.Model instance.')
     super(Aggregation, self).__init__(**kwargs)
     # This flag enables inputs to be Ragged Tensors
     self._supports_ragged_inputs = True
@@ -77,13 +83,13 @@ class Aggregation(keras.layers.Layer):
     """Standard Keras get_config() method."""
     config = super(Aggregation, self).get_config().copy()
     config.update(
-        {'model': tf.keras.utils.legacy.serialize_keras_object(self.model)}
+        {'model': keras.utils.legacy.serialize_keras_object(self.model)}
     )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model = tf.keras.utils.legacy.deserialize_keras_object(
+    model = keras.utils.legacy.deserialize_keras_object(
         config.pop('model'), custom_objects=custom_objects
     )
     return cls(model, **config)

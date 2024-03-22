@@ -26,10 +26,16 @@ from __future__ import print_function
 import functools
 import inspect
 
+import tensorflow as tf
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 from . import kronecker_factored_lattice_lib as kfl_lib
 from . import utils
-import tensorflow as tf
-from tensorflow import keras
 
 DIMS_NAME = "dims"
 KFL_SCALE_NAME = "kronecker_factored_lattice_scale"
@@ -152,7 +158,7 @@ class KroneckerFactoredLattice(keras.layers.Layer):
           only output_max is set, scale is initialized to -1 for each term.
           Otherwise scale is initialized to alternate between 1 and -1 for each
           term.
-      **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
+      **kwargs: Other args passed to `keras.layers.Layer` initializer.
 
     Raises:
       ValueError: If layer hyperparameters are invalid.
@@ -467,8 +473,8 @@ class KFLRandomMonotonicInitializer(keras.initializers.Initializer):
       shape: Must be: `(1, lattice_sizes, units * dims, num_terms)`.
       scale: Scale variable of shape: `(units, num_terms)`.
       dtype: Standard Keras initializer param.
-      **kwargs: Other args passed to `tf.keras.initializers.Initializer`
-        __call__ method.
+      **kwargs: Other args passed to `keras.initializers.Initializer` __call__
+        method.
     """
     return kfl_lib.kfl_random_monotonic_initializer(
         shape=shape,
@@ -519,8 +525,8 @@ class ScaleInitializer(keras.initializers.Initializer):
     Args:
       shape: Must be: `(units, num_terms)`.
       dtype: Standard Keras initializer param.
-      **kwargs: Other args passed to `tf.keras.initializers.Initializer`
-        __call__ method.
+      **kwargs: Other args passed to `keras.initializers.Initializer` __call__
+        method.
     """
     units, num_terms = shape
     return kfl_lib.scale_initializer(
@@ -565,8 +571,8 @@ class BiasInitializer(keras.initializers.Initializer):
     Args:
       shape: Must be: `(units, num_terms)`.
       dtype: Standard Keras initializer param.
-      **kwargs: Other args passed to `tf.keras.initializers.Initializer`
-        __call__ method.
+      **kwargs: Other args passed to `keras.initializers.Initializer` __call__
+        method.
     """
     return kfl_lib.bias_initializer(
         units=shape[0],

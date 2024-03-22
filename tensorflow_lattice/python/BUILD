@@ -141,46 +141,6 @@ py_test(
 )
 
 py_library(
-    name = "estimators",
-    srcs = ["estimators.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":categorical_calibration_layer",
-        ":configs",
-        ":kronecker_factored_lattice_layer",
-        ":lattice_layer",
-        ":linear_layer",
-        ":model_info",
-        ":premade",
-        ":premade_lib",
-        ":pwl_calibration_layer",
-        ":rtl_layer",
-        # absl/logging dep,
-        # tensorflow dep,
-        # tensorflow:tensorflow_estimator dep,
-    ],
-)
-
-py_test(
-    name = "estimators_test",
-    size = "enormous",
-    srcs = ["estimators_test.py"],
-    python_version = "PY3",
-    # shard_count = 10,
-    srcs_version = "PY2AND3",
-    deps = [
-        ":configs",
-        ":estimators",
-        ":model_info",
-        # absl/logging dep,
-        # sklearn dep,
-        # tensorflow dep,
-        # tensorflow:tensorflow_compat_v1_estimator dep,
-        # tensorflow:tensorflow_estimator dep,
-    ],
-)
-
-py_library(
     name = "internal_utils",
     srcs = ["internal_utils.py"],
     srcs_version = "PY2AND3",
@@ -348,7 +308,6 @@ py_test(
     deps = [
         ":lattice_layer",
         ":parallel_combination_layer",
-        # absl/logging dep,
         # absl/testing:parameterized dep,
         # numpy dep,
         # tensorflow dep,
@@ -393,7 +352,6 @@ py_library(
         # numpy dep,
         # six dep,
         # tensorflow dep,
-        # tensorflow:tensorflow_estimator dep,
     ],
 )
 
@@ -488,7 +446,6 @@ py_test(
         ":linear_layer",
         ":pwl_calibration_layer",
         ":rtl_layer",
-        # absl/logging dep,
         # absl/testing:parameterized dep,
         # numpy dep,
         # tensorflow dep,
@@ -500,7 +457,6 @@ py_library(
     srcs = ["test_utils.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":visualization",
         # absl/logging dep,
         # numpy dep,
     ],
@@ -560,17 +516,5 @@ py_test(
         ":utils",
         # absl/testing:parameterized dep,
         # tensorflow dep,
-    ],
-)
-
-py_library(
-    name = "visualization",
-    srcs = ["visualization.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":model_info",
-        # graphviz dep,
-        # matplotlib dep,
-        # numpy dep,
     ],
 )

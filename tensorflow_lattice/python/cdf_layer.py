@@ -21,11 +21,18 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from . import utils
 import tensorflow as tf
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+from . import utils
 
 
-class CDF(tf.keras.layers.Layer):
+class CDF(keras.layers.Layer):
   # pyformat: disable
   """Cumulative Distribution Function (CDF) layer.
 
@@ -128,7 +135,7 @@ class CDF(tf.keras.layers.Layer):
         - `'random_uniform'`: initializes parameters as uniform
           random functions in the range [0, 1].
         - Any Keras initializer object.
-      **kwargs: Any additional `tf.keras.layers.Layer` arguments.
+      **kwargs: Any additional `keras.layers.Layer` arguments.
     """
     # pyformat: enable
     super(CDF, self).__init__(**kwargs)
@@ -179,15 +186,15 @@ class CDF(tf.keras.layers.Layer):
     elif self.input_scaling_type == "learned_shared":
       self.input_scaling = self.add_weight(
           "input_scaling",
-          initializer=tf.keras.initializers.Constant(self.input_scaling_init),
-          constraint=tf.keras.constraints.NonNeg()
+          initializer=keras.initializers.Constant(self.input_scaling_init),
+          constraint=keras.constraints.NonNeg()
           if self.input_scaling_monotonicity else None,
           shape=[1])
     elif self.input_scaling_type == "learned_per_input":
       self.input_scaling = self.add_weight(
           "input_scaling",
-          initializer=tf.keras.initializers.Constant(self.input_scaling_init),
-          constraint=tf.keras.constraints.NonNeg()
+          initializer=keras.initializers.Constant(self.input_scaling_init),
+          constraint=keras.constraints.NonNeg()
           if self.input_scaling_monotonicity else None,
           shape=[1, input_dim, 1, 1])
     else:
@@ -255,7 +262,7 @@ class CDF(tf.keras.layers.Layer):
         "sparsity_factor":
             self.sparsity_factor,
         "kernel_initializer":
-            tf.keras.initializers.serialize(
+            keras.initializers.serialize(
                 self.kernel_initializer, use_legacy_format=True),
     }
     config.update(super(CDF, self).get_config())
@@ -276,6 +283,6 @@ def create_kernel_initializer(kernel_initializer_id):
     The Keras initializer object for the `tfl.layers.CDF` kernel variable.
   """
   if kernel_initializer_id in ["random_uniform", "RandomUniform"]:
-    return tf.keras.initializers.RandomUniform(0.0, 1.0)
+    return keras.initializers.RandomUniform(0.0, 1.0)
   else:
-    return tf.keras.initializers.get(kernel_initializer_id)
+    return keras.initializers.get(kernel_initializer_id)

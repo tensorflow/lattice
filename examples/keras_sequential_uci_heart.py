@@ -64,8 +64,14 @@ import numpy as np
 import pandas as pd
 
 import tensorflow as tf
-from tensorflow import keras
 import tensorflow_lattice as tfl
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, 'version', None)
+if version_fn and version_fn().startswith('3.'):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer('num_epochs', 200, 'Number of training epoch.')
@@ -73,9 +79,10 @@ flags.DEFINE_integer('num_epochs', 200, 'Number of training epoch.')
 
 def main(_):
   # UCI Statlog (Heart) dataset.
-  csv_file = tf.keras.utils.get_file(
+  csv_file = keras.utils.get_file(
       'heart.csv',
-      'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv')
+      'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv',
+  )
   training_data_df = pd.read_csv(csv_file).sample(
       frac=1.0, random_state=41).reset_index(drop=True)
 

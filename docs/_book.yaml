@@ -26,10 +26,6 @@ upper_tabs:
         path: /lattice/tutorials/keras_layers
       - title: Keras Premade Models
         path: /lattice/tutorials/premade_models
-      - title: Canned Estimators
-        path: /lattice/tutorials/canned_estimators
-      - title: Custom Estimators
-        path: /lattice/tutorials/custom_estimators
       - title: Aggregate Function Models
         path: /lattice/tutorials/aggregate_function_models
 

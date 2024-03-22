@@ -22,6 +22,19 @@ import copy
 import enum
 import itertools
 
+from absl import logging
+import numpy as np
+import six
+
+import tensorflow as tf
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, 'version', None)
+if version_fn and version_fn().startswith('3.'):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+
 from . import aggregation_layer
 from . import categorical_calibration_layer
 from . import configs
@@ -34,12 +47,6 @@ from . import pwl_calibration_layer
 from . import rtl_layer
 from . import utils
 
-from absl import logging
-import numpy as np
-import six
-
-import tensorflow as tf
-from tensorflow import estimator as tf_estimator
 
 # Layer names used for layers in the premade models.
 AGGREGATION_LAYER_NAME = 'tfl_aggregation'
@@ -167,7 +174,7 @@ def _output_range(layer_output_range, model_config, feature_config=None):
 
 
 def build_input_layer(feature_configs, dtype, ragged=False):
-  """Creates a mapping from feature name to `tf.keras.Input`.
+  """Creates a mapping from feature name to `keras.Input`.
 
   Args:
     feature_configs: A list of `tfl.configs.FeatureConfig` instances that
@@ -176,7 +183,7 @@ def build_input_layer(feature_configs, dtype, ragged=False):
     ragged: If the inputs are ragged tensors.
 
   Returns:
-    Mapping from feature name to `tf.keras.Input` for the inputs specified by
+    Mapping from feature name to `keras.Input` for the inputs specified by
       `feature_configs`.
   """
   input_layer = {}
@@ -184,10 +191,10 @@ def build_input_layer(feature_configs, dtype, ragged=False):
   for feature_config in feature_configs:
     layer_name = '{}_{}'.format(INPUT_LAYER_NAME, feature_config.name)
     if feature_config.num_buckets:
-      input_layer[feature_config.name] = tf.keras.Input(
+      input_layer[feature_config.name] = keras.Input(
           shape=shape, ragged=ragged, dtype=tf.int32, name=layer_name)
     else:
-      input_layer[feature_config.name] = tf.keras.Input(
+      input_layer[feature_config.name] = keras.Input(
           shape=shape, ragged=ragged, dtype=dtype, name=layer_name)
   return input_layer
 
@@ -199,7 +206,7 @@ def build_multi_unit_calibration_layers(calibration_input_layer,
   """Creates a mapping from feature names to calibration outputs.
 
   Args:
-    calibration_input_layer: A mapping from feature name to `tf.keras.Input`.
+    calibration_input_layer: A mapping from feature name to `keras.Input`.
     calibration_output_units: A mapping from feature name to units.
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
@@ -225,7 +232,7 @@ def build_multi_unit_calibration_layers(calibration_input_layer,
                                       feature_config)
 
     if feature_config.num_buckets:
-      kernel_initializer = tf.keras.initializers.RandomUniform(
+      kernel_initializer = keras.initializers.RandomUniform(
           output_init_min, output_init_max)
       calibrated = (
           categorical_calibration_layer.CategoricalCalibration(
@@ -287,7 +294,7 @@ def build_calibration_layers(calibration_input_layer, model_config,
   """Creates a calibration layer for `submodels` as list of list of features.
 
   Args:
-    calibration_input_layer: A mapping from feature name to `tf.keras.Input`.
+    calibration_input_layer: A mapping from feature name to `keras.Input`.
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
     layer_output_range: A `tfl.premade_lib.LayerOutputRange` enum.
@@ -357,7 +364,7 @@ def build_aggregation_layer(aggregation_input_layer, model_config,
 
   Args:
     aggregation_input_layer: A list or a mapping from feature name to
-      `tf.keras.Input`, in the order or format expected by
+      `keras.Input`, in the order or format expected by
       `calibrated_lattice_models`.
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
@@ -385,7 +392,7 @@ def build_aggregation_layer(aggregation_input_layer, model_config,
     agg_output = aggregation_layer.Aggregation(
         calibrated_lattice_models[i], name=agg_layer_name)(
             aggregation_input_layer)
-    agg_output = tf.keras.layers.Reshape((1,))(agg_output)
+    agg_output = keras.layers.Reshape((1,))(agg_output)
     if model_config.middle_calibration:
       agg_output = pwl_calibration_layer.PWLCalibration(
           input_keypoints=np.linspace(
@@ -403,7 +410,7 @@ def build_aggregation_layer(aggregation_input_layer, model_config,
           dtype=dtype,
       )(
           agg_output)
-      agg_output = tf.keras.layers.Reshape((1,))(agg_output)
+      agg_output = keras.layers.Reshape((1,))(agg_output)
     lattice_inputs.append(agg_output)
 
   # We use random monotonic initialization here to break the symmetry that we
@@ -492,11 +499,11 @@ def build_linear_layer(linear_input, feature_configs, model_config,
   """
   layer_name = '{}_{}'.format(LINEAR_LAYER_NAME, submodel_index)
 
-  linear_input = tf.keras.layers.Concatenate(axis=1)(linear_input)
+  linear_input = keras.layers.Concatenate(axis=1)(linear_input)
   num_input_dims = len(feature_configs)
-  kernel_initializer = tf.keras.initializers.Constant([1.0 / num_input_dims] *
+  kernel_initializer = keras.initializers.Constant([1.0 / num_input_dims] *
                                                       num_input_dims)
-  bias_initializer = tf.keras.initializers.Constant(0)
+  bias_initializer = keras.initializers.Constant(0)
 
   if weighted_average:
     # Linear coefficients should be possitive and sum up to one.
@@ -758,7 +765,7 @@ def build_calibrated_lattice_ensemble_layer(calibration_input_layer,
   """Creates a calibration layer followed by a lattice ensemble layer.
 
   Args:
-    calibration_input_layer: A mapping from feature name to `tf.keras.Input`.
+    calibration_input_layer: A mapping from feature name to `keras.Input`.
     model_config: Model configuration object describing model architecture.
       Should be one of the model configs in `tfl.configs`.
     average_outputs: Whether to average the outputs of this layer.
@@ -811,7 +818,7 @@ def build_calibrated_lattice_ensemble_layer(calibration_input_layer,
         dtype=dtype)
 
     if average_outputs:
-      lattice_outputs = tf.keras.layers.Average()(lattice_outputs)
+      lattice_outputs = keras.layers.Average()(lattice_outputs)
 
   return lattice_outputs
 
@@ -830,12 +837,12 @@ def build_linear_combination_layer(ensemble_outputs, model_config, dtype):
   """
   if isinstance(ensemble_outputs, list):
     num_input_dims = len(ensemble_outputs)
-    linear_input = tf.keras.layers.Concatenate(axis=1)(ensemble_outputs)
+    linear_input = keras.layers.Concatenate(axis=1)(ensemble_outputs)
   else:
     num_input_dims = int(ensemble_outputs.shape[1])
     linear_input = ensemble_outputs
-  kernel_initializer = tf.keras.initializers.Constant(1.0 / num_input_dims)
-  bias_initializer = tf.keras.initializers.Constant(0)
+  kernel_initializer = keras.initializers.Constant(1.0 / num_input_dims)
+  bias_initializer = keras.initializers.Constant(0)
 
   if (not model_config.output_calibration and
       model_config.output_min is None and model_config.output_max is None):
@@ -878,7 +885,7 @@ def build_output_calibration_layer(output_calibration_input, model_config,
       model_config.output_initialization,
       to_begin=model_config.output_initialization[0])
   input_keypoints = np.linspace(0.0, 1.0, num=len(kernel_init_values))
-  kernel_initializer = tf.keras.initializers.Constant(kernel_init_values)
+  kernel_initializer = keras.initializers.Constant(kernel_init_values)
   kernel_regularizer = _output_calibration_regularizers(model_config)
   return pwl_calibration_layer.PWLCalibration(
       input_keypoints=input_keypoints,
@@ -1070,15 +1077,15 @@ def construct_prefitting_model_config(model_config, feature_names=None):
 
 def _verify_prefitting_model(prefitting_model, feature_names):
   """Checks that prefitting_model has the proper input layer."""
-  if isinstance(prefitting_model, tf.keras.Model):
+  if isinstance(prefitting_model, keras.Model):
     layer_names = [layer.name for layer in prefitting_model.layers]
-  elif isinstance(prefitting_model, tf_estimator.Estimator):
+  elif hasattr(prefitting_model, 'get_variable_names'):  # estimator
     layer_names = prefitting_model.get_variable_names()
   else:
     raise ValueError('Invalid model type for prefitting_model: {}'.format(
         type(prefitting_model)))
   for feature_name in feature_names:
-    if isinstance(prefitting_model, tf.keras.Model):
+    if isinstance(prefitting_model, keras.Model):
       input_layer_name = '{}_{}'.format(INPUT_LAYER_NAME, feature_name)
       if input_layer_name not in layer_names:
         raise ValueError(
@@ -1104,9 +1111,9 @@ def _verify_prefitting_model(prefitting_model, feature_names):
 
 def _get_lattice_weights(prefitting_model, lattice_index):
   """Gets the weights of the lattice at the specfied index."""
-  if isinstance(prefitting_model, tf.keras.Model):
+  if isinstance(prefitting_model, keras.Model):
     lattice_layer_name = '{}_{}'.format(LATTICE_LAYER_NAME, lattice_index)
-    weights = tf.keras.backend.get_value(
+    weights = keras.backend.get_value(
         prefitting_model.get_layer(lattice_layer_name).weights[0])
   else:
     # We have already checked the types by this point, so if prefitting_model
@@ -1327,7 +1334,7 @@ def set_crystals_lattice_ensemble(model_config,
     raise ValueError('model_config.lattices must be set to \'crystals\'.')
   # Note that we cannot check the type of the prefitting model without importing
   # premade/estimators, which would cause a cyclic dependency. However, we can
-  # check that the model is a tf.keras.Model or tf.Estimator instance that has
+  # check that the model is a keras.Model or tf.Estimator instance that has
   # the proper input layers matching prefitting_model_config feature_configs.
   # Beyond that, a prefitting_model with proper input layer names that is not of
   # the proper type will have undefined behavior.

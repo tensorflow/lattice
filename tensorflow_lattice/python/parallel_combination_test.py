@@ -20,9 +20,15 @@ import tempfile
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow_lattice.python import lattice_layer as ll
 from tensorflow_lattice.python import parallel_combination_layer as pcl
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 class ParallelCombinationTest(parameterized.TestCase, tf.test.TestCase):
@@ -30,7 +36,7 @@ class ParallelCombinationTest(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(ParallelCombinationTest, self).setUp()
     self.disable_all = False
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def testParallelCombinationSingleInput(self):
     if self.disable_all:
@@ -138,12 +144,13 @@ class ParallelCombinationTest(parameterized.TestCase, tf.test.TestCase):
 
     with tempfile.NamedTemporaryFile(suffix=".h5") as f:
       model.save(f.name)
-      loaded_model = tf.keras.models.load_model(
+      loaded_model = keras.models.load_model(
           f.name,
           custom_objects={
               "ParallelCombination": pcl.ParallelCombination,
-              "Lattice": ll.Lattice
-          })
+              "Lattice": ll.Lattice,
+          },
+      )
       predictions = loaded_model.predict(test_inputs)
       self.assertTrue(
           np.allclose(predictions, np.asarray([[0.0], [1.4], [6.0]])))
