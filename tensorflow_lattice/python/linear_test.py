@@ -24,10 +24,16 @@ from absl import logging
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow_lattice.python import linear_layer as linl
 from tensorflow_lattice.python import test_utils
 from tensorflow_lattice.python import utils
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 _DISABLE_ALL = False
 _LOSS_EPS = 0.0001
@@ -39,7 +45,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     super(LinearTest, self).setUp()
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()
@@ -115,9 +121,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
 
     Returns:
       Tuple `(training_inputs, training_labels, raw_training_inputs)` where
-        `training_inputs` and `training_labels` are data for training and
-        `raw_training_inputs` are representation of `training_inputs` for
-        visualisation.
+        `training_inputs` and `training_labels` are data for training.
     """
     raw_training_inputs = config["x_generator"](
         num_points=config["num_training_records"],
@@ -133,16 +137,14 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
       training_inputs = raw_training_inputs
 
     training_labels = [config["y_function"](x) for x in training_inputs]
-    return training_inputs, training_labels, raw_training_inputs
+    return training_inputs, training_labels
 
-  def _TrainModel(self, config, plot_path=None):
+  def _TrainModel(self, config):
     """Trains model and returns loss.
 
     Args:
       config: Layer config internal for this test which specifies params of
         linear layer to train.
-      plot_path: if specified - png file name to save visualisation. See
-        test_utils.run_training_loop() for more details.
 
     Returns:
       Training loss.
@@ -153,7 +155,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
 
     self._ResetAllBackends()
 
-    training_inputs, training_labels, raw_training_inputs = (
+    training_inputs, training_labels = (
         self._GetTrainingInputsAndLabels(config))
     units = config["units"]
     num_input_dims = config["num_input_dims"]
@@ -197,13 +199,11 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
     optimizer = config["optimizer"](learning_rate=config["learning_rate"])
     model.compile(loss=keras.losses.mean_squared_error, optimizer=optimizer)
 
-    training_data = (training_inputs, training_labels, raw_training_inputs)
+    training_data = (training_inputs, training_labels)
 
     loss = test_utils.run_training_loop(
-        config=config,
-        training_data=training_data,
-        keras_model=model,
-        plot_path=plot_path)
+        config=config, training_data=training_data, keras_model=model
+    )
 
     assetion_ops = linear_layer.assert_constraints(
         eps=config["allowed_constraints_violation"])
@@ -240,7 +240,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": use_bias,
         "num_training_records": 128,
         "num_training_epoch": 400,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 5.0,
@@ -261,7 +261,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": use_bias,
         "num_training_records": 64,
         "num_training_epoch": 160,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "input_min": 0.0,
@@ -283,7 +283,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": True,
         "num_training_records": 64,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "input_min": 0.0,
@@ -305,7 +305,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_epoch": 0,
         "normalization_order": 1,
         "monotonicities": [1] * 4,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 0.0,
@@ -340,7 +340,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": use_bias,
         "num_training_records": 128,
         "num_training_epoch": 400,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 5.0,
@@ -363,7 +363,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": use_bias,
         "num_training_records": 128,
         "num_training_epoch": 400,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 5.0,
@@ -387,7 +387,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": True,
         "num_training_records": 128,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 0.0,
@@ -410,7 +410,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": True,
         "num_training_records": 128,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 0.0,
@@ -439,7 +439,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": True,
         "num_training_records": 64,
         "num_training_epoch": 160,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "input_min": 0.0,
@@ -487,7 +487,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": True,
         "num_training_records": 64,
         "num_training_epoch": 160,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._TwoDMeshGrid,
         "input_min": 0.0,
@@ -514,7 +514,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": True,
         "num_training_records": 640,
         "num_training_epoch": 160,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 0.0,
@@ -539,7 +539,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "monotonic_dominances": dominances,
         "num_training_records": 64,
         "num_training_epoch": 160,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "input_min": 0.0,
@@ -567,7 +567,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "clip_max": (1.0, 4.0, "none"),
         "num_training_records": 64,
         "num_training_epoch": 160,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._ScaterXUniformly,
         "input_min": 0.0,
@@ -592,7 +592,7 @@ class LinearTest(parameterized.TestCase, tf.test.TestCase):
         "use_bias": True,
         "num_training_records": 64,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "input_min": 0.0,

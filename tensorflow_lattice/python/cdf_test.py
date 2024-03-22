@@ -21,6 +21,13 @@ import numpy as np
 import tensorflow as tf
 from tensorflow_lattice.python import cdf_layer
 from tensorflow_lattice.python import test_utils
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
@@ -30,10 +37,10 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
     self.disable_all = False
     self.loss_eps = 0.001
     self.small_eps = 1e-6
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
-    tf.keras.backend.clear_session()
+    keras.backend.clear_session()
     tf.compat.v1.reset_default_graph()
 
   def _SetDefaults(self, config):
@@ -115,10 +122,8 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
       config: Dictionary with config for this unit test.
 
     Returns:
-      Tuple `(training_inputs, training_labels, raw_training_inputs)` where
-        `training_inputs` and `training_labels` are data for training and
-        `raw_training_inputs` are representation of training_inputs for
-        visualization.
+      Tuple `(training_inputs, training_labels)` where
+        `training_inputs` and `training_labels` are data for training.
     """
     raw_training_inputs = config["x_generator"](
         num_points=config["num_training_records"],
@@ -132,15 +137,15 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
       training_inputs = raw_training_inputs
 
     training_labels = [config["y_function"](x) for x in training_inputs]
-    return training_inputs, training_labels, raw_training_inputs
+    return training_inputs, training_labels
 
-  def _TrainModel(self, config, plot_path=None):
+  def _TrainModel(self, config):
     logging.info("Testing config:")
     logging.info(config)
     config = self._SetDefaults(config)
     self._ResetAllBackends()
 
-    training_inputs, training_labels, raw_training_inputs = (
+    training_inputs, training_labels = (
         self._GetTrainingInputsAndLabels(config))
 
     keras_layer = cdf_layer.CDF(
@@ -154,25 +159,23 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         kernel_initializer=config["kernel_initializer"],
         input_shape=(config["input_dims"],),
         dtype=tf.float32)
-    model = tf.keras.models.Sequential()
+    model = keras.models.Sequential()
     model.add(keras_layer)
 
     # When we have multi-unit output, we average across the output units for
     # testing.
     if config["units"] > 1:
       model.add(
-          tf.keras.layers.Lambda(
+          keras.layers.Lambda(
               lambda x: tf.reduce_mean(x, axis=-1, keepdims=True)))
 
     optimizer = config["optimizer"](learning_rate=config["learning_rate"])
     model.compile(loss="mse", optimizer=optimizer)
 
-    training_data = (training_inputs, training_labels, raw_training_inputs)
+    training_data = (training_inputs, training_labels)
     loss = test_utils.run_training_loop(
-        config=config,
-        training_data=training_data,
-        keras_model=model,
-        plot_path=plot_path)
+        config=config, training_data=training_data, keras_model=model
+    )
 
     if tf.executing_eagerly():
       tf.print("final weights: ", keras_layer.kernel)
@@ -203,7 +206,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 128,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinPlusX,
@@ -235,7 +238,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -268,7 +271,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 200,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._ScaledSum,
@@ -301,7 +304,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 200,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -334,7 +337,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformlyExtendedRange,
         "y_function": self._Sin,
@@ -367,7 +370,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGridExtendedRange,
         "y_function": self._SinOfSum,
@@ -395,7 +398,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
     if self.disable_all:
       return
     # Set the random seed for the initializer for consistent results.
-    kernel_initializer = tf.keras.initializers.RandomUniform(0.0, 1.0, seed=42)
+    kernel_initializer = keras.initializers.RandomUniform(0.0, 1.0, seed=42)
     config = {
         "input_dims": input_dims,
         "units": units,
@@ -406,7 +409,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "kernel_initializer": kernel_initializer,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._Square,
@@ -440,7 +443,7 @@ class CdfLayerTest(parameterized.TestCase, tf.test.TestCase):
         "input_scaling_type": input_scaling_type,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,

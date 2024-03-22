@@ -24,10 +24,16 @@ from absl import logging
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow_lattice.python import categorical_calibration_layer as categorical_calibraion
 from tensorflow_lattice.python import parallel_combination_layer as parallel_combination
 from tensorflow_lattice.python import test_utils
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
@@ -37,7 +43,7 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     self._disable_all = False
     self._loss_eps = 1e-2
     self._loss_diff_eps = 1e-4
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()
@@ -78,14 +84,12 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config.setdefault("model_dir", "/tmp/test_pwl_model_dir/")
     return config
 
-  def _TrainModel(self, config, plot_path=None):
+  def _TrainModel(self, config):
     """Trains model and returns loss.
 
     Args:
       config: Layer config internal for this test which specifies params of
         piecewise linear layer to train.
-      plot_path: if specified - png file name to save visualization. See
-        test_utils.run_training_loop() for more details.
 
     Returns:
       Training loss.
@@ -150,13 +154,12 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         loss=keras.losses.mean_squared_error,
         optimizer=config["optimizer"](learning_rate=config["learning_rate"]))
 
-    training_data = (training_inputs, training_labels, training_inputs)
+    training_data = (training_inputs, training_labels)
 
     loss = test_utils.run_training_loop(
         config=config,
         training_data=training_data,
         keras_model=model,
-        plot_path=plot_path,
         input_dtype=np.int32)
 
     assetion_ops = []
@@ -176,7 +179,7 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 200,
         "num_training_epoch": 500,
-        "optimizer": tf.keras.optimizers.Adam,
+        "optimizer": keras.optimizers.Adam,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": y_function,
@@ -201,7 +204,7 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 200,
         "num_training_epoch": 500,
-        "optimizer": tf.keras.optimizers.Adam,
+        "optimizer": keras.optimizers.Adam,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": y_function,
@@ -238,7 +241,7 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 1000,
         "num_training_epoch": 1000,
-        "optimizer": tf.keras.optimizers.Adam,
+        "optimizer": keras.optimizers.Adam,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": np.mean,
@@ -275,7 +278,7 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 200,
         "num_training_epoch": 500,
-        "optimizer": tf.keras.optimizers.Adam,
+        "optimizer": keras.optimizers.Adam,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": float,
@@ -301,7 +304,7 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 20,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.Adam,
+        "optimizer": keras.optimizers.Adam,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": lambda _: 2.0,
@@ -322,7 +325,7 @@ class CategoricalCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     # Not Splitting
     units = 10
     input_shape, output_shape = (units,), (None, units)
-    input_a = tf.keras.layers.Input(shape=input_shape)
+    input_a = keras.layers.Input(shape=input_shape)
     cat_cal_0 = categorical_calibraion.CategoricalCalibration(
         num_buckets=3, units=units)
     output = cat_cal_0(input_a)

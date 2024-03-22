@@ -27,7 +27,7 @@ from setuptools import setup
 # This version number should always be that of the *next* (unreleased) version.
 # Immediately after uploading a package to PyPI, you should increment the
 # version number and push to gitHub.
-__version__ = "2.0.13"
+__version__ = "2.1.0"
 
 if "--release" in sys.argv:
   sys.argv.remove("--release")
@@ -45,6 +45,7 @@ _install_requires = [
     "scikit-learn",
     "matplotlib",
     "graphviz",
+    "tf-keras",
 ]
 
 # Part of the visualization code uses colabtools and IPython libraries. These
@@ -77,10 +78,9 @@ _description = (
 _long_description = """\
 TensorFlow Lattice is a library that implements fast-to-evaluate and
 interpretable (optionally monotonic) lattice based models, which are also known
-as *interpolated look-up tables*. The library includes a collection of
-Estimators, which operate like any TensorFlow Estimator. It also includes
-Keras layers for lattices and feature calibration that can be composed
-into custom models.
+as *interpolated look-up tables*. The library includes a collection of Keras
+layers for lattices and feature calibration that can be composed into custom
+models or used inside generic premade models.
 """
 
 setup(

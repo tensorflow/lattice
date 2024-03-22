@@ -27,7 +27,6 @@ from tensorflow_lattice.python import cdf_layer
 from tensorflow_lattice.python import conditional_cdf
 from tensorflow_lattice.python import conditional_pwl_calibration
 from tensorflow_lattice.python import configs
-from tensorflow_lattice.python import estimators
 from tensorflow_lattice.python import kronecker_factored_lattice_layer
 from tensorflow_lattice.python import kronecker_factored_lattice_lib
 from tensorflow_lattice.python import lattice_layer
@@ -42,4 +41,3 @@ from tensorflow_lattice.python import pwl_calibration_layer
 from tensorflow_lattice.python import pwl_calibration_lib
 from tensorflow_lattice.python import test_utils
 from tensorflow_lattice.python import utils
-from tensorflow_lattice.python import visualization

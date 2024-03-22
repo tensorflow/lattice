@@ -28,15 +28,21 @@ from __future__ import print_function
 import collections
 import itertools
 
-from . import kronecker_factored_lattice_layer as kfll
-from . import lattice_layer
-from . import rtl_lib
-
 from absl import logging
 import numpy as np
 import six
 import tensorflow as tf
-from tensorflow import keras
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, 'version', None)
+if version_fn and version_fn().startswith('3.'):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+
+from . import kronecker_factored_lattice_layer as kfll
+from . import lattice_layer
+from . import rtl_lib
 
 _MAX_RTL_SWAPS = 10000
 _RTLInput = collections.namedtuple('_RTLInput',
@@ -89,10 +95,10 @@ class RTL(keras.layers.Layer):
   Example:
 
   ```python
-  a = tf.keras.Input(shape=(1,))
-  b = tf.keras.Input(shape=(1,))
-  c = tf.keras.Input(shape=(1,))
-  d = tf.keras.Input(shape=(1,))
+  a = keras.Input(shape=(1,))
+  b = keras.Input(shape=(1,))
+  c = keras.Input(shape=(1,))
+  d = keras.Input(shape=(1,))
   cal_a = tfl.layers.CategoricalCalibration(
       units=10, output_min=0, output_max=1, ...)(a)
   cal_b = tfl.layers.PWLCalibration(
@@ -116,7 +122,7 @@ class RTL(keras.layers.Layer):
       num_input_dims=5,
       monotonicities=['increasing'] * 5,
   )(rtl_1)
-  model = tf.keras.Model(inputs=[a, b, c, d], outputs=outputs)
+  model = keras.Model(inputs=[a, b, c, d], outputs=outputs)
   ```
   """
   # pyformat: enable
@@ -249,7 +255,7 @@ class RTL(keras.layers.Layer):
           is not currently supported.
       average_outputs: Whether to average the outputs of this layer. Ignored
         when separate_outputs is True.
-      **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
+      **kwargs: Other args passed to `keras.layers.Layer` initializer.
 
     Raises:
       ValueError: If layer hyperparameters are invalid.

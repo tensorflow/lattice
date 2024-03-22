@@ -6,7 +6,7 @@ knowledge into the learning process through common-sense or policy-driven
 [shape constraints](tutorials/shape_constraints.ipynb). This is done using a
 collection of [Keras layers](tutorials/keras_layers.ipynb) that can satisfy
 constraints such as monotonicity, convexity and pairwise trust. The library also
-provides easy to setup [canned estimators](tutorials/canned_estimators.ipynb).
+provides easy to setup [premade models](tutorials/premade_models.ipynb).
 
 ## Concepts
 
@@ -59,7 +59,7 @@ following show examples such calibrations functions with 10 keypoints:
 </p>
 
 It is often a good idea to use the quantiles of the features as input keypoints.
-TensorFlow Lattice [canned estimators](tutorials/canned_estimators.ipynb) can
+TensorFlow Lattice [premade models](tutorials/premade_models.ipynb) can
 automatically set the input keypoints to the feature quantiles.
 
 For categorical features, TensorFlow Lattice provides categorical calibration
@@ -209,8 +209,7 @@ include embeddings or other Keras layers.
 ## Tutorials and API docs
 
 For common model architectures, you can use
-[Keras premade models](tutorials/premade_models.ipynb) or
-[canned Estimators](tutorials/canned_estimators.ipynb). You can also create
+[Keras premade models](tutorials/premade_models.ipynb). You can also create
 custom models using [TF Lattice Keras layers](tutorials/keras_layers.ipynb) or
 mix and match with other Keras layers. Check out the
 [full API docs](https://www.tensorflow.org/lattice/api_docs/python/tfl) for

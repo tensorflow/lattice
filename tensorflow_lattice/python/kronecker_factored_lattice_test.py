@@ -23,10 +23,16 @@ from absl import logging
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow_lattice.python import kronecker_factored_lattice_layer as kfll
 from tensorflow_lattice.python import kronecker_factored_lattice_lib as kfl_lib
 from tensorflow_lattice.python import test_utils
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
@@ -38,7 +44,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.loss_eps = 0.001
     self.small_eps = 1e-6
     self.seed = 42
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()
@@ -154,10 +160,8 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
       config: Dictionary with config for this unit test.
 
     Returns:
-      Tuple `(training_inputs, training_labels, raw_training_inputs)` where
-      `training_inputs` and `training_labels` are data for training and
-      `raw_training_inputs` are representation of training_inputs for
-      visualisation.
+      Tuple `(training_inputs, training_labels)` where
+      `training_inputs` and `training_labels` are data for training.
     """
     raw_training_inputs = config["x_generator"](
         num_points=config["num_training_records"],
@@ -172,7 +176,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
       training_inputs = raw_training_inputs
 
     training_labels = [config["y_function"](x) for x in training_inputs]
-    return training_inputs, training_labels, raw_training_inputs
+    return training_inputs, training_labels
 
   def _SetDefaults(self, config):
     config.setdefault("units", 1)
@@ -201,17 +205,17 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     for units, lattice_index in [(1, 0), (3, 0), (3, 2)]:
       config["units"] = units
       config["lattice_index"] = lattice_index
-      tf.keras.utils.set_random_seed(42)
+      keras.utils.set_random_seed(42)
       losses.append(self._TrainModel(config))
     self.assertAlmostEqual(min(losses), max(losses), delta=self.loss_eps)
 
-  def _TrainModel(self, config, plot_path=None):
+  def _TrainModel(self, config):
     logging.info("Testing config:")
     logging.info(config)
     config = self._SetDefaults(config)
     self._ResetAllBackends()
 
-    training_inputs, training_labels, raw_training_inputs = (
+    training_inputs, training_labels = (
         self._GetTrainingInputsAndLabels(config))
 
     units = config["units"]
@@ -253,12 +257,10 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     optimizer = config["optimizer"](learning_rate=config["learning_rate"])
     model.compile(loss=keras.losses.mean_squared_error, optimizer=optimizer)
 
-    training_data = (training_inputs, training_labels, raw_training_inputs)
+    training_data = (training_inputs, training_labels)
     loss = test_utils.run_training_loop(
-        config=config,
-        training_data=training_data,
-        keras_model=model,
-        plot_path=plot_path)
+        config=config, training_data=training_data, keras_model=model
+    )
 
     if tf.executing_eagerly():
       tf.print("final weights: ", keras_layer.kernel)
@@ -282,7 +284,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 1,
         "num_training_records": 128,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinPlusX,
@@ -301,7 +303,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 1,
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": lambda x: -self._SinPlusX(x),
@@ -321,7 +323,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_terms": 1,
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinPlusLargeX,
@@ -344,7 +346,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -363,7 +365,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -382,7 +384,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.5,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._SinPlusXNd,
@@ -401,7 +403,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": lambda x: -self._ScaledSum(x),
@@ -420,7 +422,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 5,
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._ScaledSum,
@@ -441,7 +443,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 5,
         "num_training_records": 100,
         "num_training_epoch": 40,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": lambda x: -self._ScaledSum(x),
@@ -460,7 +462,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 4,
         "num_training_records": 100,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -485,7 +487,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "monotonicities": monotonicities,
         "num_training_records": 100,
         "num_training_epoch": 50,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 10.0,
         "x_generator": self._SameValueForAllDims,
         "y_function": self._SinOfSum,
@@ -510,7 +512,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "num_terms": 128,
         "num_training_records": 1000,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": test_utils.get_hypercube_interpolation_fn(weights),
@@ -536,7 +538,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 10,
         "num_training_records": 1000,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -573,7 +575,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 100,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._Max,
@@ -593,7 +595,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 100,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._ScaledSum,
@@ -615,24 +617,48 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
           self._TrainModel(config)
 
   @parameterized.parameters(
-      (-1, 1,
-       kfll.KFLRandomMonotonicInitializer(
-           monotonicities=None, init_min=-10,
-           init_max=10), "scale_initializer"),
-      (None, 1,
-       kfll.KFLRandomMonotonicInitializer(
-           monotonicities=None, init_min=-10,
-           init_max=10), "scale_initializer"),
-      (-1, None,
-       kfll.KFLRandomMonotonicInitializer(
-           monotonicities=None, init_min=-10,
-           init_max=10), "scale_initializer"),
-      (-1, 1, "kfl_random_monotonic_initializer",
-       tf.keras.initializers.Constant(value=-100)),
-      (None, 1, "kfl_random_monotonic_initializer",
-       tf.keras.initializers.Constant(value=100)),
-      (-1, None, "kfl_random_monotonic_initializer",
-       tf.keras.initializers.Constant(value=-100)),
+      (
+          -1,
+          1,
+          kfll.KFLRandomMonotonicInitializer(
+              monotonicities=None, init_min=-10, init_max=10
+          ),
+          "scale_initializer",
+      ),
+      (
+          None,
+          1,
+          kfll.KFLRandomMonotonicInitializer(
+              monotonicities=None, init_min=-10, init_max=10
+          ),
+          "scale_initializer",
+      ),
+      (
+          -1,
+          None,
+          kfll.KFLRandomMonotonicInitializer(
+              monotonicities=None, init_min=-10, init_max=10
+          ),
+          "scale_initializer",
+      ),
+      (
+          -1,
+          1,
+          "kfl_random_monotonic_initializer",
+          keras.initializers.Constant(value=-100),
+      ),
+      (
+          None,
+          1,
+          "kfl_random_monotonic_initializer",
+          keras.initializers.Constant(value=100),
+      ),
+      (
+          -1,
+          None,
+          "kfl_random_monotonic_initializer",
+          keras.initializers.Constant(value=-100),
+      ),
   )
   def testAssertBounds(self, output_min, output_max, kernel_initializer,
                        scale_initializer):
@@ -645,7 +671,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 100,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._TwoDMeshGrid,
         "y_function": self._ScaledSum,
@@ -681,7 +707,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": input_dims,
         "num_training_records": 900,
         "num_training_epoch": 100,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinPlusX,
@@ -789,7 +815,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 1,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformlyExtendedRange,
         "y_function": self._Sin,
@@ -806,7 +832,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "input_dims": 2,
         "num_training_records": 100,
         "num_training_epoch": 20,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._TwoDMeshGridExtendedRange,
         "y_function": self._SinOfSum,
@@ -831,7 +857,7 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
         "monotonicities": monotonicities,
         "num_training_records": 100,
         "num_training_epoch": 3,
-        "optimizer": tf.keras.optimizers.legacy.Adagrad,
+        "optimizer": keras.optimizers.legacy.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SinOfSum,
@@ -868,8 +894,9 @@ class KroneckerFactoredLatticeTest(parameterized.TestCase, tf.test.TestCase):
     self.assertLessEqual(graph_size, expected_graph_size)
 
   @parameterized.parameters(
-      ("random_uniform", tf.keras.initializers.RandomUniform),
-      ("kfl_random_monotonic_initializer", kfll.KFLRandomMonotonicInitializer))
+      ("random_uniform", keras.initializers.RandomUniform),
+      ("kfl_random_monotonic_initializer", kfll.KFLRandomMonotonicInitializer),
+  )
   def testCreateKernelInitializer(self, kernel_initializer_id, expected_type):
     self.assertEqual(
         expected_type,

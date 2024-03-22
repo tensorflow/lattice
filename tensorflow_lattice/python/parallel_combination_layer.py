@@ -22,11 +22,17 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow_lattice.python import categorical_calibration_layer
 from tensorflow_lattice.python import lattice_layer
 from tensorflow_lattice.python import linear_layer
 from tensorflow_lattice.python import pwl_calibration_layer
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
 # TODO: Add support for calibrators with units > 1.
@@ -80,7 +86,7 @@ class ParallelCombination(keras.layers.Layer):
       single_output: if True returns output as single tensor of shape
         `(batch_size, k)`. Otherwise returns list of `k` tensors of shape
         `(batch_size, 1)`.
-      **kwargs: other args passed to `tf.keras.layers.Layer` initializer.
+      **kwargs: other args passed to `keras.layers.Layer` initializer.
     """
     super(ParallelCombination, self).__init__(**kwargs)
     self.calibration_layers = []

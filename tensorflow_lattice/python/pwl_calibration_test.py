@@ -30,14 +30,20 @@ from absl import logging
 from absl.testing import parameterized
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow_lattice.python import parallel_combination_layer as parallel_combination
 from tensorflow_lattice.python import pwl_calibration_layer as keras_layer
 from tensorflow_lattice.python import test_utils
 from tensorflow_lattice.python import utils
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 
-class CalibrateWithSeparateMissing(tf.keras.layers.Layer):
+class CalibrateWithSeparateMissing(keras.layers.Layer):
   """Create separate is_missing tensor.
 
   Splits input tensor into list: [input_tensor, is_missing_tensor] and passes
@@ -62,7 +68,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     self._disable_all = False
     self._loss_eps = 0.0001
     self._small_eps = 1e-6
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
   def _ResetAllBackends(self):
     keras.backend.clear_session()
@@ -165,23 +171,18 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
               num=config["num_keypoints"]))
     return config
 
-  def _TrainModel(self, config, plot_path=None):
+  def _TrainModel(self, config):
     """Trains model and returns loss.
 
     Args:
       config: Layer config internal for this test which specifies params of
         piecewise linear layer to train.
-      plot_path: if specified - png file name to save visualization. See
-        test_utils.run_training_loop() for more details.
 
     Returns:
       Training loss.
     """
     logging.info("Testing config:")
     logging.info(config)
-    if plot_path is not None and config["units"] > 1:
-      raise ValueError("Test config error. "
-                       "Can not plot multi unit calibrators.")
     config = self._SetDefaults(config)
 
     self._ResetAllBackends()
@@ -209,7 +210,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       pwl_calibration_units = config["units"]
 
     model = keras.models.Sequential()
-    model.add(tf.keras.layers.Input(shape=[input_units], dtype=tf.float32))
+    model.add(keras.layers.Input(shape=[input_units], dtype=tf.float32))
     calibration_layers = []
     for _ in range(num_calibration_layers):
       calibration_layers.append(
@@ -251,13 +252,11 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         loss=keras.losses.mean_squared_error,
         optimizer=config["optimizer"](learning_rate=config["learning_rate"]))
 
-    training_data = (training_inputs, training_labels, training_inputs)
+    training_data = (training_inputs, training_labels)
 
     loss = test_utils.run_training_loop(
-        config=config,
-        training_data=training_data,
-        keras_model=model,
-        plot_path=plot_path)
+        config=config, training_data=training_data, keras_model=model
+    )
 
     assetion_ops = []
     for calibration_layer in calibration_layers:
@@ -346,7 +345,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "one_d_input": one_d_input,
         "num_training_records": 100,
         "num_training_epoch": 2000,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -379,7 +378,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 2000,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -405,17 +404,17 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       self.assertAlmostEqual(loss, expected_loss, delta=self._loss_eps)
 
   @parameterized.parameters(
-      (1, -1.5, 1.5, tf.keras.optimizers.SGD, 2100, 0.002957),
-      (1, -1.5, 1.5, tf.keras.optimizers.Adagrad, 2100, 0.002798),
+      (1, -1.5, 1.5, keras.optimizers.SGD, 2100, 0.002957),
+      (1, -1.5, 1.5, keras.optimizers.Adagrad, 2100, 0.002798),
       # TODO: Something really weird is going on here with Adam
       # optimizer in case when num_training_epoch is exactly 2010.
       # Test verifies result with 2100 epochs which behaves as expected.
-      (1, -1.5, 1.5, tf.keras.optimizers.Adam, 2100, 0.000769),
-      (1, -0.5, 0.5, tf.keras.optimizers.SGD, 200, 0.011483),
-      (1, -0.5, 0.5, tf.keras.optimizers.Adagrad, 200, 0.011645),
-      (1, -0.5, 0.5, tf.keras.optimizers.Adam, 200, 0.011116),
-      (3, -1.5, 1.5, tf.keras.optimizers.Adagrad, 2100, 0.001759),
-      (3, -0.5, 0.5, tf.keras.optimizers.Adagrad, 200, 0.005986),
+      (1, -1.5, 1.5, keras.optimizers.Adam, 2100, 0.000769),
+      (1, -0.5, 0.5, keras.optimizers.SGD, 200, 0.011483),
+      (1, -0.5, 0.5, keras.optimizers.Adagrad, 200, 0.011645),
+      (1, -0.5, 0.5, keras.optimizers.Adam, 200, 0.011116),
+      (3, -1.5, 1.5, keras.optimizers.Adagrad, 2100, 0.001759),
+      (3, -0.5, 0.5, keras.optimizers.Adagrad, 200, 0.005986),
   )
   def testNonMonotonicFunction(self, units, output_min, output_max, optimizer,
                                num_training_epoch, expected_loss):
@@ -425,7 +424,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 2100,
-        "optimizer": tf.keras.optimizers.SGD,
+        "optimizer": keras.optimizers.SGD,
         "learning_rate": 0.015,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -463,7 +462,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -528,7 +527,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWavesPlusOne,
@@ -549,16 +548,16 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       self.assertAlmostEqual(loss, expected_loss, delta=self._loss_eps)
 
   @parameterized.parameters(
-      (1, False, tf.keras.optimizers.SGD, 0.004715),
-      (1, False, tf.keras.optimizers.Adagrad, 0.003820),
-      (1, False, tf.keras.optimizers.Adam, 0.002797),
-      (1, True, tf.keras.optimizers.SGD, 0.004427),
-      (1, True, tf.keras.optimizers.Adagrad, 0.004084),
+      (1, False, keras.optimizers.SGD, 0.004715),
+      (1, False, keras.optimizers.Adagrad, 0.003820),
+      (1, False, keras.optimizers.Adam, 0.002797),
+      (1, True, keras.optimizers.SGD, 0.004427),
+      (1, True, keras.optimizers.Adagrad, 0.004084),
       # Adam is doing terrible when required to stretch monotonic function
       # even if bounds are proper.
-      (1, True, tf.keras.optimizers.Adam, 0.065664),
-      (3, False, tf.keras.optimizers.Adagrad, 0.002371),
-      (3, True, tf.keras.optimizers.Adagrad, 0.002670),
+      (1, True, keras.optimizers.Adam, 0.065664),
+      (3, False, keras.optimizers.Adagrad, 0.002371),
+      (3, True, keras.optimizers.Adagrad, 0.002670),
   )
   def testMonotonicProperBounds(self, units, is_clamped, optimizer,
                                 expected_loss):
@@ -589,15 +588,15 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       self.assertAlmostEqual(loss, expected_loss, delta=self._loss_eps)
 
   @parameterized.parameters(
-      (1, False, tf.keras.optimizers.SGD, 0.15, 0.009563),
-      (1, False, tf.keras.optimizers.Adagrad, 0.015, 0.011117),
-      (1, False, tf.keras.optimizers.Adam, 0.015, 0.015356),
-      (1, True, tf.keras.optimizers.SGD, 0.15, 0.009563),
-      (1, True, tf.keras.optimizers.Adagrad, 0.015, 0.011117),
+      (1, False, keras.optimizers.SGD, 0.15, 0.009563),
+      (1, False, keras.optimizers.Adagrad, 0.015, 0.011117),
+      (1, False, keras.optimizers.Adam, 0.015, 0.015356),
+      (1, True, keras.optimizers.SGD, 0.15, 0.009563),
+      (1, True, keras.optimizers.Adagrad, 0.015, 0.011117),
       # Adam squeezes monotonic function just slightly worse than adagrad.
-      (1, True, tf.keras.optimizers.Adam, 0.015, 0.015189),
-      (3, False, tf.keras.optimizers.Adagrad, 0.015, 0.006057),
-      (3, True, tf.keras.optimizers.Adagrad, 0.015, 0.006049),
+      (1, True, keras.optimizers.Adam, 0.015, 0.015189),
+      (3, False, keras.optimizers.Adagrad, 0.015, 0.006057),
+      (3, True, keras.optimizers.Adagrad, 0.015, 0.006049),
   )
   def testMonotonicNarrowBounds(self, units, is_clamped, optimizer,
                                 learning_rate, expected_loss):
@@ -628,15 +627,15 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
       self.assertAlmostEqual(loss, expected_loss, delta=self._loss_eps)
 
   @parameterized.parameters(
-      (1, False, tf.keras.optimizers.SGD, 0.005920),
-      (1, False, tf.keras.optimizers.Adagrad, 0.006080),
-      (1, False, tf.keras.optimizers.Adam, 0.002914),
-      (1, True, tf.keras.optimizers.SGD, 0.013836),
-      (1, True, tf.keras.optimizers.Adagrad, 0.066928),
+      (1, False, keras.optimizers.SGD, 0.005920),
+      (1, False, keras.optimizers.Adagrad, 0.006080),
+      (1, False, keras.optimizers.Adam, 0.002914),
+      (1, True, keras.optimizers.SGD, 0.013836),
+      (1, True, keras.optimizers.Adagrad, 0.066928),
       # Adam is doing terrible when required to stretch monotonic function.
-      (1, True, tf.keras.optimizers.Adam, 0.230402),
-      (3, False, tf.keras.optimizers.Adagrad, 0.004891),
-      (3, True, tf.keras.optimizers.Adagrad, 0.021490),
+      (1, True, keras.optimizers.Adam, 0.230402),
+      (3, False, keras.optimizers.Adagrad, 0.004891),
+      (3, True, keras.optimizers.Adagrad, 0.021490),
   )
   def testMonotonicWideBounds(self, units, is_clamped, optimizer,
                               expected_loss):
@@ -805,7 +804,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWavesPlusOne,
@@ -843,7 +842,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 120,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -878,7 +877,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 1.0,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WavyParabola,
@@ -919,7 +918,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 120,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.3,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WavyParabola,
@@ -959,7 +958,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 120,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.5,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._WavyParabola,
@@ -993,7 +992,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 100,
         "num_training_epoch": 200,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -1022,7 +1021,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": num_training_epoch,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformlyIncludeBounds,
         "y_function": self._SinCycle,
@@ -1056,7 +1055,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "num_training_records": 100,
         # 0 training epochs to see pure output of initializer.
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -1103,7 +1102,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
         "units": units,
         "num_training_records": 100,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "input_keypoints": keypoints,
@@ -1138,7 +1137,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     config = {
         "num_training_records": 100,
         "num_training_epoch": 0,
-        "optimizer": tf.keras.optimizers.Adagrad,
+        "optimizer": keras.optimizers.Adagrad,
         "learning_rate": 0.15,
         "x_generator": self._ScatterXUniformly,
         "y_function": self._SmallWaves,
@@ -1178,7 +1177,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
     units = 10
     input_keypoints = [1, 2, 3, 4, 5]
     input_shape, output_shape = (units,), (None, units)
-    input_a = tf.keras.layers.Input(shape=input_shape)
+    input_a = keras.layers.Input(shape=input_shape)
     pwl_0 = keras_layer.PWLCalibration(
         input_keypoints=input_keypoints, units=units)
     output = pwl_0(input_a)
@@ -1216,7 +1215,7 @@ class PwlCalibrationLayerTest(parameterized.TestCase, tf.test.TestCase):
 
     # Check after Keras model compile
     model = keras.models.Sequential()
-    model.add(tf.keras.layers.Input(shape=[input_dims], dtype=tf.float32))
+    model.add(keras.layers.Input(shape=[input_dims], dtype=tf.float32))
     model.add(pwl)
     model.compile(loss=keras.losses.mean_squared_error)
     self.assertAllEqual(expected_function_output, pwl.keypoints_inputs())

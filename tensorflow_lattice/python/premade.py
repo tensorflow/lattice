@@ -29,12 +29,21 @@ calibrated_lattice_model.fit(...)
 ```
 
 Supported models are defined in `tfl.configs`. Each model architecture can be
-used the same as any other `tf.keras.Model`.
+used the same as any other `keras.Model`.
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import tensorflow as tf
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 from . import aggregation_layer
 from . import categorical_calibration_layer
@@ -47,15 +56,12 @@ from . import premade_lib
 from . import pwl_calibration_layer
 from . import rtl_layer
 
-from absl import logging
-import tensorflow as tf
-
 
 # TODO: add support for serialization and object scoping or annoations.
-class CalibratedLatticeEnsemble(tf.keras.Model):
+class CalibratedLatticeEnsemble(keras.Model):
   """Premade model for Tensorflow calibrated lattice ensemble models.
 
-  Creates a `tf.keras.Model` for the model architecture specified by the
+  Creates a `keras.Model` for the model architecture specified by the
   `model_config`, which should be a
   `tfl.configs.CalibratedLatticeEnsembleConfig`. No fields in the model config
   will be automatically filled in, so the config must be fully specified. Note
@@ -84,7 +90,7 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
       model_config: Model configuration object describing model architecutre.
         Should be one of the model configs in `tfl.configs`.
       dtype: dtype of layers used in the model.
-      **kwargs: Any additional `tf.keras.Model` arguments
+      **kwargs: Any additional `keras.Model` arguments
     """
     # Set our model_config
     self.model_config = model_config
@@ -138,14 +144,14 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
   def get_config(self):
     """Returns a configuration dictionary."""
     config = {'name': self.name, 'trainable': self.trainable}
-    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+    config['model_config'] = keras.utils.legacy.serialize_keras_object(
         self.model_config
     )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+    model_config = keras.utils.legacy.deserialize_keras_object(
         config.get('model_config'), custom_objects=custom_objects
     )
     premade_lib.verify_config(model_config)
@@ -154,10 +160,10 @@ class CalibratedLatticeEnsemble(tf.keras.Model):
                trainable=config.get('trainable', True))
 
 
-class CalibratedLattice(tf.keras.Model):
+class CalibratedLattice(keras.Model):
   """Premade model for Tensorflow calibrated lattice models.
 
-  Creates a `tf.keras.Model` for the model architecture specified by the
+  Creates a `keras.Model` for the model architecture specified by the
   `model_config`, which should be a `tfl.configs.CalibratedLatticeConfig`. No
   fields in the model config will be automatically filled in, so the config
   must be fully specified. Note that the inputs to the model should match the
@@ -185,7 +191,7 @@ class CalibratedLattice(tf.keras.Model):
       model_config: Model configuration object describing model architecutre.
         Should be one of the model configs in `tfl.configs`.
       dtype: dtype of layers used in the model.
-      **kwargs: Any additional `tf.keras.Model` arguments.
+      **kwargs: Any additional `keras.Model` arguments.
     """
     # Set our model_config
     self.model_config = model_config
@@ -248,14 +254,14 @@ class CalibratedLattice(tf.keras.Model):
   def get_config(self):
     """Returns a configuration dictionary."""
     config = {'name': self.name, 'trainable': self.trainable}
-    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+    config['model_config'] = keras.utils.legacy.serialize_keras_object(
         self.model_config
     )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+    model_config = keras.utils.legacy.deserialize_keras_object(
         config.get('model_config'), custom_objects=custom_objects
     )
     premade_lib.verify_config(model_config)
@@ -264,10 +270,10 @@ class CalibratedLattice(tf.keras.Model):
                trainable=config.get('trainable', True))
 
 
-class CalibratedLinear(tf.keras.Model):
+class CalibratedLinear(keras.Model):
   """Premade model for Tensorflow calibrated linear models.
 
-  Creates a `tf.keras.Model` for the model architecture specified by the
+  Creates a `keras.Model` for the model architecture specified by the
   `model_config`, which should be a `tfl.configs.CalibratedLinearConfig`. No
   fields in the model config will be automatically filled in, so the config
   must be fully specified. Note that the inputs to the model should match the
@@ -295,7 +301,7 @@ class CalibratedLinear(tf.keras.Model):
       model_config: Model configuration object describing model architecutre.
         Should be one of the model configs in `tfl.configs`.
       dtype: dtype of layers used in the model.
-      **kwargs: Any additional `tf.keras.Model` arguments.
+      **kwargs: Any additional `keras.Model` arguments.
     """
     # Set our model_config
     self.model_config = model_config
@@ -361,14 +367,14 @@ class CalibratedLinear(tf.keras.Model):
   def get_config(self):
     """Returns a configuration dictionary."""
     config = {'name': self.name, 'trainable': self.trainable}
-    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+    config['model_config'] = keras.utils.legacy.serialize_keras_object(
         self.model_config
     )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+    model_config = keras.utils.legacy.deserialize_keras_object(
         config.get('model_config'), custom_objects=custom_objects
     )
     premade_lib.verify_config(model_config)
@@ -379,10 +385,10 @@ class CalibratedLinear(tf.keras.Model):
 
 # TODO: add support for tf.map_fn and inputs of shape (B, ?, input_dim)
 # as well as non-ragged inputs using padding/mask.
-class AggregateFunction(tf.keras.Model):
+class AggregateFunction(keras.Model):
   """Premade model for Tensorflow aggregate function learning models.
 
-  Creates a `tf.keras.Model` for the model architecture specified by the
+  Creates a `keras.Model` for the model architecture specified by the
   `model_config`, which should be a
   `tfl.configs.AggregateFunctionConfig`. No
   fields in the model config will be automatically filled in, so the config
@@ -408,7 +414,7 @@ class AggregateFunction(tf.keras.Model):
       model_config: Model configuration object describing model architecutre.
         Should be a `tfl.configs.AggregateFunctionConfig` instance.
       dtype: dtype of layers used in the model.
-      **kwargs: Any additional `tf.keras.Model` arguments.
+      **kwargs: Any additional `keras.Model` arguments.
     """
     # Set our model_config
     self.model_config = model_config
@@ -479,14 +485,14 @@ class AggregateFunction(tf.keras.Model):
   def get_config(self):
     """Returns a configuration dictionary."""
     config = {'name': self.name, 'trainable': self.trainable}
-    config['model_config'] = tf.keras.utils.legacy.serialize_keras_object(
+    config['model_config'] = keras.utils.legacy.serialize_keras_object(
         self.model_config
     )
     return config
 
   @classmethod
   def from_config(cls, config, custom_objects=None):
-    model_config = tf.keras.utils.legacy.deserialize_keras_object(
+    model_config = keras.utils.legacy.deserialize_keras_object(
         config.get('model_config'), custom_objects=custom_objects
     )
     premade_lib.verify_config(model_config)

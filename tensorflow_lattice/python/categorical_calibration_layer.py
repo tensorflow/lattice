@@ -21,10 +21,15 @@ tables satisfying monotonicity and bounds constraints if specified.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
-from . import categorical_calibration_lib
 import tensorflow as tf
-from tensorflow import keras
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, "version", None)
+if version_fn and version_fn().startswith("3."):
+  import tf_keras as keras
+else:
+  keras = tf.keras
+from . import categorical_calibration_lib
 
 DEFAULT_INPUT_VALUE_NAME = "default_input_value"
 CATEGORICAL_CALIBRATION_KERNEL_NAME = "categorical_calibration_kernel"
@@ -124,7 +129,7 @@ class CategoricalCalibration(keras.layers.Layer):
         be treated as default and mapped to the last bucket.
       split_outputs: Whether to split the output tensor into a list of
         outputs for each unit. Ignored if units < 2.
-      **kwargs: Other args passed to `tf.keras.layers.Layer` initializer.
+      **kwargs: Other args passed to `keras.layers.Layer` initializer.
 
     Raises:
       ValueError: If layer hyperparameters are invalid.

@@ -5,7 +5,7 @@ There are several ways to set up your environment to use TensorFlow Lattice
 
 *   The easiest way to learn and use TFL requires no installation: run the any
     of the tutorials (e.g.
-    [canned estimators tutorial](tutorials/canned_estimators.ipynb)).
+    [premade models](tutorials/premade_models.ipynb)).
 *   To use TFL on a local machine, install the `tensorflow-lattice` pip package.
 *   If you have a unique machine configuration, you can build the package from
     source.
@@ -17,6 +17,8 @@ Install using pip.
 ```shell
 pip install --upgrade tensorflow-lattice
 ```
+
+Note that you will need to have `tf_keras` package installed as well.
 
 ## Build from source
 

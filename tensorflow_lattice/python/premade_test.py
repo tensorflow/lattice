@@ -29,7 +29,13 @@ import tensorflow as tf
 from tensorflow_lattice.python import configs
 from tensorflow_lattice.python import premade
 from tensorflow_lattice.python import premade_lib
-
+# pylint: disable=g-import-not-at-top
+# Use Keras 2.
+version_fn = getattr(tf.keras, 'version', None)
+if version_fn and version_fn().startswith('3.'):
+  import tf_keras as keras
+else:
+  keras = tf.keras
 
 fake_data = {
     'train_xs': [np.array([1]), np.array([3]), np.array([0])],
@@ -101,12 +107,13 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     super(PremadeTest, self).setUp()
-    tf.keras.utils.set_random_seed(42)
+    keras.utils.set_random_seed(42)
 
     # UCI Statlog (Heart) dataset.
-    heart_csv_file = tf.keras.utils.get_file(
+    heart_csv_file = keras.utils.get_file(
         'heart.csv',
-        'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv')
+        'http://storage.googleapis.com/download.tensorflow.org/data/heart.csv',
+    )
     heart_df = pd.read_csv(heart_csv_file)
     thal_vocab_list = ['normal', 'fixed', 'reversible']
     heart_df['thal'] = heart_df['thal'].map(
@@ -257,7 +264,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         add_missing_feature_configs=False)
 
   def _ResetAllBackends(self):
-    tf.keras.backend.clear_session()
+    keras.backend.clear_session()
     tf.compat.v1.reset_default_graph()
 
   class Encoder(json.JSONEncoder):
@@ -482,8 +489,9 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     prefitting_model = premade.CalibratedLatticeEnsemble(
         prefitting_model_config)
     prefitting_model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
+        loss=keras.losses.BinaryCrossentropy(from_logits=True),
+        optimizer=keras.optimizers.legacy.Adam(0.01),
+    )
     prefitting_model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -496,9 +504,10 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLatticeEnsemble(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-        metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
+        loss=keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=keras.metrics.AUC(from_logits=True),
+        optimizer=keras.optimizers.legacy.Adam(0.01),
+    )
     model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -550,9 +559,10 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLatticeEnsemble(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-        metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
+        loss=keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=keras.metrics.AUC(from_logits=True),
+        optimizer=keras.optimizers.legacy.Adam(0.01),
+    )
     model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -599,9 +609,10 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLattice(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-        metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
+        loss=keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=keras.metrics.AUC(from_logits=True),
+        optimizer=keras.optimizers.legacy.Adam(0.01),
+    )
     model.fit(
         self.heart_train_x[:5],
         self.heart_train_y,
@@ -641,9 +652,10 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLatticeEnsemble(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-        metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
+        loss=keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=keras.metrics.AUC(from_logits=True),
+        optimizer=keras.optimizers.legacy.Adam(0.01),
+    )
     model.fit(
         self.heart_train_x,
         self.heart_train_y,
@@ -672,9 +684,10 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
     # Construct and train final model
     model = premade.CalibratedLattice(model_config)
     model.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-        metrics=tf.keras.metrics.AUC(from_logits=True),
-        optimizer=tf.keras.optimizers.legacy.Adam(0.01))
+        loss=keras.losses.BinaryCrossentropy(from_logits=True),
+        metrics=keras.metrics.AUC(from_logits=True),
+        optimizer=keras.optimizers.legacy.Adam(0.01),
+    )
     model.fit(
         self.heart_train_x[:5],
         self.heart_train_y,
@@ -720,13 +733,14 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         feature_config.regularizer_configs = None
     model = premade.CalibratedLatticeEnsemble(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
+    model.compile(loss='mse', optimizer=keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
-      tf.keras.models.save_model(model, f.name)
-      loaded_model = tf.keras.models.load_model(
-          f.name, custom_objects=premade.get_custom_objects())
+      keras.models.save_model(model, f.name)
+      loaded_model = keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects()
+      )
       self.assertAllClose(
           model.predict(fake_data['eval_xs']),
           loaded_model.predict(fake_data['eval_xs']))
@@ -764,13 +778,14 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
       model_config.regularizer_configs = None
     model = premade.CalibratedLatticeEnsemble(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
+    model.compile(loss='mse', optimizer=keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
-      tf.keras.models.save_model(model, f.name)
-      loaded_model = tf.keras.models.load_model(
-          f.name, custom_objects=premade.get_custom_objects())
+      keras.models.save_model(model, f.name)
+      loaded_model = keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects()
+      )
       self.assertAllClose(
           model.predict(fake_data['eval_xs']),
           loaded_model.predict(fake_data['eval_xs']))
@@ -803,13 +818,14 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         feature_config.regularizer_configs = None
     model = premade.CalibratedLattice(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
+    model.compile(loss='mse', optimizer=keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
-      tf.keras.models.save_model(model, f.name)
-      loaded_model = tf.keras.models.load_model(
-          f.name, custom_objects=premade.get_custom_objects())
+      keras.models.save_model(model, f.name)
+      loaded_model = keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects()
+      )
       self.assertAllClose(
           model.predict(fake_data['eval_xs']),
           loaded_model.predict(fake_data['eval_xs']))
@@ -829,13 +845,14 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.CalibratedLinear(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
+    model.compile(loss='mse', optimizer=keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
-      tf.keras.models.save_model(model, f.name)
-      loaded_model = tf.keras.models.load_model(
-          f.name, custom_objects=premade.get_custom_objects())
+      keras.models.save_model(model, f.name)
+      loaded_model = keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects()
+      )
       self.assertAllClose(
           model.predict(fake_data['eval_xs']),
           loaded_model.predict(fake_data['eval_xs']))
@@ -856,7 +873,7 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
         output_initialization=[-2., -1., 0., 1., 2.])
     model = premade.AggregateFunction(model_config)
     # Compile and fit model.
-    model.compile(loss='mse', optimizer=tf.keras.optimizers.legacy.Adam(0.1))
+    model.compile(loss='mse', optimizer=keras.optimizers.legacy.Adam(0.1))
     model.fit(fake_data['train_xs'], fake_data['train_ys'])
     # Save model using H5 format.
     with tempfile.NamedTemporaryFile(suffix='.h5') as f:
@@ -864,9 +881,10 @@ class PremadeTest(parameterized.TestCase, tf.test.TestCase):
       # when saving in HDF5. The keras team has informed us that we should not
       # push to support this since SavedModel format is the new default and no
       # new HDF5 functionality is desired.
-      tf.keras.models.save_model(model, f.name, include_optimizer=False)
-      loaded_model = tf.keras.models.load_model(
-          f.name, custom_objects=premade.get_custom_objects())
+      keras.models.save_model(model, f.name, include_optimizer=False)
+      loaded_model = keras.models.load_model(
+          f.name, custom_objects=premade.get_custom_objects()
+      )
       self.assertAllClose(
           model.predict(fake_data['eval_xs']),
           loaded_model.predict(fake_data['eval_xs']))
