@@ -2482,7 +2482,7 @@ def verify_hyperparameters(lattice_sizes,
                        (weights_shape, lattice_sizes, expected_num_weights))
 
   if input_shape is not None:
-    if not isinstance(input_shape, list):
+    if isinstance(input_shape[-1], int):
       if input_shape[-1] != len(lattice_sizes):
         raise ValueError("Last dimension of input shape must have same number "
                          "of elements as 'lattice_sizes'. 'input shape': %s, "

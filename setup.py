@@ -27,7 +27,7 @@ from setuptools import setup
 # This version number should always be that of the *next* (unreleased) version.
 # Immediately after uploading a package to PyPI, you should increment the
 # version number and push to gitHub.
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 
 if "--release" in sys.argv:
   sys.argv.remove("--release")
