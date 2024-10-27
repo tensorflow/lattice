@@ -1136,7 +1136,7 @@ def apply_updates(model_config, updates):
   configs.apply_updates(model_config, updates)
   ```
 
-  Arguments:
+  Args:
     model_config: The model config object to apply the updates to.
     updates: A list of (key, value) pairs with potential config updates. Values
       that are not matched to a field in the model config will be ignored.
